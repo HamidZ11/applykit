@@ -15,6 +15,7 @@ export const STATUS_LABEL: Record<FieldStatus, string> = {
   'no-value': 'Not in profile',
   'no-profile': 'Needs profile',
   'no-option': 'No matching option',
+  unusable: 'Saved value does not fit',
   unrecognised: 'Not recognised',
   conflict: 'Unclear',
   duplicate: 'Asked twice',

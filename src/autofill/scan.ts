@@ -40,8 +40,14 @@ export type FieldSupport =
   | { status: 'manual'; reason: ManualReason }
   /** A text field ApplyKit does not recognise. */
   | { status: 'unrecognised' }
-  /** A control type ApplyKit does not fill. */
-  | { status: 'unsupported' };
+  /**
+   * A control ApplyKit does not fill. For a custom dropdown built on a text
+   * input, `field` says what it appears to ask for.
+   */
+  | {
+      status: 'unsupported';
+      custom?: { field: AutofillField | null; evidence: Evidence[] };
+    };
 
 export interface ScannedField {
   element: FormControl;
@@ -74,6 +80,28 @@ const IGNORED_INPUT_TYPES = new Set([
 
 /** Input types the engine may write text into. */
 const TEXT_INPUT_TYPES = new Set(['text', 'email', 'tel', 'url', 'search']);
+
+/** Fields a native select may be filled for, by exact option match. */
+const SELECT_FIELDS = new Set<AutofillField>(['country', 'phoneCountryCode']);
+
+const POPUP_ROLES = new Set([
+  'listbox',
+  'tree',
+  'grid',
+  'dialog',
+  'menu',
+  'true',
+]);
+
+/** A text input that works as a custom dropdown (combobox) widget. */
+function isCustomDropdown(element: FormControl): boolean {
+  if (!isInput(element)) return false;
+  const popup = element.getAttribute('aria-haspopup');
+  return (
+    element.getAttribute('role') === 'combobox' ||
+    (popup !== null && POPUP_ROLES.has(popup))
+  );
+}
 
 const DATE_TYPES = new Set(['date', 'datetime-local', 'month', 'week', 'time']);
 
@@ -220,13 +248,25 @@ function supportOf(element: FormControl): FieldSupport {
     return { status: 'other-person', evidence: detection.evidence };
   }
 
-  // What the engine can write: text-like inputs, and native selects for the
-  // country only.
+  // Custom dropdowns built on a text input commit a choice through their own
+  // scripts; typing into them would not select anything.
+  if (isCustomDropdown(element)) {
+    return {
+      status: 'unsupported',
+      custom: {
+        field: detection.kind === 'match' ? detection.field : null,
+        evidence: detection.kind === 'match' ? detection.evidence : [],
+      },
+    };
+  }
+
+  // What the engine can write: text-like inputs, and native selects whose
+  // options it can match exactly.
   const writable = isInput(element)
     ? TEXT_INPUT_TYPES.has(element.type)
     : element.localName === 'select' &&
       detection.kind === 'match' &&
-      detection.field === 'country';
+      SELECT_FIELDS.has(detection.field);
   if (!writable) return { status: 'unsupported' };
 
   switch (detection.kind) {

@@ -1,8 +1,4 @@
-import {
-  AUTOFILL_FIELDS,
-  type AutofillValues,
-  type TextField,
-} from '@/autofill/fields';
+import { TEXT_FIELDS, type AutofillValues } from '@/autofill/fields';
 
 /** Messages between the panel's content script and the background worker. */
 
@@ -56,10 +52,6 @@ export function isGetAutofillValuesMessage(
   return hasType(message, GET_AUTOFILL_VALUES.type);
 }
 
-const TEXT_FIELDS = AUTOFILL_FIELDS.filter(
-  (field): field is TextField => field !== 'country',
-);
-
 /** Checks a reply's shape before the panel relies on it. */
 export function isAutofillValuesResponse(
   value: unknown,
@@ -86,6 +78,16 @@ export function isAutofillValuesResponse(
   ) {
     return false;
   }
+  return isCountry(country) && isPhone((values as { phone?: unknown }).phone);
+}
+
+function isStringArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
+}
+
+function isCountry(country: unknown): boolean {
   if (country === null) return true;
   if (typeof country !== 'object') return false;
   const c = country as Record<string, unknown>;
@@ -93,7 +95,19 @@ export function isAutofillValuesResponse(
     typeof c.code === 'string' &&
     typeof c.alpha3 === 'string' &&
     typeof c.name === 'string' &&
-    Array.isArray(c.aliases) &&
-    c.aliases.every((alias) => typeof alias === 'string')
+    isStringArray(c.aliases)
+  );
+}
+
+function isPhone(phone: unknown): boolean {
+  if (phone === null) return true;
+  if (typeof phone !== 'object') return false;
+  const p = phone as Record<string, unknown>;
+  return (
+    typeof p.callingCode === 'string' &&
+    /^\d{1,4}$/.test(p.callingCode) &&
+    typeof p.nationalNumber === 'string' &&
+    /^\d{2,17}$/.test(p.nationalNumber) &&
+    isStringArray(p.regionNames)
   );
 }

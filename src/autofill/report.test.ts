@@ -8,6 +8,7 @@ import {
   summarise,
   type FieldReport,
 } from './report';
+import { phoneParts } from './profile-values';
 import { scanFields } from './scan';
 
 function plan(values: AutofillValues | null = sampleValues()): FieldReport[] {
@@ -165,6 +166,152 @@ describe('preferred name', () => {
       status: 'fill',
       fillValue: 'Alex',
       note: 'Your first name, as you chose for preferred-name fields.',
+    });
+  });
+});
+
+describe('phone numbers', () => {
+  /** Values for a saved number, read as the background would. */
+  function withPhone(phone: string, country = 'GB'): AutofillValues {
+    const values = sampleValues();
+    values.text.phone = phone;
+    values.phone = phoneParts(phone, country);
+    return values;
+  }
+
+  const SPLIT = `
+    <label>Country calling code <input id="code"></label>
+    <label>Telephone number <input id="number" type="tel"></label>`;
+
+  it('splits the number when the form asks for the code separately', () => {
+    loadHtml(SPLIT);
+
+    const reports = plan(withPhone('+44 7700 900123'));
+
+    expect(byId(reports, 'code')).toMatchObject({
+      status: 'fill',
+      fillValue: '+44',
+    });
+    expect(byId(reports, 'number')).toMatchObject({
+      status: 'fill',
+      target: 'phone',
+      fillValue: '7700900123',
+      note: expect.stringContaining('without its country code') as string,
+    });
+  });
+
+  it('reads a nationally written number with the saved country', () => {
+    loadHtml(SPLIT);
+
+    const reports = plan(withPhone('07700 900123'));
+
+    expect(byId(reports, 'code').fillValue).toBe('+44');
+    expect(byId(reports, 'number').fillValue).toBe('7700900123');
+  });
+
+  it('keeps the saved number as it is when there is no separate code', () => {
+    loadHtml('<label>Telephone number <input id="number" type="tel"></label>');
+
+    expect(byId(plan(withPhone('+44 7700 900123')), 'number').fillValue).toBe(
+      '+44 7700 900123',
+    );
+  });
+
+  it('gives digits only to a code field too short for the plus', () => {
+    loadHtml('<label>Dialling code <input id="code" maxlength="2"></label>');
+
+    expect(byId(plan(withPhone('+44 7700 900123')), 'code').fillValue).toBe(
+      '44',
+    );
+  });
+
+  it('fills the national number for autocomplete="tel-national"', () => {
+    loadHtml('<input id="n" autocomplete="tel-national">');
+
+    expect(byId(plan(withPhone('+44 7700 900123')), 'n').fillValue).toBe(
+      '7700900123',
+    );
+  });
+
+  it('leaves both parts when the saved number cannot be split', () => {
+    loadHtml(SPLIT);
+
+    const reports = plan(withPhone('07700 900123', ''));
+
+    for (const id of ['code', 'number']) {
+      expect(byId(reports, id)).toMatchObject({
+        status: 'unusable',
+        fillValue: null,
+        reason: expect.stringContaining('could not be split') as string,
+      });
+    }
+  });
+
+  it('keeps a code the user already entered', () => {
+    loadHtml(
+      '<label>Country calling code <input id="code" value="+353"></label>',
+    );
+
+    expect(byId(plan(withPhone('+44 7700 900123')), 'code')).toMatchObject({
+      status: 'keep',
+      value: '+353',
+    });
+  });
+
+  describe('calling code selects', () => {
+    function codeSelect(
+      options: string,
+      values = withPhone('+44 7700 900123'),
+    ) {
+      loadHtml(`<label>Country calling code <select id="code">
+        <option value="">Select</option>${options}</select></label>`);
+      return byId(plan(values), 'code');
+    }
+
+    it('chooses the one option showing the code', () => {
+      expect(
+        codeSelect(`
+          <option value="353">Ireland (+353)</option>
+          <option value="44">United Kingdom (+44)</option>
+          <option value="4">Fiji (+679)</option>`),
+      ).toMatchObject({ status: 'fill', fillValue: '44' });
+    });
+
+    it('tells apart countries sharing a code by the number’s country', () => {
+      expect(
+        codeSelect(`
+          <option value="JE">Jersey (+44)</option>
+          <option value="GB">United Kingdom (+44)</option>
+          <option value="IM">Isle of Man (+44)</option>`),
+      ).toMatchObject({ status: 'fill', fillValue: 'GB' });
+    });
+
+    it('follows the number when it contradicts the saved country', () => {
+      expect(
+        codeSelect(
+          `<option value="GB">United Kingdom (+44)</option>
+           <option value="US">United States (+1)</option>`,
+          withPhone('+1 202 555 0123', 'GB'),
+        ),
+      ).toMatchObject({ status: 'fill', fillValue: 'US' });
+    });
+
+    it('chooses nothing when shared codes cannot be told apart', () => {
+      expect(
+        codeSelect(
+          `<option value="a">+44</option><option value="b">+44</option>`,
+        ),
+      ).toMatchObject({
+        status: 'no-option',
+        reason:
+          'Several options show +44, so ApplyKit leaves the choice to you.',
+      });
+    });
+
+    it('never matches a longer code that starts with the same digits', () => {
+      expect(
+        codeSelect(`<option value="441">Example (+441)</option>`),
+      ).toMatchObject({ status: 'no-option' });
     });
   });
 });
@@ -352,5 +499,32 @@ describe('select placeholders', () => {
     </select></label>`);
 
     expect(plan()[0]).toMatchObject({ status: 'fill', fillValue: 'GB' });
+  });
+});
+
+describe('custom dropdowns', () => {
+  it('reports a combobox as unsupported, saying what it seems to ask', () => {
+    loadHtml(
+      '<label>Country <input id="c" role="combobox" aria-expanded="false"></label>',
+    );
+
+    expect(byId(plan(), 'c')).toMatchObject({
+      status: 'unsupported',
+      target: 'country',
+      fillValue: null,
+      reason:
+        'This looks like your country, but it is a custom dropdown. ApplyKit fills only standard form fields so far.',
+    });
+  });
+
+  it('reports an unrecognised custom dropdown without guessing', () => {
+    loadHtml('<label>Source <input id="s" aria-haspopup="listbox"></label>');
+
+    expect(byId(plan(), 's')).toMatchObject({
+      status: 'unsupported',
+      target: null,
+      reason:
+        'This is a custom dropdown. ApplyKit fills only standard form fields so far.',
+    });
   });
 });

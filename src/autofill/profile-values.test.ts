@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fullProfile } from '@/test/autofill-fixtures';
 import { validProfile } from '@/test/profile-fixtures';
-import { autofillValuesFrom } from './profile-values';
+import { autofillValuesFrom, phoneParts } from './profile-values';
 
 describe('autofillValuesFrom', () => {
   it('maps the confirmed profile to the values autofill may use', () => {
@@ -28,6 +28,11 @@ describe('autofillValuesFrom', () => {
         alpha3: 'GBR',
         name: 'United Kingdom',
         aliases: ['UK', 'Great Britain'],
+      },
+      phone: {
+        callingCode: '44',
+        nationalNumber: '2079460000',
+        regionNames: ['GB', 'GBR', 'United Kingdom', 'UK', 'Great Britain'],
       },
     });
   });
@@ -94,6 +99,57 @@ describe('autofillValuesFrom', () => {
       'text',
       'preferredNameIsFirstName',
       'country',
+      'phone',
     ]);
   });
+});
+
+describe('phoneParts', () => {
+  it('reads the calling code from an international number', () => {
+    expect(phoneParts('+44 7700 900123', 'GB')).toEqual({
+      callingCode: '44',
+      nationalNumber: '7700900123',
+      regionNames: ['GB', 'GBR', 'United Kingdom', 'UK', 'Great Britain'],
+    });
+  });
+
+  it('reads a national number using the saved country', () => {
+    expect(phoneParts('07700 900123', 'GB')).toMatchObject({
+      callingCode: '44',
+      // The trunk "0" is not part of the number after the code.
+      nationalNumber: '7700900123',
+    });
+  });
+
+  it('accepts the international prefix written as 00', () => {
+    expect(phoneParts('0044 7700 900123', 'GB')).toMatchObject({
+      callingCode: '44',
+      nationalNumber: '7700900123',
+    });
+  });
+
+  it('follows the number, not the saved country, when they disagree', () => {
+    expect(phoneParts('+1 202 555 0123', 'GB')).toEqual({
+      callingCode: '1',
+      nationalNumber: '2025550123',
+      regionNames: expect.arrayContaining(['US', 'United States']) as string[],
+    });
+  });
+
+  it('names the territory the number belongs to', () => {
+    expect(phoneParts('+44 7797 712345', 'GB')?.regionNames).toContain(
+      'Jersey',
+    );
+  });
+
+  it('skips a national number when there is no country to read it with', () => {
+    expect(phoneParts('07700 900123', '')).toBeNull();
+  });
+
+  it.each(['12345', '+44 12', '+999 1234567', ''])(
+    'skips the unusable number %j',
+    (phone) => {
+      expect(phoneParts(phone, 'GB')).toBeNull();
+    },
+  );
 });

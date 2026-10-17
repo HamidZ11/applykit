@@ -16,7 +16,14 @@ export type DetectableControl =
   HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
 export type Signal =
-  'autocomplete' | 'type' | 'label' | 'name' | 'id' | 'placeholder';
+  | 'autocomplete'
+  | 'type'
+  | 'label'
+  | 'name'
+  | 'id'
+  | 'placeholder'
+  /** A select's options, e.g. calling codes such as "+44". */
+  | 'options';
 
 export interface Evidence {
   signal: Signal;
@@ -44,7 +51,8 @@ const AUTOCOMPLETE: Record<string, AutofillField> = {
   nickname: 'preferredName',
   email: 'email',
   tel: 'phone',
-  'tel-national': 'phone',
+  'tel-country-code': 'phoneCountryCode',
+  'tel-national': 'phoneNational',
   'address-line1': 'addressLine1',
   'address-line2': 'addressLine2',
   'address-level2': 'city',
@@ -103,6 +111,16 @@ const TEXT_RULES: Record<AutofillField, RegExp[]> = {
   region: [/\b(?:county|state|region|province)\b/],
   postcode: [/\bpost ?code\b/, /\bpostal code\b/, /\bzip(?: ?code)?\b/],
   country: [/\bcountry\b/],
+  phoneCountryCode: [
+    /\b(?:international|country) (?:telephone |phone |mobile )?(?:calling|dialling|dialing|dial) code\b/,
+    /\b(?:calling|dialling|dialing|dial) code\b/,
+    /\b(?:phone|telephone|mobile) country code\b/,
+    /\bcountry code (?:for )?(?:your )?(?:phone|telephone|mobile)\b/,
+    /\binternational (?:dialling |calling )?prefix\b/,
+  ],
+  // Only from `autocomplete="tel-national"`, or a phone field next to a
+  // separate calling code (see report.ts).
+  phoneNational: [],
   linkedin: [/\blinked ?in\b/],
   github: [/\bgit ?hub\b/],
   portfolio: [
@@ -209,6 +227,16 @@ export function detectControl(control: DetectableControl): Detection {
       add(field, { signal, text: raw });
   }
 
+  // "Country code" alone could be an ISO code or a calling code; a select
+  // whose options are calling codes settles it.
+  const callingCodes = callingCodeOptions(control);
+  if (
+    callingCodes &&
+    texts.some((t) => t.signal === 'label' && BARE_CODE.test(t.normalised))
+  ) {
+    add('phoneCountryCode', { signal: 'options', text: callingCodes });
+  }
+
   // A label that asks something else outweighs an example in the
   // placeholder: "How did you hear about us?" with "e.g. LinkedIn".
   const labelled = texts.some((t) => t.signal === 'label');
@@ -250,6 +278,22 @@ export function detectControl(control: DetectableControl): Detection {
   }
   if (fields.length > 1) return { kind: 'conflict', fields, evidence };
   return { kind: 'none' };
+}
+
+const BARE_CODE = /^(?:country |phone )?(?:code|prefix)$/;
+const CALLING_CODE = /\+\s?\d{1,4}\b/;
+
+/**
+ * For a select whose options are mostly calling codes ("+44",
+ * "United Kingdom (+44)"), an example option; otherwise null.
+ */
+function callingCodeOptions(control: DetectableControl): string | null {
+  if (!(control instanceof HTMLSelectElement)) return null;
+  const options = [...control.options].filter((o) => o.value !== '');
+  const coded = options.filter((o) => CALLING_CODE.test(o.text));
+  return options.length >= 2 && coded.length / options.length >= 0.8
+    ? (coded[0]?.text.trim() ?? null)
+    : null;
 }
 
 /** The fields a piece of normalised text refers to. */
@@ -412,7 +456,13 @@ export function normalise(text: string): string {
 
 /** How evidence is shown to people, e.g. `autocomplete="given-name"`. */
 export function describeEvidence(evidence: Evidence): string {
-  return evidence.signal === 'label' || evidence.signal === 'placeholder'
-    ? `${evidence.signal} “${evidence.text}”`
-    : `${evidence.signal}="${evidence.text}"`;
+  switch (evidence.signal) {
+    case 'label':
+    case 'placeholder':
+      return `${evidence.signal} “${evidence.text}”`;
+    case 'options':
+      return `options like “${evidence.text}”`;
+    default:
+      return `${evidence.signal}="${evidence.text}"`;
+  }
 }

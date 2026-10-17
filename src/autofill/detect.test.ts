@@ -76,7 +76,8 @@ describe('detectControl', () => {
     ['address-level2', 'city'],
     ['address-level1', 'region'],
     ['country-name', 'country'],
-    ['tel-national', 'phone'],
+    ['tel-national', 'phoneNational'],
+    ['tel-country-code', 'phoneCountryCode'],
   ])('reads autocomplete="%s"', (autocomplete, field) => {
     expect(matched(`<input autocomplete="${autocomplete}">`)).toBe(field);
   });
@@ -136,7 +137,6 @@ describe('detectControl', () => {
   it.each([
     '<label>Phone extension <input type="tel"></label>',
     '<label>Country code <input></label>',
-    '<label>Dialling code <input name="phone_code"></label>',
     '<label>Phone type <select autocomplete="tel"></select></label>',
   ])('does not fill phone or country parts: %s', (html) => {
     expect(matched(html)).toBeNull();
@@ -242,6 +242,48 @@ describe('describeEvidence', () => {
     expect(describeEvidence({ signal: 'label', text: 'First name' })).toBe(
       'label “First name”',
     );
+  });
+});
+
+describe('international calling codes', () => {
+  it.each([
+    '<label>International telephone calling code <input></label>',
+    '<label>Country calling code <input></label>',
+    '<label>Dialling code <input name="phone_code"></label>',
+    '<label>Phone country code <select><option>+44</option></select></label>',
+    '<input name="countryCallingCode">',
+  ])('recognises %s', (html) => {
+    expect(matched(html)).toBe('phoneCountryCode');
+  });
+
+  it('reads a bare "Country code" select as a calling code from its options', () => {
+    const detection = detect(`<label>Country code <select>
+      <option value="">Select</option>
+      <option value="1">United Kingdom (+44)</option>
+      <option value="2">Ireland (+353)</option>
+      <option value="3">France (+33)</option>
+    </select></label>`);
+
+    expect(detection).toEqual({
+      kind: 'match',
+      field: 'phoneCountryCode',
+      evidence: [{ signal: 'options', text: 'United Kingdom (+44)' }],
+    });
+  });
+
+  it.each([
+    '<label>Country code <input></label>',
+    '<label>Country code <select><option>GB</option><option>IE</option></select></label>',
+    '<label>Area code <input></label>',
+  ])('does not guess that %s is a calling code', (html) => {
+    expect(matched(html)).toBeNull();
+  });
+
+  it('never takes a referee’s calling code for the applicant’s', () => {
+    expect(
+      detect(`<fieldset><legend>Referee</legend>
+        <label>Country calling code <input></label></fieldset>`).kind,
+    ).toBe('other-person');
   });
 });
 

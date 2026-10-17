@@ -4,6 +4,7 @@ import {
   type AutofillField,
   type AutofillValues,
   type CountryValue,
+  type PhoneParts,
 } from './fields';
 import type { ScannedField } from './scan';
 
@@ -26,6 +27,8 @@ export type FieldStatus =
   | 'no-value'
   | 'no-profile'
   | 'no-option'
+  /** The saved value cannot be given in the form this field needs. */
+  | 'unusable'
   | 'unrecognised'
   | 'unsupported'
   | 'manual'
@@ -81,7 +84,19 @@ const REASON = {
   tooLong: 'Your saved value is longer than this field allows.',
   firstOption:
     'This list starts on its first option, so ApplyKit cannot tell whether you chose it. Check it yourself.',
+  phoneParts:
+    'Your saved phone number could not be split into a country code and a number. Save it with its country code, for example +44, or check your country.',
 } as const;
+
+/** What planning needs to know about the whole form. */
+interface FormContext {
+  values: AutofillValues;
+  /**
+   * The form asks for the calling code in a separate field, so phone fields
+   * get the number without it (never the code twice).
+   */
+  splitPhone: boolean;
+}
 
 /**
  * Plans autofill without touching the page: what each recognised field
@@ -92,12 +107,19 @@ export function planFill(
   fields: readonly ScannedField[],
   values: AutofillValues | null,
 ): FieldReport[] {
-  return fields.map((field) => planField(field, values));
+  const context: FormContext | null = values && {
+    values,
+    splitPhone: fields.some(
+      ({ support }) =>
+        support.status === 'match' && support.field === 'phoneCountryCode',
+    ),
+  };
+  return fields.map((field) => planField(field, context));
 }
 
 function planField(
   field: ScannedField,
-  values: AutofillValues | null,
+  context: FormContext | null,
 ): FieldReport {
   const base = {
     field,
@@ -141,6 +163,20 @@ function planField(
     case 'unrecognised':
       return { ...base, status: 'unrecognised', reason: REASON.unrecognised };
     case 'unsupported':
+      if (support.custom) {
+        const target = support.custom.field;
+        return {
+          ...base,
+          status: 'unsupported',
+          target,
+          evidence: support.custom.evidence,
+          reason: `${
+            target
+              ? `This looks like your ${AUTOFILL_FIELD_LABEL[target].toLowerCase()}, but it`
+              : 'This'
+          } is a custom dropdown. ApplyKit fills only standard form fields so far.`,
+        };
+      }
       return { ...base, status: 'unsupported', reason: REASON.unsupported };
     case 'match':
       break;
@@ -151,7 +187,7 @@ function planField(
     target: support.field,
     evidence: support.evidence,
   };
-  if (!values) {
+  if (!context) {
     return { ...matched, status: 'no-profile', reason: REASON.noProfile };
   }
 
@@ -172,12 +208,7 @@ function planField(
     };
   }
 
-  const planned =
-    support.field === 'country'
-      ? planCountry(field, values.country)
-      : support.field === 'preferredName'
-        ? planPreferredName(values)
-        : planText(values.text[support.field]);
+  const planned = planValue(field, support.field, context);
   if ('reason' in planned) {
     return { ...matched, status: planned.status, reason: planned.reason };
   }
@@ -201,7 +232,105 @@ function planField(
 
 type Planned =
   | { display: string; fillValue: string; note?: string }
-  | { status: 'no-value' | 'no-option'; reason: string };
+  | { status: 'no-value' | 'no-option' | 'unusable'; reason: string };
+
+function planValue(
+  field: ScannedField,
+  target: AutofillField,
+  { values, splitPhone }: FormContext,
+): Planned {
+  switch (target) {
+    case 'country':
+      return planCountry(field, values.country);
+    case 'preferredName':
+      return planPreferredName(values);
+    case 'phoneCountryCode':
+      return planCallingCode(field, values);
+    case 'phoneNational':
+      return planNationalNumber(values);
+    case 'phone':
+      return splitPhone
+        ? planNationalNumber(values)
+        : planText(values.text.phone);
+    default:
+      return planText(values.text[target]);
+  }
+}
+
+/** The parts of the saved phone number, or why they are not available. */
+function phoneOf(
+  values: AutofillValues,
+): PhoneParts | { status: 'no-value' | 'unusable'; reason: string } {
+  if (values.phone) return values.phone;
+  return values.text.phone.trim() === ''
+    ? { status: 'no-value', reason: 'Your profile has no phone number.' }
+    : { status: 'unusable', reason: REASON.phoneParts };
+}
+
+/** The number without its calling code, as dialled after the code. */
+function planNationalNumber(values: AutofillValues): Planned {
+  const phone = phoneOf(values);
+  if ('reason' in phone) return phone;
+  return {
+    display: phone.nationalNumber,
+    fillValue: phone.nationalNumber,
+    note: 'The number without its country code, which the form asks for separately.',
+  };
+}
+
+/**
+ * The international calling code. Text fields get "+44" (or "44" when they
+ * are too short for the plus). Selects need exactly one option showing the
+ * code; when several countries share it (+44, +1), the number's own
+ * country picks between them, or nothing is chosen.
+ */
+function planCallingCode(field: ScannedField, values: AutofillValues): Planned {
+  const phone = phoneOf(values);
+  if ('reason' in phone) return phone;
+  const code = phone.callingCode;
+  const { element } = field;
+  if (!(element instanceof HTMLSelectElement)) {
+    const withPlus = `+${code}`;
+    const value =
+      element.maxLength > 0 && element.maxLength < withPlus.length
+        ? code
+        : withPlus;
+    return { display: value, fillValue: value };
+  }
+
+  const pattern = new RegExp(
+    `(?:^|[^\\d+])\\+\\s?${code}(?!\\d)|^\\+?${code}$`,
+  );
+  const showsCode = (option: HTMLOptionElement) =>
+    pattern.test(option.text.trim()) || pattern.test(option.value.trim());
+  let matching = usableOptions(element).filter(showsCode);
+  if (matching.length > 1 && phone.regionNames.length > 0) {
+    // "+44" alone cannot tell the United Kingdom from Jersey; the name can.
+    const names = new Set(phone.regionNames.map(comparable));
+    const nameOf = (text: string) => comparable(text.replace(/\+\s?\d+/g, ''));
+    const named = matching.filter(
+      (option) =>
+        names.has(nameOf(option.text)) || names.has(comparable(option.value)),
+    );
+    if (named.length > 0) matching = named;
+  }
+  const [only] = matching;
+  if (matching.length === 1 && only) {
+    return { display: only.text.trim(), fillValue: only.value };
+  }
+  return {
+    status: 'no-option',
+    reason:
+      matching.length === 0
+        ? `None of the options is your country code, +${code}.`
+        : `Several options show +${code}, so ApplyKit leaves the choice to you.`,
+  };
+}
+
+/** Options a user could choose: enabled and not a placeholder. */
+function usableOptions(select: HTMLSelectElement): HTMLOptionElement[] {
+  return [...select.options].filter((option) => !isPlaceholderOption(option));
+}
 
 function planText(value: string): Planned {
   const trimmed = value.trim();

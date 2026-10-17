@@ -3,7 +3,8 @@
  * Plain data with no browser or React dependencies.
  */
 
-export const AUTOFILL_FIELDS = [
+/** Fields filled with a saved text value as it is. */
+export const TEXT_FIELDS = [
   'fullName',
   'firstName',
   'lastName',
@@ -15,14 +16,21 @@ export const AUTOFILL_FIELDS = [
   'city',
   'region',
   'postcode',
-  'country',
   'linkedin',
   'github',
   'portfolio',
 ] as const;
 
+export type TextField = (typeof TEXT_FIELDS)[number];
+
+export const AUTOFILL_FIELDS = [
+  ...TEXT_FIELDS,
+  'country',
+  'phoneCountryCode',
+  'phoneNational',
+] as const;
+
 export type AutofillField = (typeof AUTOFILL_FIELDS)[number];
-export type TextField = Exclude<AutofillField, 'country'>;
 
 export const AUTOFILL_FIELD_LABEL: Record<AutofillField, string> = {
   fullName: 'Full name',
@@ -40,6 +48,8 @@ export const AUTOFILL_FIELD_LABEL: Record<AutofillField, string> = {
   linkedin: 'LinkedIn',
   github: 'GitHub',
   portfolio: 'Portfolio or website',
+  phoneCountryCode: 'Phone country code',
+  phoneNational: 'Phone number without country code',
 };
 
 /** The saved country, with every representation a form might expect. */
@@ -55,6 +65,23 @@ export interface CountryValue {
 }
 
 /**
+ * The saved phone number split into its parts, for forms that ask for the
+ * international calling code separately.
+ */
+export interface PhoneParts {
+  /** Digits only, e.g. "44". */
+  callingCode: string;
+  /** The national significant number: no calling code, no trunk "0". */
+  nationalNumber: string;
+  /**
+   * Names and codes of the number's country or territory, used only to tell
+   * apart options that share a calling code (+44: United Kingdom, Jersey).
+   * Empty when the number does not say which one.
+   */
+  regionNames: string[];
+}
+
+/**
  * The values autofill may use, taken only from the confirmed profile.
  * Empty strings mean "not in the profile"; nothing is ever invented.
  */
@@ -66,4 +93,9 @@ export interface AutofillValues {
    */
   preferredNameIsFirstName: boolean;
   country: CountryValue | null;
+  /**
+   * `text.phone` split into its parts, or null when there is no saved
+   * number or it cannot be read unambiguously.
+   */
+  phone: PhoneParts | null;
 }

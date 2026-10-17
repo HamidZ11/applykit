@@ -211,6 +211,23 @@ describe('fillFields', () => {
     expect(outcome?.status).toBe('rejected');
   });
 
+  it('fills a calling code select and the national number together', async () => {
+    loadHtml(`<form>
+      <label>Country calling code <select id="code">
+        <option value="">Select</option>
+        <option value="353">Ireland (+353)</option>
+        <option value="44">United Kingdom (+44)</option>
+      </select></label>
+      <label>Phone number <input id="number" type="tel"></label>
+    </form>`);
+
+    const outcomes = await fillFields(plan());
+
+    expect(control('code').value).toBe('44');
+    expect(control('number').value).toBe('2079460000');
+    expect(outcomes.map((r) => r.status)).toEqual(['filled', 'filled']);
+  });
+
   it('never submits the form or clicks anything', async () => {
     const document = loadFixture('full-application.html');
     const form = document.getElementById('application') as HTMLFormElement;
