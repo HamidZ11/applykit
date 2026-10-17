@@ -108,14 +108,18 @@ Limitations:
 ## Setting up your profile
 
 1. Run `pnpm build` and load (or reload) `.output/chrome-mv3`.
-2. On a fresh install the profile page opens by itself, once. Otherwise
-   open it from the ApplyKit panel's profile button (person icon), or via
-   `chrome://extensions` → ApplyKit → **Extension options**.
-3. Work through Personal details, Education, Experience and Links, then
-   **Save profile** on the Review step. Education, experience and links can
-   be left empty.
-4. Reopen the page later to edit; it opens on an overview of the saved
-   profile. Use fictional data while testing.
+2. On a fresh install the profile page opens by itself, once, on a welcome
+   screen. Otherwise open it from the ApplyKit panel's profile button
+   (person icon), or via `chrome://extensions` → ApplyKit → **Extension
+   options**.
+3. **Get started**, then work through Personal details, Education,
+   Experience and Links, and **Save profile** on the Review step. Education,
+   experience and links can be left empty.
+4. Unfinished work is kept as a draft: close the tab and reopen the page to
+   carry on, or choose **Start over**.
+5. Reopen the page later to edit; it opens on an overview of the saved
+   profile. Unsaved edits are kept as a draft too, and **Discard changes**
+   returns to the saved profile. Use fictional data while testing.
 
 ## Current functionality
 

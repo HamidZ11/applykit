@@ -100,20 +100,27 @@ Toolbar click
 ## Profile and onboarding
 
 The options page (`src/entrypoints/options`, opened in a full tab) runs
-`OnboardingApp`: first-run onboarding when no profile is saved, profile
-editing afterwards. It opens once on first install, and from the panel's
+`OnboardingApp`: a welcome screen and first-run onboarding when no profile is
+saved, the profile overview and editing afterwards. It opens once on first install, and from the panel's
 header button (the panel sends `applykit:open-profile`; the background calls
 `runtime.openOptionsPage()`).
 
 ```
 OnboardingApp
-  → profileStore.load()           empty | loaded | invalid | error
+  → profileStore.load()           empty | loaded | invalid | error (v1 migrated)
+  → profileStore.loadDraft()      restore, discard if obsolete (planDraftRestore)
+  → WelcomeScreen                 first run only, until "Get started"
   → onboardingReducer             one draft for all steps, errors, furthest step
+  → useDraftAutosave              saveDraft() after 800 ms idle and on page hide
   → Continue: validateSection()   the current step only; records may be empty
   → Save: validateDraft()         whole draft, normalised (trim, https://)
       profileFromDraft()          adds metadata (version, created, updated)
-      profileStore.save()         storage.local `profile`
+      profileStore.save()         storage.local `profile`, clears `profileDraft`
 ```
+
+Drafts and countries are described in ADR 0008: drafts are separate from the
+confirmed profile, and the country is an ISO 3166-1 alpha-2 code
+(`src/domain/countries.ts`).
 
 Validation boundaries: the form validates on Continue and Save, never while
 typing; errors clear as fields change. Storage validates on every read. The
