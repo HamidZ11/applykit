@@ -60,5 +60,10 @@ export interface CountryValue {
  */
 export interface AutofillValues {
   text: Record<TextField, string>;
+  /**
+   * `text.preferredName` is the first name because the user chose that for
+   * preferred-name fields, rather than a saved preferred name.
+   */
+  preferredNameIsFirstName: boolean;
   country: CountryValue | null;
 }

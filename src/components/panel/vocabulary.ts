@@ -45,9 +45,12 @@ export function explain(report: FieldReport): string {
     : 'value';
   switch (report.status) {
     case 'fill':
-      return `ApplyKit will fill this with your ${target}.`;
+      return withNote(`ApplyKit will fill this with your ${target}.`, report);
     case 'filled':
-      return `Filled with your ${target}. The site accepted it.`;
+      return withNote(
+        `Filled with your ${target}. The site accepted it.`,
+        report,
+      );
     case 'unsupported':
       return (
         report.reason ??
@@ -56,6 +59,10 @@ export function explain(report: FieldReport): string {
     default:
       return report.reason ?? STATUS_LABEL[report.status];
   }
+}
+
+function withNote(text: string, report: FieldReport): string {
+  return report.note ? `${text} ${report.note}` : text;
 }
 
 /**

@@ -22,6 +22,7 @@ describe('autofillValuesFrom', () => {
         github: 'https://github.com/alex-sample',
         portfolio: 'https://alex-sample.example.com',
       },
+      preferredNameIsFirstName: false,
       country: {
         code: 'GB',
         alpha3: 'GBR',
@@ -37,6 +38,37 @@ describe('autofillValuesFrom', () => {
     expect(values.text.preferredName).toBe('');
     expect(values.text.github).toBe('');
     expect(values.text.region).toBe('');
+  });
+
+  describe('preferred name', () => {
+    it('uses a saved preferred name', () => {
+      const profile = fullProfile();
+      profile.personal.useFirstNameAsPreferred = true;
+
+      expect(autofillValuesFrom(profile)).toMatchObject({
+        text: { preferredName: 'Al' },
+        preferredNameIsFirstName: false,
+      });
+    });
+
+    it('never assumes the first name when the user has not chosen it', () => {
+      const profile = validProfile();
+
+      expect(autofillValuesFrom(profile)).toMatchObject({
+        text: { preferredName: '' },
+        preferredNameIsFirstName: false,
+      });
+    });
+
+    it('uses the first name when the user chose that', () => {
+      const profile = validProfile();
+      profile.personal.useFirstNameAsPreferred = true;
+
+      expect(autofillValuesFrom(profile)).toMatchObject({
+        text: { preferredName: 'Alex' },
+        preferredNameIsFirstName: true,
+      });
+    });
   });
 
   it('has no country when the saved country is not a known code', () => {
@@ -58,6 +90,10 @@ describe('autofillValuesFrom', () => {
     const values = autofillValuesFrom(profile);
 
     expect(JSON.stringify(values)).not.toContain('metadata');
-    expect(Object.keys(values)).toEqual(['text', 'country']);
+    expect(Object.keys(values)).toEqual([
+      'text',
+      'preferredNameIsFirstName',
+      'country',
+    ]);
   });
 });

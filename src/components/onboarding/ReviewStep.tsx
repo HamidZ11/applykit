@@ -41,7 +41,10 @@ export function ReviewStep({
           <Row label="Name">
             {[personal.firstName, personal.lastName].filter(Boolean).join(' ')}
           </Row>
-          <Row label="Preferred name">{personal.preferredName}</Row>
+          <Row label="Preferred name">
+            {personal.preferredName ||
+              (personal.useFirstNameAsPreferred ? 'Same as first name' : '')}
+          </Row>
           <Row label="Email">{personal.email}</Row>
           <Row label="Phone">{personal.phone}</Row>
           <Row label="Address">

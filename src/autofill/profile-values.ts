@@ -10,6 +10,10 @@ import type { AutofillValues } from './fields';
 export function autofillValuesFrom(profile: UserProfile): AutofillValues {
   const { personal, links } = profile;
   const country = countryDetails(personal.address.country);
+  const savedPreferred = personal.preferredName.trim();
+  // The first name stands in only when the user said it may.
+  const preferredIsFirst =
+    savedPreferred === '' && personal.useFirstNameAsPreferred;
   return {
     text: {
       fullName: [personal.firstName, personal.lastName]
@@ -18,7 +22,7 @@ export function autofillValuesFrom(profile: UserProfile): AutofillValues {
         .join(' '),
       firstName: personal.firstName,
       lastName: personal.lastName,
-      preferredName: personal.preferredName,
+      preferredName: preferredIsFirst ? personal.firstName : savedPreferred,
       email: personal.email,
       phone: personal.phone,
       addressLine1: personal.address.line1,
@@ -30,6 +34,7 @@ export function autofillValuesFrom(profile: UserProfile): AutofillValues {
       github: links.github,
       portfolio: links.portfolio,
     },
+    preferredNameIsFirstName: preferredIsFirst && personal.firstName !== '',
     country: country
       ? {
           code: country.code,

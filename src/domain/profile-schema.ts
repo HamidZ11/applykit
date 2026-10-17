@@ -91,6 +91,7 @@ function personalWith(countryField: z.ZodType<string>) {
     firstName: required('Enter your first name'),
     lastName: required('Enter your last name'),
     preferredName: optional,
+    useFirstNameAsPreferred: z.boolean(),
     email,
     phone,
     address: z.object({
@@ -264,8 +265,32 @@ export function parseStoredProfile(value: unknown): StoredProfile | null {
   return result.success ? { profile: result.data, unmatchedCountry } : null;
 }
 
-/** Version 1 → 2: free-text country to an ISO 3166-1 alpha-2 code. */
+/** Brings older stored profiles up to the current version, step by step. */
 function migrateStoredProfile(value: unknown): {
+  migrated: unknown;
+  unmatchedCountry: string | null;
+} {
+  const fromV1 = migrateVersion1(value);
+  return {
+    migrated: migrateVersion2(fromV1.migrated),
+    unmatchedCountry: fromV1.unmatchedCountry,
+  };
+}
+
+/** Version 2 → 3: the first-name preference, off unless the user opts in. */
+function migrateVersion2(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.metadata)) return value;
+  if (value.metadata.schemaVersion !== 2) return value;
+  const personal = isRecord(value.personal) ? value.personal : {};
+  return {
+    ...value,
+    personal: { ...personal, useFirstNameAsPreferred: false },
+    metadata: { ...value.metadata, schemaVersion: 3 },
+  };
+}
+
+/** Version 1 → 2: free-text country to an ISO 3166-1 alpha-2 code. */
+function migrateVersion1(value: unknown): {
   migrated: unknown;
   unmatchedCountry: string | null;
 } {

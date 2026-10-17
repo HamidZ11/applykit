@@ -7,6 +7,7 @@ export const E2E_PROFILE = {
     firstName: 'Alex',
     lastName: 'Sample',
     preferredName: 'Al',
+    useFirstNameAsPreferred: false,
     email: 'alex.sample@example.com',
     phone: '+44 20 7946 0000',
     address: {
@@ -27,7 +28,7 @@ export const E2E_PROFILE = {
     other: [],
   },
   metadata: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     createdAt: '2026-10-17T12:00:00.000Z',
     updatedAt: '2026-10-17T12:00:00.000Z',
   },

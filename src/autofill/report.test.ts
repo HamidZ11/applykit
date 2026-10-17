@@ -129,6 +129,46 @@ describe('planFill', () => {
   });
 });
 
+describe('preferred name', () => {
+  function preferredField(values: AutofillValues): FieldReport {
+    loadHtml('<label>Preferred first name <input id="pref"></label>');
+    return byId(plan(values), 'pref');
+  }
+
+  it('fills a saved preferred name', () => {
+    expect(preferredField(sampleValues())).toMatchObject({
+      status: 'fill',
+      fillValue: 'Al',
+      note: null,
+    });
+  });
+
+  it('leaves the field when no preferred name is saved', () => {
+    const values = sampleValues();
+    values.text.preferredName = '';
+
+    expect(preferredField(values)).toMatchObject({
+      status: 'no-value',
+      fillValue: null,
+      reason: expect.stringContaining(
+        'choose to use your first name',
+      ) as string,
+    });
+  });
+
+  it('says when the first name is used because the user chose it', () => {
+    const values = sampleValues();
+    values.text.preferredName = 'Alex';
+    values.preferredNameIsFirstName = true;
+
+    expect(preferredField(values)).toMatchObject({
+      status: 'fill',
+      fillValue: 'Alex',
+      note: 'Your first name, as you chose for preferred-name fields.',
+    });
+  });
+});
+
 describe('country', () => {
   /** A country field; selects get the usual empty first option. */
   function country(html: string, values = sampleValues()): FieldReport {
@@ -256,6 +296,7 @@ describe('summarise and attentionQueue', () => {
       value: null,
       fillValue: null,
       reason: null,
+      note: null,
       evidence: [],
     };
   }

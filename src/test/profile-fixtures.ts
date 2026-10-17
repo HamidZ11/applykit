@@ -14,6 +14,7 @@ export function validDraft(): ProfileDraft {
     firstName: 'Alex',
     lastName: 'Sample',
     preferredName: '',
+    useFirstNameAsPreferred: false,
     email: 'alex.sample@example.com',
     phone: '+44 20 7946 0000',
     address: {

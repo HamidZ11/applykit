@@ -72,7 +72,12 @@ export function isAutofillValuesResponse(
   if (status !== 'ready') return false;
   const values = (value as { values?: unknown }).values;
   if (typeof values !== 'object' || values === null) return false;
-  const { text, country } = values as { text?: unknown; country?: unknown };
+  const { text, country, preferredNameIsFirstName } = values as {
+    text?: unknown;
+    country?: unknown;
+    preferredNameIsFirstName?: unknown;
+  };
+  if (typeof preferredNameIsFirstName !== 'boolean') return false;
   if (typeof text !== 'object' || text === null) return false;
   if (
     !TEXT_FIELDS.every(

@@ -10,8 +10,9 @@
 
 /**
  * 2: `address.country` is an ISO 3166-1 alpha-2 code (was free text in 1).
+ * 3: adds `personal.useFirstNameAsPreferred` (false for older profiles).
  */
-export const PROFILE_SCHEMA_VERSION = 2;
+export const PROFILE_SCHEMA_VERSION = 3;
 
 /** A calendar month as `YYYY-MM`, the value of an `<input type="month">`. */
 export type YearMonth = string;
@@ -33,6 +34,12 @@ export interface PersonalDetails {
   lastName: string;
   /** Optional. */
   preferredName: string;
+  /**
+   * Whether forms asking for a preferred name may receive the first name
+   * when no preferred name is saved. Off unless the user chooses it: a
+   * preferred name is personal and is never assumed.
+   */
+  useFirstNameAsPreferred: boolean;
   email: string;
   phone: string;
   address: Address;
@@ -114,6 +121,7 @@ export function emptyDraft(): ProfileDraft {
       firstName: '',
       lastName: '',
       preferredName: '',
+      useFirstNameAsPreferred: false,
       email: '',
       phone: '',
       address: {

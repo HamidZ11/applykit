@@ -47,6 +47,8 @@ export interface FieldReport {
   fillValue: string | null;
   /** Why the field is left to the user, in plain language. */
   reason: string | null;
+  /** Where a filled value came from, when that needs saying. */
+  note: string | null;
   evidence: Evidence[];
 }
 
@@ -103,6 +105,7 @@ function planField(
     value: null,
     fillValue: null,
     reason: null,
+    note: null,
     evidence: [],
   };
   const { support } = field;
@@ -172,7 +175,9 @@ function planField(
   const planned =
     support.field === 'country'
       ? planCountry(field, values.country)
-      : planText(values.text[support.field]);
+      : support.field === 'preferredName'
+        ? planPreferredName(values)
+        : planText(values.text[support.field]);
   if ('reason' in planned) {
     return { ...matched, status: planned.status, reason: planned.reason };
   }
@@ -190,11 +195,12 @@ function planField(
     status: 'fill',
     value: planned.display,
     fillValue: planned.fillValue,
+    note: planned.note ?? null,
   };
 }
 
 type Planned =
-  | { display: string; fillValue: string }
+  | { display: string; fillValue: string; note?: string }
   | { status: 'no-value' | 'no-option'; reason: string };
 
 function planText(value: string): Planned {
@@ -202,6 +208,24 @@ function planText(value: string): Planned {
   return trimmed === ''
     ? { status: 'no-value', reason: 'Your profile has no value for this.' }
     : { display: trimmed, fillValue: trimmed };
+}
+
+/** A preferred name, or the first name only if the user chose that. */
+function planPreferredName(values: AutofillValues): Planned {
+  const planned = planText(values.text.preferredName);
+  if ('reason' in planned) {
+    return {
+      status: 'no-value',
+      reason:
+        'You have not saved a preferred name. Add one, or choose to use your first name, in your profile.',
+    };
+  }
+  return values.preferredNameIsFirstName
+    ? {
+        ...planned,
+        note: 'Your first name, as you chose for preferred-name fields.',
+      }
+    : planned;
 }
 
 /**

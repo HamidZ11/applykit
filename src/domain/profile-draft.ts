@@ -38,6 +38,8 @@ const draftShape = z.object({
     firstName: text,
     lastName: text,
     preferredName: text,
+    // Drafts saved before this setting existed restore with it off.
+    useFirstNameAsPreferred: z.boolean().catch(false),
     email: text,
     phone: text,
     address: z.object({

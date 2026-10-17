@@ -265,6 +265,30 @@ describe('first-run onboarding', () => {
     expect(host.textContent).toContain('No education added');
   });
 
+  it('never uses the first name as a preferred name unless asked', async () => {
+    const { store, saved } = memoryStore();
+    await render(store);
+    await start();
+    fillPersonal();
+    const reuse = field(
+      'If I leave this empty, use my first name when a form asks for a preferred name',
+    ) as HTMLInputElement;
+    expect(reuse.checked).toBe(false);
+
+    await act(async () => {
+      reuse.click();
+      await Promise.resolve();
+    });
+    for (let i = 0; i < 4; i++) await click('Continue');
+    expect(host.textContent).toContain('Same as first name');
+    await click('Save profile');
+
+    expect(saved[0]?.personal).toMatchObject({
+      preferredName: '',
+      useFirstNameAsPreferred: true,
+    });
+  });
+
   it('saves a complete profile after review', async () => {
     const { store, saved } = memoryStore();
     await render(store);
@@ -310,7 +334,7 @@ describe('first-run onboarding', () => {
       ],
       links: { portfolio: 'https://example.com', linkedin: '' },
       metadata: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         createdAt: NOW.toISOString(),
         updatedAt: NOW.toISOString(),
       },
@@ -368,7 +392,7 @@ describe('editing a saved profile', () => {
 
     expect(saved[0]?.personal.phone).toBe('020 7946 0001');
     expect(saved[0]?.metadata).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: NOW.toISOString(),
     });

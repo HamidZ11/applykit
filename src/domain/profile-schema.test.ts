@@ -248,6 +248,13 @@ describe('country', () => {
   });
 });
 
+/** Personal details as saved before the first-name preference existed. */
+function withoutPreference(personal: object): Record<string, unknown> {
+  const copy: Record<string, unknown> = { ...personal };
+  Reflect.deleteProperty(copy, 'useFirstNameAsPreferred');
+  return copy;
+}
+
 describe('parseStoredProfile', () => {
   const stored = () =>
     profileFromDraft(validDraft(), null, new Date('2026-10-17T12:00:00Z'));
@@ -283,10 +290,39 @@ describe('parseStoredProfile', () => {
     const result = parseStoredProfile(version1(text));
 
     expect(result?.profile.personal.address.country).toBe(code);
-    expect(result?.profile.metadata.schemaVersion).toBe(2);
+    expect(result?.profile.metadata.schemaVersion).toBe(3);
     expect(result?.unmatchedCountry).toBeNull();
     // Everything else is kept as it was.
     expect(result?.profile.personal.email).toBe('alex.sample@example.com');
+  });
+
+  it('migrates a version 2 profile with the first-name preference off', () => {
+    const personal = withoutPreference(stored().personal);
+    const version2 = {
+      ...stored(),
+      personal: { ...personal, preferredName: '' },
+      metadata: { ...stored().metadata, schemaVersion: 2 },
+    };
+
+    const result = parseStoredProfile(version2);
+
+    expect(result?.profile.personal.useFirstNameAsPreferred).toBe(false);
+    expect(result?.profile.metadata.schemaVersion).toBe(3);
+    expect(result?.profile.personal.firstName).toBe('Alex');
+  });
+
+  it('migrates a version 1 profile through every version', () => {
+    const personal = withoutPreference(version1('United Kingdom').personal);
+    const result = parseStoredProfile({
+      ...version1('United Kingdom'),
+      personal,
+    });
+
+    expect(result?.profile.personal).toMatchObject({
+      address: { country: 'GB' },
+      useFirstNameAsPreferred: false,
+    });
+    expect(result?.profile.metadata.schemaVersion).toBe(3);
   });
 
   it('keeps a version 1 profile whose country cannot be matched', () => {
@@ -303,7 +339,7 @@ describe('parseStoredProfile', () => {
     ['an empty object', {}],
     [
       'a future schema version',
-      { ...stored(), metadata: { ...stored().metadata, schemaVersion: 3 } },
+      { ...stored(), metadata: { ...stored().metadata, schemaVersion: 4 } },
     ],
     ['a missing section', { ...stored(), education: undefined }],
     [
@@ -339,7 +375,7 @@ describe('profileFromDraft', () => {
     );
 
     expect(updated.metadata).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-02-01T00:00:00.000Z',
     });

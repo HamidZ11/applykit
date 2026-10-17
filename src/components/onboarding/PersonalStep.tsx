@@ -1,6 +1,6 @@
 import type { Dispatch } from 'react';
 import { CountryField } from './CountryField';
-import { FieldGrid, FieldSection, TextField } from './fields';
+import { CheckboxField, FieldGrid, FieldSection, TextField } from './fields';
 import type { OnboardingAction, OnboardingState } from './onboarding-state';
 
 export function PersonalStep({
@@ -54,6 +54,15 @@ export function PersonalStep({
             }}
           />
           <span aria-hidden className="hidden sm:block" />
+          <div className="-mt-3 sm:col-span-2">
+            <CheckboxField
+              label="If I leave this empty, use my first name when a form asks for a preferred name"
+              checked={personal.useFirstNameAsPreferred}
+              onCheckedChange={(useFirstNameAsPreferred) => {
+                setPersonal({ useFirstNameAsPreferred });
+              }}
+            />
+          </div>
           <TextField
             label="Email address"
             type="email"
