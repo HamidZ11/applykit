@@ -50,8 +50,10 @@ without clicks, key presses or waiting (`docs/research/custom-dropdowns.md`).
   expanded panel as "From your saved profile", never written, never sent,
   never stored, and never computed for sensitive or other people's fields.
 - "Go to field" scrolls to a field of the current scan that is still on
-  the page and focuses it if it is keyboard-focusable and enabled. It
-  never clicks, presses keys or changes a value. No DOM observers: a
+  the page. It focuses only plain native inputs, selects and textareas;
+  custom controls (including inputs acting as comboboxes) are never
+  focused, because some open their popup on focus. It never clicks,
+  presses keys or changes a value. No DOM observers: a
   rescan picks up questions added later.
 
 ## Consequences
@@ -61,5 +63,5 @@ without clicks, key presses or waiting (`docs/research/custom-dropdowns.md`).
 - Autofill success does not change for custom controls: they always need
   the user. Operating standards-based comboboxes remains a separate,
   explicitly tested step.
-- Some widgets may open their popup when focused; "Go to field" cannot
-  rule that out without a real browser test on each platform.
+- Custom controls are scrolled to and outlined, and the user clicks them;
+  the panel says so.

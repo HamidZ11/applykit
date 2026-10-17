@@ -180,7 +180,11 @@ Limitations:
 - Fields your profile has no value for link to your profile page.
 - Custom dropdowns are counted as fields and, when ApplyKit recognises
   them, show "From your saved profile" with the value to choose, plus
-  "Go to field" to jump to any field that needs you.
+  "Go to field" to jump to any field that needs you (custom dropdowns are
+  scrolled to, never focused or opened).
+- With the profile open in two tabs, a save never overwrites a newer save
+  from the other tab: you choose which version to keep. Saved profiles stay
+  readable if ApplyKit's checks become stricter.
 - The full list groups fields by topic, so long forms do not end up under
   "Other fields".
 - Detects fields from `autocomplete`, input type, labels, `name`, `id`,
@@ -237,6 +241,8 @@ Limitations:
   section. Some PDFs (encrypted ones, some fonts) need Chrome 147 or later;
   older versions may report the file as damaged.
 - One profile per browser; no import, export or sync.
+- Two tabs with unsaved profile edits share one draft: the latest
+  autosave is kept until one of them saves.
 - Visibility uses the browser's own check plus size, opacity and
   off-page position, so common honeypots are skipped; other hiding
   techniques may still be listed.

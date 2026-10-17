@@ -14,7 +14,6 @@ src/
       style.css         Tailwind and the panel's design tokens
   components/
     panel/              The panel: state, hook, modes, rows, locator, primitives
-    options/            Profile onboarding and editing page (full tab)
   components/ui/        Buttons and icons shared by the panel and profile page
   components/onboarding/ Onboarding steps, form controls, draft reducer
   domain/               Domain types: UserProfile, countries, profile
@@ -120,7 +119,7 @@ header button (the panel sends `applykit:open-profile`; the background calls
 ```
 OnboardingApp
   → profileStore.load()           empty | loaded | invalid | error (v1, v2 migrated)
-  → profileStore.loadDraft()      restore, discard if obsolete (planDraftRestore)
+  → profileStore.loadDraft()      restore (planDraftRestore); never dropped silently
   → WelcomeScreen                 first run only, until "Get started"
   → onboardingReducer             one draft for all steps, errors, furthest step
   → useDraftAutosave              saveDraft() after 800 ms idle and on page hide
@@ -151,7 +150,10 @@ The CV file and text stay in component state during review and are never
 stored. The saved profile changes only when the user saves.
 
 Validation boundaries: the form validates on Continue and Save, never while
-typing; errors clear as fields change. Storage validates on every read. The
+typing; errors clear as fields change. Storage checks the shape of every
+read; content rules apply when saving, so old profiles stay readable
+(ADR 0014). Saves are compare-and-set against the version the edit started
+from, under a Web Locks lock, and report conflicts instead of overwriting. The
 domain model (`user-profile.ts`) has no validation or storage code; the schema
 (`profile-schema.ts`) has no storage code; the store has no UI code.
 
@@ -178,12 +180,15 @@ profile", "Open your profile" or "Try again" instead of Autofill.
 
 1. **Entrypoints** know about WXT and browser APIs. They contain wiring, not
    logic.
-2. **Components** are React UI. They call domain and autofill functions; they
-   do not call browser APIs directly.
+2. **Components** are React UI. They call domain and autofill functions.
+   Browser APIs are reached only through small adapters
+   (`panel/profile-access.ts`, the profile store), never from components
+   directly.
 3. **Domain** (`src/domain`) holds plain types and data. No DOM, no browser
    APIs, no React.
 4. **Autofill** (`src/autofill`) depends only on the standard DOM and plain
-   `AutofillValues`. It has no storage, browser-extension or React code, so
+   `AutofillValues` (except `profile-values.ts`, which runs in the
+   background to derive those values from the profile). It has no storage, browser-extension or React code, so
    it is tested in jsdom against `fixtures/`. `scanFields` and `planFill`
    are read-only; `fillFields` writes only what the plan says, so what the
    panel predicts is what autofill does.
@@ -228,7 +233,9 @@ Details and reasoning are in ADR 0010 and ADR 0011.
   the user chose for a section), `suggestion` (saved values shown as
   guidance for fields ApplyKit cannot fill), `fill` (write and verify),
   plus pure rules in `education`, `dates`, `options` and `categories`.
-  `src/page/navigate.ts` takes the user to a field ("Go to field").
+  `src/page/navigate.ts` takes the user to a field ("Go to field"): it
+  scrolls to it and focuses only plain native controls, never custom
+  controls, which some widgets open on focus.
 - Fields are native controls or custom controls (`FieldElement`). Custom
   comboboxes, popup buttons and listboxes are listed once each, from ARIA
   roles and relationships only, and are never written: the panel shows

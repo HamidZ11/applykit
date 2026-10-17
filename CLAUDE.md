@@ -117,7 +117,10 @@ old (pnpm enforces a minimum release age; do not add exclusions).
   calling codes and education; `fixtures/interactive-education.html`
   covers choosing a record for ambiguous and numbered sections.
 - Custom controls (ARIA comboboxes, listboxes, popup buttons) are listed
-  and guided, never operated: only native controls are written.
+  and guided, never operated or focused: only native controls are written.
+- Saved profiles are read by shape and saved with compare-and-set
+  (ADR 0014). Never make stored data unreadable through a form-rule
+  change; never overwrite or drop a profile or draft silently.
   `fixtures/custom-controls.html` covers listing, deduplication and page
   furniture.
 - A user's choice must never make other fields eligible for automatic

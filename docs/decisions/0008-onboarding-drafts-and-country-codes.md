@@ -20,10 +20,13 @@ Drafts:
 - A draft is versioned (`schemaVersion` 1), records the step reached, and
   records `basedOn`: the `updatedAt` of the saved profile it edits, or null
   during first run. On load it is restored when it matches the saved profile
-  (or there is none), discarded when a later save made it obsolete, and kept
-  untouched if the profile could not be read.
+  (or there is none), and kept untouched if the profile could not be read.
+  _Amended by ADR 0014: a draft started before a later save is restored
+  with a warning, not discarded, and saving it asks which version to
+  keep._
 - Only the draft's shape is validated on load, since it holds half-entered
-  values; an unreadable draft is removed. Saving the profile clears the
+  values; an unreadable draft is copied to `profileDraftBackup`, then
+  removed. Saving the profile clears the
   draft. Users can discard edits or start first-run onboarding over.
 - Drafts are never read by the panel or autofill.
 
