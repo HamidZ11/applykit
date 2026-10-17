@@ -1,6 +1,8 @@
 import { expect, test } from './extension';
 
 const FIXTURE = '/basic-application.html';
+const AUTOFILL = { name: /^Autofill/ };
+const PANEL = { name: 'ApplyKit' };
 
 interface Manifest {
   permissions?: string[];
@@ -40,9 +42,9 @@ test('opens the panel from the toolbar button', async ({
 }) => {
   await clickToolbar(page);
 
-  await expect(page.getByRole('dialog', { name: 'ApplyKit' })).toContainText(
-    'ApplyKit is running',
-  );
+  const panel = page.getByRole('dialog', PANEL);
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('button', AUTOFILL)).toBeEnabled();
 });
 
 test('closes with the close button and reopens', async ({
@@ -82,12 +84,14 @@ test('fills first name, last name and email with sample data', async ({
   clickToolbar,
 }) => {
   await clickToolbar(page);
-  await page.getByRole('button', { name: 'Fill sample data' }).click();
+  await page.getByRole('button', AUTOFILL).click();
 
   await expect(page.locator('#first-name')).toHaveValue('Alex');
   await expect(page.locator('#last-name')).toHaveValue('Sample');
   await expect(page.locator('#email')).toHaveValue('alex.sample@example.com');
-  await expect(page.getByRole('dialog')).toContainText('Filled: 3');
+  await expect(page.getByRole('dialog', PANEL).getByRole('status')).toHaveText(
+    'Autofill complete. Filled 3 fields, 0 fields need you.',
+  );
   // Fields ApplyKit does not recognise are left alone.
   await expect(page.locator('[name=job_id]')).toHaveValue('fixture-001');
 });
@@ -107,7 +111,7 @@ test('dispatches input and change events the page can observe', async ({
   });
 
   await clickToolbar(page);
-  await page.getByRole('button', { name: 'Fill sample data' }).click();
+  await page.getByRole('button', AUTOFILL).click();
   await expect(page.locator('#email')).toHaveValue('alex.sample@example.com');
 
   const events = await page.evaluate(
@@ -132,16 +136,18 @@ test('preserves values the user already entered', async ({
   await page.locator('#first-name').fill('Typed by user');
 
   await clickToolbar(page);
-  await page.getByRole('button', { name: 'Fill sample data' }).click();
+  await page.getByRole('button', AUTOFILL).click();
 
   await expect(page.locator('#last-name')).toHaveValue('Sample');
   await expect(page.locator('#first-name')).toHaveValue('Typed by user');
-  await expect(page.getByRole('dialog')).toContainText('Skipped');
+  await expect(
+    page.getByRole('dialog', PANEL).getByRole('status'),
+  ).toContainText('Filled 2 fields, kept 1 existing entry');
 });
 
 test('never submits the form', async ({ page, clickToolbar }) => {
   await clickToolbar(page);
-  await page.getByRole('button', { name: 'Fill sample data' }).click();
+  await page.getByRole('button', AUTOFILL).click();
   await expect(page.locator('#email')).toHaveValue('alex.sample@example.com');
 
   await expect(page.locator('#status')).toContainText('Submitted: no');

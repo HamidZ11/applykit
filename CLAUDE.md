@@ -98,6 +98,10 @@ old (pnpm enforces a minimum release age; do not add exclusions).
   used for manual testing. Add a fixture for each new form shape supported.
 - Every autofill change keeps the safety tests: no submission, no overwriting,
   hidden and disabled inputs untouched, React-controlled inputs updated.
+- Browser tests and design captures run headless only, in a throwaway
+  profile, never the user's own Chrome profile. Do not launch visible
+  browser windows or run repeated stress loops of browser tests without the
+  user's permission; ask before any headed run.
 - Browser tests (`e2e/`, Playwright) drive the built extension. Wait on
   observable state with auto-retrying assertions, never fixed delays. Each
   test must be able to fail: pair "nothing happened" assertions with a

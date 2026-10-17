@@ -10,7 +10,20 @@ import {
   type Worker,
 } from '@playwright/test';
 
-const EXTENSION_PATH = resolve(import.meta.dirname, '../.output/chrome-mv3');
+export type Concept = 'command-dock' | 'field-inspector';
+
+function extensionPath(concept: Concept): string {
+  return resolve(import.meta.dirname, `../.output/${concept}/chrome-mv3`);
+}
+
+export interface ExtensionOptions {
+  /** Which panel concept build to load; set per Playwright project. */
+  concept: Concept;
+  /** Additional Chromium switches, e.g. host resolver rules for capture. */
+  browserArgs: string[];
+  /** Records a video of each page into this directory when set. */
+  videoDir: string | null;
+}
 
 interface ExtensionFixtures {
   /** Throwaway browser profile; never reuse a real one. */
@@ -22,16 +35,24 @@ interface ExtensionFixtures {
   clickToolbar: (page: Page) => Promise<void>;
 }
 
+type ProbeState = 'pending' | 'granted' | 'denied';
+
 interface ChromeInWorker {
   chrome: {
     action: {
       onClicked: {
         hasListeners: () => boolean;
-        addListener: (listener: () => void) => void;
+        addListener: (listener: (tab: { id?: number }) => void) => void;
       };
     };
+    scripting: {
+      executeScript: (injection: {
+        target: { tabId: number };
+        func: () => boolean;
+      }) => Promise<unknown>;
+    };
   };
-  __applykitProbe?: boolean;
+  __applykitProbe?: ProbeState;
 }
 
 const MAX_CLICK_ATTEMPTS = 5;
@@ -43,7 +64,11 @@ const MAX_CLICK_ATTEMPTS = 5;
  * It requires `--enable-unsafe-extension-debugging`, a throwaway profile and
  * Chromium (Chrome for Testing); branded Chrome ignores `--load-extension`.
  */
-export const test = base.extend<ExtensionFixtures>({
+export const test = base.extend<ExtensionFixtures & ExtensionOptions>({
+  concept: ['command-dock', { option: true }],
+  browserArgs: [[], { option: true }],
+  videoDir: [null, { option: true }],
+
   // eslint-disable-next-line no-empty-pattern
   profileDir: async ({}, use) => {
     const profile = mkdtempSync(join(tmpdir(), 'applykit-e2e-'));
@@ -51,14 +76,27 @@ export const test = base.extend<ExtensionFixtures>({
     rmSync(profile, { recursive: true, force: true });
   },
 
-  context: async ({ profileDir }, use) => {
+  context: async (
+    { profileDir, concept, browserArgs, videoDir, viewport, deviceScaleFactor },
+    use,
+  ) => {
+    const path = extensionPath(concept);
     const context = await chromium.launchPersistentContext(profileDir, {
+      // Always headless: no visible windows. Headed runs need the user's
+      // explicit permission (see CLAUDE.md).
+      headless: true,
       channel: 'chromium', // new headless mode, which supports extensions
+      viewport,
+      ...(deviceScaleFactor === undefined ? {} : { deviceScaleFactor }),
+      ...(videoDir && viewport
+        ? { recordVideo: { dir: videoDir, size: viewport } }
+        : {}),
       args: [
-        `--disable-extensions-except=${EXTENSION_PATH}`,
-        `--load-extension=${EXTENSION_PATH}`,
+        `--disable-extensions-except=${path}`,
+        `--load-extension=${path}`,
         '--enable-unsafe-extension-debugging',
         '--remote-debugging-port=0',
+        ...browserArgs,
       ],
     });
     await use(context);
@@ -120,6 +158,10 @@ export const test = base.extend<ExtensionFixtures>({
       });
 
     await use(async (page) => {
+      // A real toolbar click always targets the active tab, and Chrome only
+      // grants activeTab for it. Tabs opened by tests may be in the
+      // background, so activate the tab first.
+      await page.bringToFront();
       // Locate the tab by its currently loaded URL.
       const { targetInfos } = (await send('Target.getTargets', {
         filter: [{ type: 'tab' }],
@@ -131,19 +173,38 @@ export const test = base.extend<ExtensionFixtures>({
           id: extensionId,
           targetId: tab.targetId,
         });
-      // The extension's service worker is stopped and restarted shortly after
-      // the browser starts, and a click that lands during the restart is lost.
-      // Attach a probe listener to the live worker and retry only if that
-      // worker provably did not receive the click.
+      // Simulated clicks can fail in two ways a real click cannot:
+      // - The service worker is restarted shortly after browser start, and a
+      //   click that lands during the restart is lost.
+      // - Occasionally the activeTab grant does not take effect, so the
+      //   extension's injection is refused and no panel opens.
+      // A probe listener in the live worker records whether the click arrived
+      // and whether the tab was scriptable. The click is retried only when it
+      // provably did not arrive, or arrived without a grant on a page that
+      // should allow one; in both cases ApplyKit did nothing.
+      const restricted = !/^https?:/.test(page.url());
       for (let attempt = 1; attempt <= MAX_CLICK_ATTEMPTS; attempt++) {
         const worker = context.serviceWorkers().at(-1);
         const armed = await worker
           ?.evaluate(() => {
             const scope = globalThis as unknown as ChromeInWorker;
             if (!scope.chrome.action.onClicked.hasListeners()) return false;
-            scope.__applykitProbe = false;
-            scope.chrome.action.onClicked.addListener(() => {
-              scope.__applykitProbe = true;
+            scope.__applykitProbe = 'pending';
+            scope.chrome.action.onClicked.addListener((clicked) => {
+              if (clicked.id === undefined) return;
+              scope.chrome.scripting
+                .executeScript({
+                  target: { tabId: clicked.id },
+                  func: () => true,
+                })
+                .then(
+                  () => {
+                    scope.__applykitProbe = 'granted';
+                  },
+                  () => {
+                    scope.__applykitProbe = 'denied';
+                  },
+                );
             });
             return true;
           })
@@ -154,26 +215,32 @@ export const test = base.extend<ExtensionFixtures>({
             .catch(() => undefined);
           continue;
         }
+        const readProbe = () =>
+          worker
+            .evaluate(
+              () =>
+                (globalThis as unknown as ChromeInWorker).__applykitProbe ??
+                'pending',
+            )
+            .catch((): ProbeState => 'pending');
         await trigger();
-        const delivered = await expect
+        let outcome = await readProbe();
+        await expect
           .poll(
-            () =>
-              worker
-                .evaluate(
-                  () =>
-                    (globalThis as unknown as ChromeInWorker).__applykitProbe,
-                )
-                .catch(() => false),
+            async () => {
+              outcome = await readProbe();
+              return outcome;
+            },
             { timeout: 1500 },
           )
-          .toBe(true)
-          .then(
-            () => true,
-            () => false,
-          );
-        if (delivered) return;
+          .not.toBe('pending')
+          .catch(() => undefined);
+        if (outcome === 'granted') return;
+        if (outcome === 'denied' && restricted) return;
       }
-      throw new Error('The toolbar click was never delivered to the extension');
+      throw new Error(
+        'The toolbar click never reached the extension with tab access',
+      );
     });
     cdp.close();
   },

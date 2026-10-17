@@ -1,1 +1,140 @@
 @import 'tailwindcss';
+
+/*
+ * Provisional panel tokens for design exploration. Both concepts share them so
+ * the comparison is about composition and interaction, not palette.
+ *
+ * `static` emits every token, including those only used from plain CSS.
+ *
+ * Everything is in px: the panel lives in other people's pages, and rem units
+ * would scale with whatever root font size the page sets.
+ */
+@theme static {
+  --spacing: 4px;
+
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-canvas: #fcfbf9;
+  --color-sunken: #f6f4f0;
+  --color-hover: #f2f0eb;
+  --color-line: #e9e6e0;
+  --color-line-strong: #dcd8d0;
+  --color-ink: #1d1c1a;
+  --color-ink-2: #55514a;
+  --color-ink-3: #77726a;
+  --color-accent: #2d53d4;
+  --color-accent-hover: #2445b6;
+  --color-accent-soft: #edf1fc;
+  --color-accent-line: #c9d4f6;
+  --color-success: #2b7449;
+  --color-success-soft: #e9f3ec;
+  --color-warning: #8d5d0b;
+  --color-warning-soft: #faf2e2;
+  --color-danger: #b2372d;
+
+  --text-*: initial;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 14px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 18px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+
+  --radius-*: initial;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --shadow-*: initial;
+  --shadow-control: 0 1px 1px rgb(29 28 26 / 0.06);
+  --shadow-panel:
+    0 0 0 1px rgb(29 28 26 / 0.04), 0 2px 4px rgb(29 28 26 / 0.04),
+    0 12px 32px -8px rgb(29 28 26 / 0.18);
+
+  --font-sans:
+    'ApplyKit Instrument Sans', 'Instrument Sans', ui-sans-serif, system-ui,
+    -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:
+    'ApplyKit IBM Plex Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo,
+    monospace;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@layer base {
+  /*
+   * WXT resets the host with `all: initial !important`, so inherited text
+   * styles are set on the UI container inside the shadow root instead.
+   */
+  :host > div {
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    font-synthesis: none;
+  }
+  button {
+    cursor: default;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+}
+
+/* Panel entrance and exit; the closing state is set by the content script. */
+@keyframes ak-enter {
+  from {
+    opacity: 0;
+    translate: var(--ak-enter-from, 0 6px);
+  }
+}
+@keyframes ak-exit {
+  to {
+    opacity: 0;
+    translate: var(--ak-enter-from, 0 6px);
+  }
+}
+@keyframes ak-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ak-locate {
+  0% {
+    opacity: 0;
+  }
+  12%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes ak-changed {
+  from {
+    background-color: var(--color-success-soft);
+  }
+}
+
+@layer components {
+  .ak-panel {
+    animation: ak-enter 180ms var(--ease-out);
+  }
+  [data-state='closing'] .ak-panel,
+  [data-state='closing'] .ak-locator {
+    animation: ak-exit 120ms var(--ease-in) forwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :host {
+    --ak-enter-from: 0 0;
+  }
+}

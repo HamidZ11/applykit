@@ -31,3 +31,6 @@ stats-*.json
 test-results
 playwright-report
 blob-report
+
+# Design capture output (screenshots, videos)
+artifacts
