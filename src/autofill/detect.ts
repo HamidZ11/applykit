@@ -55,14 +55,16 @@ export function detectFields(root: ParentNode): DetectedField[] {
   return detected;
 }
 
-function isFillable(element: HTMLInputElement): boolean {
+/** Whether the engine is able to write to this input at all. */
+export function isFillable(element: HTMLInputElement): boolean {
   const type = (element.getAttribute('type') ?? '').toLowerCase();
   return (
     FILLABLE_INPUT_TYPES.has(type) && !element.disabled && !element.readOnly
   );
 }
 
-function classify(
+/** Which profile field a fillable input corresponds to, if any. */
+export function classify(
   element: HTMLInputElement,
 ): { field: ProfileField; source: DetectionSource } | null {
   const autocomplete = autocompleteToken(element);
@@ -105,7 +107,9 @@ function autocompleteToken(element: HTMLInputElement): string {
   return tokens.at(-1) ?? '';
 }
 
-function labelText(element: HTMLInputElement): string {
+export function labelText(
+  element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+): string {
   const parts: string[] = [];
 
   for (const label of element.labels ?? []) {
