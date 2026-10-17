@@ -7,11 +7,12 @@ time on repetitive job applications. Chrome is the first target; Safari must
 keep working from the same code.
 
 Built so far: the floating panel (compact and expanded), autofill of three
-fields from sample data, and profile onboarding/editing in a full tab with
-local storage. The saved profile is not yet connected to autofill.
+fields from sample data, profile onboarding/editing in a full tab with local
+storage and drafts, and local CV import with review. The saved profile is not
+yet connected to autofill.
 
 Still to come (build only when asked, one at a time): autofill from the
-saved profile and more field types; CV upload and extraction; application
+saved profile and more field types; application
 details and reusable answers; review of uncertain fields. A separate
 marketing website comes later.
 

@@ -20,6 +20,7 @@ src/
   domain/               Domain types: autofill sample profile, UserProfile,
                         profile validation schema
   storage/              Extension storage access (profile store, presence)
+  cv/                   CV import: read, normalise, extract, review (no React)
   styles/theme.css      Design tokens shared by both surfaces
   messages.ts           Panel ↔ background message types
   autofill/             Detection, scanning, filling and reporting: pure DOM
@@ -121,6 +122,22 @@ OnboardingApp
 Drafts and countries are described in ADR 0008: drafts are separate from the
 confirmed profile, and the country is an ISO 3166-1 alpha-2 code
 (`src/domain/countries.ts`).
+
+### CV import
+
+"Import from CV" (welcome screen and step rail) replaces the step content
+with `CvImport` until the user adds suggestions or cancels (ADR 0009):
+
+```
+file → readCv()            size/format checks; PDF.js or mammoth, loaded on demand
+     → extractCv(text)     lines → sections → candidates (confident | review)
+     → buildReview(draft)  proposals: new | same | conflict; duplicate records
+     → user choices        accept, correct, reject
+     → applyChoices()      new draft → 'import-cv' action → autosaved draft
+```
+
+The CV file and text stay in component state during review and are never
+stored. The saved profile changes only when the user saves.
 
 Validation boundaries: the form validates on Continue and Save, never while
 typing; errors clear as fields change. Storage validates on every read. The

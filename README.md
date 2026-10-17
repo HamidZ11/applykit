@@ -115,9 +115,13 @@ Limitations:
 3. **Get started**, then work through Personal details, Education,
    Experience and Links, and **Save profile** on the Review step. Education,
    experience and links can be left empty.
-4. Unfinished work is kept as a draft: close the tab and reopen the page to
+4. To start from your CV, choose **Import from CV** on the welcome screen or
+   in the step list: pick or drop a PDF or Word (.docx) file, review each
+   suggestion, and **Add to profile**. Suggestions go into your unsaved
+   draft; nothing is saved until you save your profile.
+5. Unfinished work is kept as a draft: close the tab and reopen the page to
    carry on, or choose **Start over**.
-5. Reopen the page later to edit; it opens on an overview of the saved
+6. Reopen the page later to edit; it opens on an overview of the saved
    profile. Unsaved edits are kept as a draft too, and **Discard changes**
    returns to the saved profile. Use fictional data while testing.
 
@@ -150,7 +154,12 @@ Limitations:
 ## Known limitations
 
 - Autofill still uses fictional sample data; the saved profile is not
-  connected to it yet. No CV import.
+  connected to it yet.
+- CV import reads text only: no scanned or image-only PDFs (no OCR), no
+  password-protected PDFs, no older .doc files, 5 MB and 10 pages at most.
+  Extraction is rule-based and conservative: unusual layouts yield fewer
+  suggestions, and addresses and country are never taken from a CV. PDF
+  import needs Chrome 140 or later.
 - One profile per browser; no import, export or sync.
 - Only three fields, only `<input>` elements, and only English labels.
 - No visibility check: a visually hidden text input matching a known field
