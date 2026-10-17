@@ -34,20 +34,42 @@ import type { ScannedField } from './scan';
  */
 
 export type Planned =
-  | { display: string; fillValue: string; note?: string }
+  | { display: string; fillValue: string; note?: string; chosen?: boolean }
   | {
       status: 'no-value' | 'no-option' | 'unusable' | 'ambiguous' | 'manual';
       reason: string;
+      /** For `ambiguous`: the ids of the records that could fit. */
+      candidates?: string[];
     };
 
 export type RecordChoice =
-  | { record: EducationValue; note: string | null }
-  | { status: 'no-value' | 'ambiguous'; reason: string };
+  | {
+      record: EducationValue;
+      note: string | null;
+      /** The user chose this record for the field's section. */
+      chosen: boolean;
+    }
+  | { status: 'no-value'; reason: string }
+  | { status: 'ambiguous'; reason: string; candidates: string[] };
 
-/** The record each education field of the form would be filled from. */
+/**
+ * Records the user explicitly chose, by section (`ScannedField.group`).
+ * Only for this page and this panel: never saved to the profile.
+ */
+export type SectionChoices = ReadonlyMap<Element | null, string>;
+
+/**
+ * The record each education field of the form would be filled from.
+ *
+ * A choice applies only to fields of its own section whose own rules leave
+ * several records, and only if the chosen record is one of them: it never
+ * overrides a field that already has exactly one fitting record, and never
+ * reaches another section.
+ */
 export function chooseRecords(
   fields: readonly ScannedField[],
   records: readonly EducationValue[],
+  sectionChoices: SectionChoices = new Map(),
 ): Map<ScannedField, RecordChoice> {
   const education = fields.filter(
     ({ support }) =>
@@ -72,7 +94,24 @@ export function chooseRecords(
     const level =
       requestedLevel(normalise(field.label)) ??
       (section.length === 1 ? (section[0] ?? null) : null);
-    choices.set(field, choose(records, level));
+    const choice = choose(records, level);
+    const chosenId = sectionChoices.get(field.group);
+    const chosen =
+      'candidates' in choice && chosenId !== undefined
+        ? records.find(
+            (r) => r.id === chosenId && choice.candidates.includes(r.id),
+          )
+        : undefined;
+    choices.set(
+      field,
+      chosen
+        ? {
+            record: chosen,
+            note: `From ${chosen.qualification} at ${chosen.institution}, which you chose for this section.`,
+            chosen: true,
+          }
+        : choice,
+    );
   }
   return choices;
 }
@@ -97,6 +136,7 @@ function choose(
         records.length > 1
           ? `From your saved ${only.qualification} at ${only.institution}.`
           : null,
+      chosen: false,
     };
   }
   if (fitting.length === 0) {
@@ -110,7 +150,8 @@ function choose(
   }
   return {
     status: 'ambiguous',
-    reason: `${String(fitting.length)} of your saved education records could fit here, and the form does not say which. ApplyKit leaves it to you.`,
+    reason: `${String(fitting.length)} of your saved education records could fit here, and the form does not say which. Choose one, or fill it in yourself.`,
+    candidates: fitting.map((r) => r.id),
   };
 }
 

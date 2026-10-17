@@ -392,3 +392,15 @@ describe('education fields', () => {
     ).not.toBe('match');
   });
 });
+
+describe('date format hints in labels', () => {
+  it.each([
+    'Start date (MM/YYYY)',
+    'Start date mm/yyyy',
+    'Start date (DD/MM/YYYY)',
+  ])('still recognises %s in an education section', (label) => {
+    expect(matched(`<h2>Education</h2><label>${label} <input></label>`)).toBe(
+      'educationStart',
+    );
+  });
+});

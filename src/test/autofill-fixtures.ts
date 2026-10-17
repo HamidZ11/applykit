@@ -48,6 +48,19 @@ export function educationRecords(): EducationRecord[] {
   ];
 }
 
+/** A second school record, so school sections have two candidates. */
+export function gcseRecord(): EducationRecord {
+  return {
+    id: 'gcses',
+    institution: 'Example Grammar School',
+    qualification: 'GCSEs',
+    fieldOfStudy: 'Ten subjects',
+    startDate: '2017-09',
+    endDate: '2022-06',
+    grade: '',
+  };
+}
+
 /** The values autofill receives for `fullProfile()`. */
 export function sampleValues(): AutofillValues {
   return autofillValuesFrom(fullProfile());

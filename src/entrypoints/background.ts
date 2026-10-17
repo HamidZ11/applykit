@@ -40,8 +40,10 @@ export default defineBackground(() => {
 
   browser.runtime.onMessage.addListener(
     (message: unknown, sender, sendResponse: (response: unknown) => void) => {
-      // Only ApplyKit's own scripts may ask.
+      // Only ApplyKit's own scripts may ask: its pages, or the panel, which
+      // is only ever injected into a tab's top frame.
       if (sender.id !== browser.runtime.id) return undefined;
+      if (sender.tab && sender.frameId !== 0) return undefined;
 
       // Content scripts cannot open extension pages themselves.
       if (isOpenProfileMessage(message)) {

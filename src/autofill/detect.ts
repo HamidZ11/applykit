@@ -493,6 +493,8 @@ function matchEducation(text: string, inEducation: boolean): EducationField[] {
   return matches;
 }
 
+const FORMAT_HINT = /\b(?:dd|mm|yyyy|yy)\b/g;
+
 interface TextSignal {
   signal: Signal;
   raw: string;
@@ -516,7 +518,12 @@ function textSignals(control: DetectableControl): TextSignal[] {
         signal === 'placeholder'
           ? text.replace(/\S+@\S+|\S*(?:https?:\/\/|www\.)\S*/gi, ' ')
           : text,
-      ),
+      )
+        // Format hints ("Start date (MM/YYYY)") say how to answer, not what
+        // is asked; dates.ts reads them when formatting the value.
+        .replace(FORMAT_HINT, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
     }))
     .filter((signal) => signal.normalised !== '');
 }

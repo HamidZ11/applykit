@@ -91,6 +91,7 @@ export function isAutofillValuesResponse(
 }
 
 const EDUCATION_TEXT = [
+  'id',
   'institution',
   'qualification',
   'fieldOfStudy',

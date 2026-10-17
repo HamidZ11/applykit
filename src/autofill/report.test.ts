@@ -451,6 +451,8 @@ describe('summarise and attentionQueue', () => {
       reason: null,
       note: null,
       evidence: [],
+      candidates: [],
+      chosen: false,
     };
   }
 

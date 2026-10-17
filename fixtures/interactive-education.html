@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Graduate Programme · Marlow Analytics Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional application for choosing between saved education records.
+      Secondary education and the two numbered education sections do not
+      say which qualification they mean, so ApplyKit asks the user to choose.
+      Also: a university dropdown without the saved university, an existing
+      entry, an accessible combobox ApplyKit does not fill, and a button that
+      adds another education section. Every name is invented. Used by unit
+      tests and manual testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #0f6b5c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      fieldset fieldset > legend {
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 16px;
+      }
+      label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      .req {
+        color: #cf222e;
+      }
+      input:not([type='checkbox'], [type='radio']),
+      select,
+      textarea {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+      .choice {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 400;
+        margin-top: 10px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 4px 0 0;
+      }
+      button {
+        margin-top: 28px;
+        padding: 10px 18px;
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--brand);
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      output {
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar"><span class="logo"></span>Marlow Analytics</div>
+    </header>
+    <main>
+      <h1>Graduate Programme 2027</h1>
+      <p class="meta">Manchester · Data and engineering</p>
+
+      <form id="application" action="/submitted" method="post">
+        <h2>Personal information</h2>
+        <div class="row">
+          <div>
+            <label for="first">First name</label>
+            <input id="first" name="firstName" />
+          </div>
+          <div>
+            <label for="last">Last name</label>
+            <input id="last" name="lastName" />
+          </div>
+        </div>
+        <label for="email">Email address</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          value="already.typed@example.org"
+        />
+
+        <h2>Secondary education</h2>
+        <label for="sec-school">School name</label>
+        <input id="sec-school" name="secondarySchool" />
+        <label for="sec-qual">Qualification</label>
+        <select id="sec-qual" name="secondaryQualification">
+          <option value="">Select…</option>
+          <option value="al">A levels</option>
+          <option value="gc">GCSEs</option>
+          <option value="bt">BTEC Nationals</option>
+        </select>
+        <label for="sec-grades">Grades achieved</label>
+        <input id="sec-grades" name="secondaryGrades" />
+        <label for="sec-year">Year completed</label>
+        <input id="sec-year" name="secondaryYear" />
+
+        <div id="education-list">
+          <section aria-labelledby="edu-1">
+            <h3 id="edu-1">Education 1</h3>
+            <label for="e1-inst">Institution</label>
+            <input id="e1-inst" name="education[0][institution]" />
+            <label for="e1-start">Start date (MM/YYYY)</label>
+            <input id="e1-start" name="education[0][start]" />
+            <label for="e1-end">End date (MM/YYYY)</label>
+            <input id="e1-end" name="education[0][end]" />
+          </section>
+          <section aria-labelledby="edu-2">
+            <h3 id="edu-2">Education 2</h3>
+            <label for="e2-inst">Institution</label>
+            <input id="e2-inst" name="education[1][institution]" />
+            <label for="e2-start">Start date (MM/YYYY)</label>
+            <input id="e2-start" name="education[1][start]" />
+            <label for="e2-end">End date (MM/YYYY)</label>
+            <input id="e2-end" name="education[1][end]" />
+          </section>
+        </div>
+        <button type="button" id="add-education">Add another education</button>
+
+        <h2>University</h2>
+        <label for="uni">University</label>
+        <select id="uni" name="university">
+          <option value="">Select…</option>
+          <option value="1">University of Elsewhere</option>
+          <option value="2">Example Metropolitan University</option>
+        </select>
+
+        <h2>Work experience</h2>
+        <label for="employer">Employer</label>
+        <input id="employer" name="employer" />
+
+        <h2>Preferences</h2>
+        <label for="office" id="office-label">Preferred office</label>
+        <input
+          id="office"
+          name="office"
+          role="combobox"
+          aria-controls="office-options"
+          aria-expanded="false"
+          aria-autocomplete="list"
+        />
+        <ul
+          id="office-options"
+          role="listbox"
+          aria-labelledby="office-label"
+          hidden
+        >
+          <li role="option" id="office-man">Manchester</li>
+          <li role="option" id="office-lon">London</li>
+        </ul>
+
+        <button type="submit">Submit application</button>
+      </form>
+
+      <output id="status">Fixture · submitted: no · input events: 0</output>
+    </main>
+
+    <script>
+      // Lets reviewers confirm what the page observed.
+      const form = document.getElementById('application');
+      const status = document.getElementById('status');
+      let submitted = false;
+      let inputEvents = 0;
+      const render = () => {
+        status.textContent = `Fixture · submitted: ${submitted ? 'YES' : 'no'} · input events: ${inputEvents}`;
+      };
+      form.addEventListener('input', () => {
+        inputEvents += 1;
+        render();
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitted = true;
+        render();
+      });
+
+      // Adds a third education section, as many forms do on request.
+      document.getElementById('add-education').addEventListener('click', () => {
+        const list = document.getElementById('education-list');
+        const n = list.children.length + 1;
+        const section = document.createElement('section');
+        section.setAttribute('aria-labelledby', `edu-${n}`);
+        section.innerHTML = `
+          <h3 id="edu-${n}">Education ${n}</h3>
+          <label for="e${n}-inst">Institution</label>
+          <input id="e${n}-inst" name="education[${n - 1}][institution]" />`;
+        list.append(section);
+      });
+    </script>
+  </body>
+</html>

@@ -51,6 +51,7 @@ export function autofillValuesFrom(profile: UserProfile): AutofillValues {
       : null,
     phone: phoneParts(personal.phone, personal.address.country),
     education: profile.education.map((record) => ({
+      id: record.id,
       institution: record.institution,
       qualification: record.qualification,
       fieldOfStudy: record.fieldOfStudy,

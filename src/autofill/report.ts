@@ -13,6 +13,7 @@ import {
   planEducation,
   type Planned,
   type RecordChoice,
+  type SectionChoices,
 } from './plan-education';
 import type { ScannedField } from './scan';
 
@@ -63,6 +64,13 @@ export interface FieldReport {
   /** Where a filled value came from, when that needs saying. */
   note: string | null;
   evidence: Evidence[];
+  /**
+   * For `ambiguous` education fields: the ids of the saved records the user
+   * can choose between. Empty otherwise.
+   */
+  candidates: string[];
+  /** Planned or filled from a record the user explicitly chose. */
+  chosen: boolean;
 }
 
 export interface ReportSummary {
@@ -120,10 +128,11 @@ export function planFill(
   fields: readonly ScannedField[],
   values: AutofillValues | null,
   now: Date = new Date(),
+  sectionChoices?: SectionChoices,
 ): FieldReport[] {
   const context: FormContext | null = values && {
     values,
-    education: chooseRecords(fields, values.education),
+    education: chooseRecords(fields, values.education, sectionChoices),
     now,
     splitPhone: fields.some(
       ({ support }) =>
@@ -145,6 +154,8 @@ function planField(
     reason: null,
     note: null,
     evidence: [],
+    candidates: [],
+    chosen: false,
   };
   const { support } = field;
   switch (support.status) {
@@ -226,7 +237,12 @@ function planField(
 
   const planned = planValue(field, support.field, context);
   if ('reason' in planned) {
-    return { ...matched, status: planned.status, reason: planned.reason };
+    return {
+      ...matched,
+      status: planned.status,
+      reason: planned.reason,
+      candidates: planned.candidates ?? [],
+    };
   }
 
   const { element } = field;
@@ -243,6 +259,7 @@ function planField(
     value: planned.display,
     fillValue: planned.fillValue,
     note: planned.note ?? null,
+    chosen: planned.chosen ?? false,
   };
 }
 
@@ -261,12 +278,14 @@ function planValue(
     }
     if ('status' in choice) return choice;
     const planned = planEducation(field, target, choice.record, now);
-    return 'reason' in planned || !choice.note
-      ? planned
-      : {
-          ...planned,
-          note: [planned.note, choice.note].filter(Boolean).join(' '),
-        };
+    if ('reason' in planned) return planned;
+    const note = [planned.note, choice.note].filter(Boolean).join(' ');
+    return {
+      display: planned.display,
+      fillValue: planned.fillValue,
+      ...(note ? { note } : {}),
+      chosen: choice.chosen,
+    };
   }
   switch (target) {
     case 'country':

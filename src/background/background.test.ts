@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { GET_AUTOFILL_VALUES, OPEN_PROFILE } from '@/messages';
 import { browserProfileStore } from '@/storage/profile-store';
@@ -14,12 +15,27 @@ beforeEach(() => {
   background.main();
 });
 
+/** Only the parts of a sender the background reads. */
+function sender(
+  id: string,
+  frame: { tab?: { id: number }; frameId?: number },
+): Browser.runtime.MessageSender {
+  return { id, ...frame } as Browser.runtime.MessageSender;
+}
+
 /** Delivers a message as the browser would, and waits for the reply. */
-async function send(message: unknown, senderId = fakeBrowser.runtime.id) {
+async function send(
+  message: unknown,
+  senderId = fakeBrowser.runtime.id,
+  frame: { tab?: { id: number }; frameId?: number } = {
+    tab: { id: 7 },
+    frameId: 0,
+  },
+) {
   let reply: unknown;
   const replied = new Promise<void>((resolve) => {
     void fakeBrowser.runtime.onMessage
-      .trigger(message, { id: senderId }, (response: unknown) => {
+      .trigger(message, sender(senderId, frame), (response: unknown) => {
         reply = response;
         resolve();
       })
@@ -71,6 +87,26 @@ describe('background messages', () => {
     await send(OPEN_PROFILE);
 
     expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers the panel in a tab’s top frame and extension pages', async () => {
+    await browserProfileStore.save(fullProfile());
+
+    expect(await send(GET_AUTOFILL_VALUES)).toMatchObject({ status: 'ready' });
+    expect(
+      await send(GET_AUTOFILL_VALUES, fakeBrowser.runtime.id, {}),
+    ).toMatchObject({ status: 'ready' });
+  });
+
+  it('never sends profile values into a frame within a page', async () => {
+    await browserProfileStore.save(fullProfile());
+
+    expect(
+      await send(GET_AUTOFILL_VALUES, fakeBrowser.runtime.id, {
+        tab: { id: 7 },
+        frameId: 3,
+      }),
+    ).toBeUndefined();
   });
 
   it('ignores unknown messages', async () => {

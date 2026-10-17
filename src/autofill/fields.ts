@@ -81,6 +81,8 @@ export function isEducationField(
 
 /** One saved education record, as autofill uses it. */
 export interface EducationValue {
+  /** The saved record's id, so the user can choose it for a section. */
+  id: string;
   institution: string;
   qualification: string;
   fieldOfStudy: string;
