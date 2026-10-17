@@ -9,9 +9,12 @@ import {
   it,
   vi,
 } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { autofill } from '@/autofill/fill';
 import { scanFields } from '@/autofill/scan';
 import { loadFixture } from '@/test/load-fixture';
+import { validProfile } from '@/test/profile-fixtures';
+import { OPEN_PROFILE } from '@/messages';
 import { Panel } from './Panel';
 
 // Count real engine calls without changing what the engine does.
@@ -41,6 +44,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  fakeBrowser.reset();
   loadFixture('job-application.html');
   input('email').value = TYPED_EMAIL;
   host = document.createElement('div');
@@ -230,5 +234,40 @@ describe('Panel', () => {
     expect(status()).toBe('');
     expect(button(/^Nothing to fill/).disabled).toBe(true);
     expect(autofill).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('profile access', () => {
+  async function settle() {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+
+  it('offers profile setup when no profile is saved', async () => {
+    await settle();
+    const sendMessage = vi
+      .spyOn(fakeBrowser.runtime, 'sendMessage')
+      .mockResolvedValue(undefined);
+
+    expect(dialog().textContent).toContain('No profile saved yet.');
+    click('Set up your profile');
+
+    expect(sendMessage).toHaveBeenCalledWith(OPEN_PROFILE);
+  });
+
+  it('only links to the profile once one is saved', async () => {
+    act(() => {
+      root.unmount();
+    });
+    await fakeBrowser.storage.local.set({ profile: validProfile() });
+    root = createRoot(host);
+    act(() => {
+      root.render(<Panel onClose={onClose} />);
+    });
+    await settle();
+
+    expect(dialog().textContent).not.toContain('No profile saved yet.');
+    expect(button('Open your profile')).toBeTruthy();
   });
 });

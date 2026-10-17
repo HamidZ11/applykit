@@ -4,20 +4,23 @@ import {
   Maximize2,
   Minimize2,
   RotateCw,
+  UserRound,
   ShieldCheck,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { CompactView } from './CompactView';
 import { ExpandedView, visibleReports } from './ExpandedView';
 import { fieldKey } from './FieldRow';
-import { BrandMark, Icon } from './icons';
+import { BrandMark, Icon } from '@/components/ui/icons';
 import { Locator } from './Locator';
+import { openProfile, useHasSavedProfile } from './profile-access';
 import {
   Announcer,
   CloseButton,
   Kbd,
   PrimaryButton,
   SecondaryButton,
-} from './primitives';
+} from '@/components/ui/primitives';
 import { useHeightTransition } from './useHeightTransition';
 import { usePanel, type PanelModel } from './usePanel';
 import { locateTarget } from './vocabulary';
@@ -34,6 +37,7 @@ const EXPANDED_HEIGHT = 'min(600px, calc(100vh - 32px))';
  */
 export function Panel({ onClose }: { onClose: () => void }) {
   const model = usePanel();
+  const hasProfile = useHasSavedProfile();
   const frame = useRef<HTMLDivElement>(null);
   const { mode, phase, summary, selected, fields } = model;
   const hasForm = summary.total > 0;
@@ -92,6 +96,13 @@ export function Panel({ onClose }: { onClose: () => void }) {
             {model.page.host}
           </span>
           <span className="flex-1" />
+          <HeaderButton
+            label={
+              hasProfile === false ? 'Set up your profile' : 'Open your profile'
+            }
+            icon={UserRound}
+            onClick={openProfile}
+          />
           {hasForm && <ModeToggle model={model} />}
           <CloseButton onClose={onClose} />
         </header>
@@ -107,7 +118,7 @@ export function Panel({ onClose }: { onClose: () => void }) {
           ) : mode === 'expanded' ? (
             <ExpandedView model={model} />
           ) : (
-            <CompactView model={model} />
+            <CompactView model={model} hasProfile={hasProfile} />
           )}
         </div>
 
@@ -115,6 +126,29 @@ export function Panel({ onClose }: { onClose: () => void }) {
         <Announcer message={model.announcement} />
       </div>
     </>
+  );
+}
+
+/** A header icon button, matching the expand toggle and close button. */
+function HeaderButton({
+  label,
+  icon,
+  onClick,
+}: {
+  label: string;
+  icon: LucideIcon;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="flex size-7 items-center justify-center rounded-sm text-ink-3 transition-colors duration-100 hover:bg-hover hover:text-ink"
+    >
+      <Icon icon={icon} size={14} />
+    </button>
   );
 }
 

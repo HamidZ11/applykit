@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
+import { isOpenProfileMessage } from '@/messages';
 
 export default defineBackground(() => {
   // Clicking the toolbar button grants temporary access to the current tab
@@ -17,5 +18,17 @@ export default defineBackground(() => {
         // Chrome Web Store.
         console.warn('ApplyKit could not open on this page.', error);
       });
+  });
+
+  // First install only: open profile setup once. Updates and browser
+  // restarts never open tabs.
+  browser.runtime.onInstalled.addListener(({ reason }) => {
+    if (reason === 'install') void browser.runtime.openOptionsPage();
+  });
+
+  // The panel asks for the profile page; content scripts cannot open
+  // extension pages themselves.
+  browser.runtime.onMessage.addListener((message: unknown) => {
+    if (isOpenProfileMessage(message)) void browser.runtime.openOptionsPage();
   });
 });

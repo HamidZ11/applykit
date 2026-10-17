@@ -1,0 +1,28 @@
+/* Generate classes only for the profile screens' own components. */
+@import 'tailwindcss' source(none);
+@source '../../components/onboarding';
+@source '../../components/ui';
+
+@import '../../styles/theme.css';
+
+@layer base {
+  html {
+    background: var(--color-canvas);
+    color-scheme: light;
+  }
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    font-synthesis: none;
+  }
+  button {
+    cursor: default;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+}

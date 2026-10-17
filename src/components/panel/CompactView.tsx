@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import { ChevronRight, CircleDashed, ShieldCheck } from 'lucide-react';
 import { FieldRow, fieldKey } from './FieldRow';
-import { Icon, StatusGlyph } from './icons';
+import { Icon } from '@/components/ui/icons';
+import { StatusGlyph } from './icons';
 import type { FieldFilter } from './panel-state';
 import type { PanelModel } from './usePanel';
+import { openProfile } from './profile-access';
 import { PROFILE_FIELD_LABEL, plural } from './vocabulary';
 
 /** Queue rows shown at once in compact mode; the rest is in the full list. */
@@ -13,15 +15,28 @@ const QUEUE_WINDOW = 5;
  * Compact mode (the default): what ApplyKit will do, then what is left for
  * you. Details open in the expanded mode, on the matching filter.
  */
-export function CompactView({ model }: { model: PanelModel }) {
+export function CompactView({
+  model,
+  hasProfile,
+}: {
+  model: PanelModel;
+  /** Whether a profile is saved; null while checking. */
+  hasProfile: boolean | null;
+}) {
   return model.phase === 'ready' ? (
-    <ReadyBody model={model} />
+    <ReadyBody model={model} hasProfile={hasProfile} />
   ) : (
     <ResultsBody model={model} />
   );
 }
 
-function ReadyBody({ model }: { model: PanelModel }) {
+function ReadyBody({
+  model,
+  hasProfile,
+}: {
+  model: PanelModel;
+  hasProfile: boolean | null;
+}) {
   const { reports, summary, queue, expand } = model;
   const willFill = reports.filter((r) => r.status === 'fill').length;
   const willKeep = reports.filter((r) => r.status === 'keep').length;
@@ -67,6 +82,18 @@ function ReadyBody({ model }: { model: PanelModel }) {
         <Icon icon={ShieldCheck} size={12} />
         Never submits, never overwrites what you typed
       </p>
+      {hasProfile === false && (
+        <p className="mt-1.5 text-2xs text-ink-3">
+          No profile saved yet.{' '}
+          <button
+            type="button"
+            onClick={openProfile}
+            className="font-medium text-accent hover:text-accent-hover hover:underline"
+          >
+            Set up your profile
+          </button>
+        </p>
+      )}
     </div>
   );
 }

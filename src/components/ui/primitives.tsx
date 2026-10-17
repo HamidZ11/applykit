@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { X } from 'lucide-react';
-import { Icon } from './icons';
+import { Icon } from '@/components/ui/icons';
 
 /**
  * Small primitives both concepts share. Kept intentionally few: anything
@@ -59,5 +59,24 @@ export function Announcer({ message }: { message: string }) {
     <div role="status" className="sr-only">
       {message}
     </div>
+  );
+}
+
+/** A quiet text button for secondary actions next to the object they affect. */
+export function GhostButton({
+  className = '',
+  tone = 'neutral',
+  ...props
+}: ButtonProps & { tone?: 'neutral' | 'danger' }) {
+  return (
+    <button
+      type="button"
+      className={`inline-flex h-7 items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors duration-100 ${
+        tone === 'danger'
+          ? 'text-danger hover:bg-danger-soft'
+          : 'text-ink-2 hover:bg-hover hover:text-ink'
+      } ${className}`}
+      {...props}
+    />
   );
 }
