@@ -147,6 +147,9 @@ Limitations:
   education, experience and links, validated and saved in
   `browser.storage.local`. Opens once on install; reopen it from the
   panel's profile button or the extension's Options.
+- CV import from PDF or Word, read entirely in the browser: contact details,
+  links, education and roles are suggested with their source text and a
+  Confident / Check this label, and only what you accept enters your draft.
 - Requests only `activeTab`, `scripting` and `storage`: no access to any
   site until you click the toolbar button on it, and nothing leaves the
   browser.
