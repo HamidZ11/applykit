@@ -178,6 +178,30 @@ describe('panelReducer', () => {
     expect(after.selected).toBe(element('phone'));
   });
 
+  it('keeps confirmed choices until a rescan', async () => {
+    const done = await filledState();
+    const [first] = done.outcomes ?? [];
+    if (!first) throw new Error('No outcome');
+    const chosen = { ...first, status: 'filled' as const, chosen: true };
+
+    const resolved = panelReducer(done, {
+      type: 'resolved',
+      outcomes: [chosen],
+      notice:
+        'Filled 1 field from the record you chose. Nothing was submitted.',
+    });
+
+    expect(resolved.confirmed.get(first.field.element)).toBe(chosen);
+    expect(resolved.outcomes).toBe(done.outcomes);
+    expect(resolved.notice).toContain('record you chose');
+    const rescanned = panelReducer(resolved, {
+      type: 'rescanned',
+      fields: scanFields(document),
+    });
+    expect(rescanned.confirmed.size).toBe(0);
+    expect(rescanned.notice).toBe('');
+  });
+
   it('drops a selection whose field is gone after a rescan', async () => {
     const before = panelReducer(await filledState(), {
       type: 'select',

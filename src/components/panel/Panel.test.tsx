@@ -707,6 +707,20 @@ describe('choosing a saved education record', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('never fills a section just because a record was previewed', async () => {
+    await openChooser(/^School name/);
+    await choose('Example Sixth Form College');
+    click('Cancel');
+    click('Show summary');
+
+    await autofill();
+
+    expect(field('sec-school').value).toBe('');
+    expect(field('sec-grades').value).toBe('');
+    // Autofill still fills what is certain.
+    expect(field('first').value).toBe('Alex');
+  });
+
   it('explains a dropdown without the saved value', () => {
     click(/^University/);
 
