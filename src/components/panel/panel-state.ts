@@ -28,6 +28,14 @@ export interface PanelState {
   /** What autofill actually did, or null before autofill or after a rescan. */
   outcomes: FieldReport[] | null;
   /**
+   * Fields filled from a record the user chose, with their verified
+   * outcomes. They take precedence over planned or autofill reports for the
+   * same element, until a rescan.
+   */
+  confirmed: ReadonlyMap<FormControl, FieldReport>;
+  /** Screen-reader text for the latest choice the user confirmed. */
+  notice: string;
+  /**
    * The field the user is reviewing, by element so it survives rescans.
    * Shared by both modes: the compact queue's current step and the expanded
    * list's selected row are the same thing.
@@ -45,6 +53,8 @@ export type PanelAction =
   /** Autofill could not start, e.g. the profile was removed meanwhile. */
   | { type: 'fill-stopped'; values: AutofillValuesResponse }
   | { type: 'autofilled'; fields: ScannedField[]; outcomes: FieldReport[] }
+  /** A chosen record was written; `outcomes` are its section's fields. */
+  | { type: 'resolved'; outcomes: FieldReport[]; notice: string }
   | { type: 'rescanned'; fields: ScannedField[] };
 
 export function initialPanelState(fields: ScannedField[]): PanelState {
@@ -55,6 +65,8 @@ export function initialPanelState(fields: ScannedField[]): PanelState {
     fields,
     values: { status: 'loading' },
     outcomes: null,
+    confirmed: new Map(),
+    notice: '',
     selected: null,
   };
 }
@@ -82,10 +94,18 @@ export function panelReducer(
       return state.phase === 'ready' ? { ...state, phase: 'filling' } : state;
     case 'fill-stopped':
       return { ...state, phase: 'ready', values: action.values };
+    case 'resolved': {
+      const confirmed = new Map(state.confirmed);
+      for (const outcome of action.outcomes) {
+        confirmed.set(outcome.field.element, outcome);
+      }
+      return { ...state, confirmed, notice: action.notice };
+    }
     case 'autofilled':
       return {
         ...state,
         phase: 'done',
+        notice: '',
         fields: action.fields,
         outcomes: action.outcomes,
         selected: keepIfPresent(state.selected, action.fields),
@@ -96,6 +116,8 @@ export function panelReducer(
         phase: 'ready',
         fields: action.fields,
         outcomes: null,
+        confirmed: new Map(),
+        notice: '',
         selected: keepIfPresent(state.selected, action.fields),
       };
   }

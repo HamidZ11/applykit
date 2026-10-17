@@ -14,7 +14,13 @@ import type { AutofillValues } from '@/autofill/fields';
 import { fillFields } from '@/autofill/fill';
 import { scanFields } from '@/autofill/scan';
 import { OPEN_PROFILE, type AutofillValuesResponse } from '@/messages';
-import { sampleValues } from '@/test/autofill-fixtures';
+import { autofillValuesFrom } from '@/autofill/profile-values';
+import {
+  educationRecords,
+  fullProfile,
+  gcseRecord,
+  sampleValues,
+} from '@/test/autofill-fixtures';
 import { loadFixture } from '@/test/load-fixture';
 import { Panel } from './Panel';
 
@@ -525,5 +531,212 @@ describe('Panel without a usable profile', () => {
 
     expect(button(/^Autofill/).disabled).toBe(false);
     expect(dialog().textContent).toContain('Fill 6 fields from your profile');
+  });
+});
+
+describe('choosing a saved education record', () => {
+  /** A degree, A levels and GCSEs: two records fit a school section. */
+  function threeRecords(): AutofillValuesResponse {
+    const profile = fullProfile();
+    profile.education = [...educationRecords(), gcseRecord()];
+    return ready(autofillValuesFrom(profile));
+  }
+
+  beforeEach(async () => {
+    loadFixture('interactive-education.html');
+    document.body.append(host);
+    await open(threeRecords());
+    click('Show all fields');
+  });
+
+  function field(id: string): HTMLInputElement {
+    const element = document.getElementById(id);
+    if (!element) throw new Error(`No #${id}`);
+    return element as HTMLInputElement;
+  }
+
+  function radios(): HTMLInputElement[] {
+    return [...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+  }
+
+  async function choose(institution: string) {
+    const radio = radios().find((r) =>
+      r.closest('label')?.textContent.includes(institution),
+    );
+    if (!radio) throw new Error(`No record ${institution}`);
+    await act(async () => {
+      radio.click();
+      await Promise.resolve();
+    });
+  }
+
+  async function openChooser(row: RegExp) {
+    click(row);
+    click('Choose a saved record');
+    await settle();
+  }
+
+  it('offers only the records that fit the section', async () => {
+    await openChooser(/^School name/);
+
+    expect(radios().map((r) => r.closest('label')?.textContent.trim())).toEqual(
+      [
+        'Example Sixth Form CollegeA levels · 2022–2024',
+        'Example Grammar SchoolGCSEs · 2017–2022',
+      ],
+    );
+    expect(document.activeElement?.closest('label')?.textContent).toContain(
+      'Example Sixth Form College',
+    );
+    // Nothing is chosen for the user.
+    expect(radios().some((r) => r.checked)).toBe(false);
+    expect(button(/^Fill fields/).disabled).toBe(true);
+  });
+
+  it('previews exactly what the chosen record fills', async () => {
+    await openChooser(/^School name/);
+    await choose('Example Grammar School');
+
+    const preview = host.querySelector('[aria-label="What this record fills"]');
+    expect(
+      [...(preview?.querySelectorAll('li') ?? [])].map((li) =>
+        li.textContent.trim(),
+      ),
+    ).toEqual([
+      'School nameWill fill',
+      'QualificationWill fill',
+      'Grades achievedNot in this record',
+      'Year completedWill fill',
+    ]);
+    expect(button('Fill 3 fields').disabled).toBe(false);
+    // Previewing changes nothing on the page.
+    expect(field('sec-school').value).toBe('');
+  });
+
+  it('fills the section only after the user confirms', async () => {
+    const needsYouBefore = tabCounts()[2];
+    await openChooser(/^School name/);
+    await choose('Example Sixth Form College');
+
+    click('Fill 4 fields');
+    await settle();
+
+    expect(field('sec-school').value).toBe('Example Sixth Form College');
+    expect(field('sec-qual').value).toBe('al');
+    expect(field('sec-grades').value).toBe('A*AA');
+    expect(field('sec-year').value).toBe('2024');
+    // Other sections and fields are untouched.
+    for (const id of ['e1-inst', 'e2-inst', 'first']) {
+      expect(field(id).value, id).toBe('');
+    }
+    expect(fillFields).toHaveBeenCalledTimes(1);
+    // The profile is read again before writing.
+    expect(loadValues).toHaveBeenCalledTimes(2);
+    expect(announcement()).toBe(
+      'Filled 4 fields from the record you chose. Nothing was submitted.',
+    );
+    // Same mode, same row, now reported as filled by the user's choice.
+    expect(dialog().dataset.mode).toBe('expanded');
+    expect(button(/^School name/).getAttribute('aria-pressed')).toBe('true');
+    expect(button(/^School name/).textContent).toContain(
+      'Example Sixth Form College',
+    );
+    expect(dialog().textContent).toContain('Filled · your choice');
+    expect(document.activeElement).toBe(button(/^School name/));
+    expect(tabCounts()[2]).not.toBe(needsYouBefore);
+    expect(radios()).toHaveLength(0);
+  });
+
+  it('cancels without filling anything', async () => {
+    await openChooser(/^School name/);
+    await choose('Example Sixth Form College');
+
+    click('Cancel');
+
+    expect(radios()).toHaveLength(0);
+    expect(field('sec-school').value).toBe('');
+    expect(fillFields).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(button(/^School name/));
+  });
+
+  it('fills nothing when the section changed after the preview', async () => {
+    await openChooser(/^Institution/);
+    await choose('University of Example');
+    document
+      .querySelector('[aria-labelledby="edu-1"]')
+      ?.insertAdjacentHTML(
+        'beforeend',
+        '<label>Grade <input id="e1-grade"></label>',
+      );
+
+    click(/^Fill \d fields?$/);
+    await settle();
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'This section has changed since you chose. Nothing was filled; review it again.',
+    );
+    expect(field('e1-inst').value).toBe('');
+    expect(fillFields).not.toHaveBeenCalled();
+  });
+
+  it('keeps the arrow keys, Enter and Escape for the chooser', async () => {
+    await openChooser(/^School name/);
+    const [first] = radios();
+    if (!first) throw new Error('No radio');
+    act(() => {
+      first.focus();
+    });
+
+    for (const key of ['ArrowDown', 'Enter']) {
+      act(() => {
+        first.dispatchEvent(
+          new KeyboardEvent('keydown', { key, bubbles: true }),
+        );
+      });
+    }
+    expect(button(/^School name/).getAttribute('aria-pressed')).toBe('true');
+    expect(field('sec-school').value).toBe('');
+
+    act(() => {
+      first.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+    });
+    expect(radios()).toHaveLength(0);
+    expect(dialog().dataset.mode).toBe('expanded');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('explains a dropdown without the saved value', () => {
+    click(/^University/);
+
+    expect(dialog().textContent).toContain(
+      'Choose the right option on the page yourself.',
+    );
+    expect(findButton('Choose a saved record')).toBeUndefined();
+  });
+
+  it('keeps the compact mode free of choosers', () => {
+    click('Show summary');
+
+    expect(findButton('Choose a saved record')).toBeUndefined();
+    expect(radios()).toHaveLength(0);
+  });
+});
+
+describe('missing profile details', () => {
+  it('links to the profile editor', async () => {
+    const values = sampleValues();
+    values.text.lastName = '';
+    await open(ready(values));
+    const sendMessage = vi
+      .spyOn(fakeBrowser.runtime, 'sendMessage')
+      .mockResolvedValue(undefined);
+    click('Show all fields');
+    click(/^Last name/);
+
+    click(/Edit your profile$/);
+
+    expect(sendMessage).toHaveBeenCalledWith(OPEN_PROFILE);
   });
 });

@@ -78,6 +78,8 @@ export interface ReportSummary {
   filled: number;
   /** How many of `filled` the site accepted in its own format: worth a check. */
   reformatted: number;
+  /** How many of `filled` came from a record the user chose. */
+  chosen: number;
   /** Fields that already held a value, which ApplyKit leaves as is. */
   kept: number;
   /** Fills the page did not accept, or fields that disappeared. */
@@ -505,6 +507,7 @@ export function summarise(reports: readonly FieldReport[]): ReportSummary {
   const summary: ReportSummary = {
     filled: 0,
     reformatted: 0,
+    chosen: 0,
     kept: 0,
     failed: 0,
     needsYou: 0,
@@ -519,6 +522,7 @@ export function summarise(reports: readonly FieldReport[]): ReportSummary {
     ) {
       summary.filled++;
       if (report.status === 'reformatted') summary.reformatted++;
+      if (report.chosen) summary.chosen++;
     } else if (report.status === 'keep' || report.status === 'kept') {
       summary.kept++;
     } else {

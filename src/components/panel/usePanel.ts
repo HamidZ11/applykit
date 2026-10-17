@@ -15,6 +15,12 @@ import {
   type FieldReport,
   type ReportSummary,
 } from '@/autofill/report';
+import {
+  confirmChoice,
+  previewChoice,
+  type ChoicePreview,
+  type SectionChoice,
+} from '@/autofill/resolve';
 import { scanFields, type FormControl } from '@/autofill/scan';
 import type { AutofillValuesResponse } from '@/messages';
 import { readPageContext, type PageContext } from '@/page/page-context';
@@ -30,6 +36,10 @@ import { plural } from './vocabulary';
 
 /** Reads the confirmed profile's values; injectable for tests. */
 export type LoadValues = () => Promise<AutofillValuesResponse>;
+
+/** What happened when the user confirmed a chosen record. */
+export type ChoiceResult =
+  { ok: true; filled: number; total: number } | { ok: false; message: string };
 
 export interface PanelModel extends PanelState {
   page: PageContext;
@@ -50,6 +60,16 @@ export interface PanelModel extends PanelState {
   clearSelection: () => void;
   /** Moves to the next field that needs the user, in priority order. */
   next: () => void;
+  /** What choosing a saved record for a section would fill; no page changes. */
+  previewChoice: (choice: SectionChoice) => ChoicePreview | null;
+  /**
+   * Fills a section from the record the user chose, after re-checking that
+   * the page and profile still match the preview (`previewed` fields).
+   */
+  applyChoice: (
+    choice: SectionChoice,
+    previewed: readonly FormControl[],
+  ) => Promise<ChoiceResult>;
 }
 
 /**
@@ -93,8 +113,11 @@ export function usePanel(
   // Every scan produces a new `fields` array, so plans re-read values the
   // user typed since the last scan.
   const reports = useMemo(
-    () => state.outcomes ?? planFill(state.fields, values),
-    [state.fields, state.outcomes, values],
+    () =>
+      (state.outcomes ?? planFill(state.fields, values)).map(
+        (report) => state.confirmed.get(report.field.element) ?? report,
+      ),
+    [state.fields, state.outcomes, state.confirmed, values],
   );
   const summary = useMemo(() => summarise(reports), [reports]);
   const queue = useMemo(() => attentionQueue(reports), [reports]);
@@ -124,6 +147,62 @@ export function usePanel(
       filling.current = false;
     }
   }, [loadValues, root]);
+
+  const preview = useCallback(
+    (choice: SectionChoice) =>
+      values ? previewChoice(state.fields, values, choice) : null,
+    [state.fields, values],
+  );
+
+  const applyChoice = useCallback(
+    async (
+      choice: SectionChoice,
+      previewed: readonly FormControl[],
+    ): Promise<ChoiceResult> => {
+      if (filling.current) {
+        return { ok: false, message: 'ApplyKit is still filling. Try again.' };
+      }
+      filling.current = true;
+      try {
+        // As for autofill: the latest saved profile and the page as it is now.
+        const request = ++latestRequest.current;
+        const latest = await loadValues();
+        if (request === latestRequest.current) {
+          dispatch({ type: 'values', values: latest });
+        }
+        if (latest.status !== 'ready') {
+          return {
+            ok: false,
+            message:
+              'Your saved profile could not be read. Nothing was filled.',
+          };
+        }
+        const check = confirmChoice(
+          scanFields(root),
+          latest.values,
+          choice,
+          previewed,
+        );
+        if (!check.ok) return check;
+        const outcomes = await fillFields(check.plan);
+        const filled = outcomes.filter(
+          (r) =>
+            r.chosen && (r.status === 'filled' || r.status === 'reformatted'),
+        ).length;
+        const notice = `Filled ${plural(filled, 'field')} from the record you chose. Nothing was submitted.`;
+        dispatch({ type: 'resolved', outcomes, notice });
+        return { ok: true, filled, total: outcomes.length };
+      } catch {
+        return {
+          ok: false,
+          message: 'Something went wrong. Nothing more was filled.',
+        };
+      } finally {
+        filling.current = false;
+      }
+    },
+    [loadValues, root],
+  );
 
   const autofill = useCallback(() => {
     void runAutofill();
@@ -172,7 +251,8 @@ export function usePanel(
     reports,
     summary,
     queue,
-    announcement: state.phase === 'done' ? describeOutcome(summary) : '',
+    announcement:
+      state.notice || (state.phase === 'done' ? describeOutcome(summary) : ''),
     autofill,
     rescan,
     expand,
@@ -181,6 +261,8 @@ export function usePanel(
     toggleSelect,
     clearSelection,
     next,
+    previewChoice: preview,
+    applyChoice,
   };
 }
 

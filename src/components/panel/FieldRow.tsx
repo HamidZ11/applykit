@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { FieldReport } from '@/autofill/report';
 import { StatusGlyph } from './icons';
 import {
@@ -20,6 +20,8 @@ interface FieldRowProps {
   flash?: boolean;
   onFlashEnd?: () => void;
   onSelect: () => void;
+  /** Expanded mode: what the user can do about the field, under its explanation. */
+  actions?: ReactNode;
 }
 
 /**
@@ -33,6 +35,7 @@ export function FieldRow({
   flash = false,
   onFlashEnd,
   onSelect,
+  actions,
 }: FieldRowProps) {
   const { field, status } = report;
   const value = detailed ? report.value : null;
@@ -85,8 +88,12 @@ export function FieldRow({
       {detailed && selected && (
         <div className="animate-[ak-fade-in_140ms_var(--ease-out)] pr-2 pb-2.5 pl-[32px] text-xs">
           <p className="text-ink-2">{explain(report)}</p>
+          {actions}
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5 font-mono text-2xs text-ink-3">
-            <span>{STATUS_LABEL[status]}</span>
+            <span>
+              {STATUS_LABEL[status]}
+              {report.chosen ? ' · your choice' : ''}
+            </span>
             <span aria-hidden>·</span>
             <span>{KIND_LABEL[field.kind].toLowerCase()}</span>
             {detail?.target && (

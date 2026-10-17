@@ -470,6 +470,7 @@ describe('summarise and attentionQueue', () => {
     expect(summarise(reports)).toEqual({
       filled: 2,
       reformatted: 1,
+      chosen: 0,
       kept: 1,
       failed: 2,
       needsYou: 4,

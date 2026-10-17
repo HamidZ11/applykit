@@ -7,6 +7,7 @@ import {
 } from '@/autofill/categories';
 import type { FieldReport } from '@/autofill/report';
 import { PageIdentity } from './CompactView';
+import { FieldActions } from './FieldActions';
 import { FieldRow, fieldKey } from './FieldRow';
 import { matchesFilter, type FieldFilter } from './panel-state';
 import type { PanelModel } from './usePanel';
@@ -76,6 +77,7 @@ export function ExpandedView({ model }: { model: PanelModel }) {
                     onSelect={() => {
                       toggleSelect(report.field.element);
                     }}
+                    actions={<FieldActions report={report} model={model} />}
                   />
                 ))}
               </ul>

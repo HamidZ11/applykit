@@ -66,11 +66,15 @@ export function Panel({
       else onClose();
     } else if (event.key === 'Enter') {
       if (event.target instanceof HTMLButtonElement) return;
+      // A control inside the list (a record choice) handles its own keys.
+      if (event.target instanceof HTMLInputElement) return;
       event.preventDefault();
       runPrimary(model);
     } else if (
       mode === 'expanded' &&
-      (event.key === 'ArrowDown' || event.key === 'ArrowUp')
+      (event.key === 'ArrowDown' || event.key === 'ArrowUp') &&
+      // Radio buttons move between choices with the arrow keys.
+      !(event.target instanceof HTMLInputElement)
     ) {
       event.preventDefault();
       moveSelection(model, event.key === 'ArrowDown' ? 1 : -1);
