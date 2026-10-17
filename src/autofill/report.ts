@@ -1,112 +1,309 @@
-import type { Profile } from '@/domain/profile';
-import type { FillResult } from './fill';
+import type { Evidence } from './detect';
+import {
+  AUTOFILL_FIELD_LABEL,
+  type AutofillField,
+  type AutofillValues,
+  type CountryValue,
+} from './fields';
 import type { ScannedField } from './scan';
 
 /**
  * What happens, or happened, to one field.
  *
- * Before autofill: `fill`, `keep` or `no-value` for recognised fields.
- * After autofill: `filled`, `kept` or `no-value`.
- * In both phases: `unrecognised` and `unsupported` fields are left to the user.
+ * Before autofill: `fill` or `keep` for recognised fields that ApplyKit can
+ * handle. After autofill: `filled`, `reformatted` (accepted in the site's own
+ * format), `kept`, or a failure (`rejected`, `detached`). In both phases the
+ * remaining statuses say why a field is left to the user.
  */
 export type FieldStatus =
   | 'fill'
   | 'filled'
+  | 'reformatted'
   | 'keep'
   | 'kept'
+  | 'rejected'
+  | 'detached'
   | 'no-value'
+  | 'no-profile'
+  | 'no-option'
   | 'unrecognised'
-  | 'unsupported';
+  | 'unsupported'
+  | 'manual'
+  | 'conflict'
+  | 'other-person';
 
 export interface FieldReport {
   field: ScannedField;
   status: FieldStatus;
-  /** The value ApplyKit will write or wrote, or the user's value it keeps. */
+  /** The profile field the control was matched to, if any. */
+  target: AutofillField | null;
+  /**
+   * What to show: the value ApplyKit will write or wrote, the user's own
+   * entry it keeps, or what the site changed it to.
+   */
   value: string | null;
+  /** Exactly what is written: text, or the chosen option's value. */
+  fillValue: string | null;
+  /** Why the field is left to the user, in plain language. */
+  reason: string | null;
+  evidence: Evidence[];
 }
 
 export interface ReportSummary {
   /** Fields ApplyKit fills (before autofill) or filled (after). */
   filled: number;
-  /** Recognised fields that already held a value, which ApplyKit leaves as is. */
+  /** How many of `filled` the site accepted in its own format: worth a check. */
+  reformatted: number;
+  /** Fields that already held a value, which ApplyKit leaves as is. */
   kept: number;
-  /** Fields the applicant must complete themselves. */
+  /** Fills the page did not accept, or fields that disappeared. */
+  failed: number;
+  /** Fields the applicant must complete or check themselves. */
   needsYou: number;
   /** How many of `needsYou` the form marks as required. */
   requiredNeedsYou: number;
   total: number;
 }
 
+const REASON = {
+  sensitive:
+    'A personal or sensitive question. ApplyKit never answers these for you.',
+  consent: 'A declaration or consent. Only you can agree to this.',
+  verification: 'A verification check. Complete it yourself.',
+  otherPerson:
+    'This seems to ask about someone else or an organisation, such as a reference or employer.',
+  unrecognised: 'ApplyKit does not know what this field asks for.',
+  unsupported: 'ApplyKit does not fill this kind of field yet.',
+  noProfile: 'Set up your profile so ApplyKit can fill this.',
+  tooLong: 'Your saved value is longer than this field allows.',
+} as const;
+
 /**
- * Predicts what `autofill` will do, using the same rules: recognised fields
- * with a value already entered are kept, empty ones are filled.
+ * Plans autofill without touching the page: what each recognised field
+ * would receive from the confirmed profile, and why the others are left
+ * alone. `values` is null when no confirmed profile is available.
  */
 export function planFill(
   fields: readonly ScannedField[],
-  profile: Profile,
+  values: AutofillValues | null,
 ): FieldReport[] {
-  return fields.map((field) => {
-    const { support } = field;
-    if (support.status !== 'fillable') {
-      return { field, status: support.status, value: null };
-    }
-    const existing = currentValue(field);
-    if (existing) return { field, status: 'keep', value: existing };
-    const value = profile[support.field];
-    return value
-      ? { field, status: 'fill', value }
-      : { field, status: 'no-value', value: null };
-  });
+  return fields.map((field) => planField(field, values));
 }
 
-/** Describes what `autofill` actually did to each scanned field. */
-export function reportFill(
-  fields: readonly ScannedField[],
-  result: FillResult,
-): FieldReport[] {
-  const filled = new Set<Element>(result.filled.map((t) => t.element));
-  const skipped = new Map<Element, string>(
-    result.skipped.map((t) => [t.element, t.reason]),
-  );
+function planField(
+  field: ScannedField,
+  values: AutofillValues | null,
+): FieldReport {
+  const base = {
+    field,
+    target: null,
+    value: null,
+    fillValue: null,
+    reason: null,
+    evidence: [],
+  };
+  const { support } = field;
+  switch (support.status) {
+    case 'manual':
+      return { ...base, status: 'manual', reason: REASON[support.reason] };
+    case 'other-person':
+      return {
+        ...base,
+        status: 'other-person',
+        reason: REASON.otherPerson,
+        evidence: support.evidence,
+      };
+    case 'conflict':
+      return {
+        ...base,
+        status: 'conflict',
+        evidence: support.evidence,
+        reason: `The page’s labels disagree (${support.fields
+          .map((target) => AUTOFILL_FIELD_LABEL[target].toLowerCase())
+          .join(' or ')}), so ApplyKit leaves it to you.`,
+      };
+    case 'unrecognised':
+      return { ...base, status: 'unrecognised', reason: REASON.unrecognised };
+    case 'unsupported':
+      return { ...base, status: 'unsupported', reason: REASON.unsupported };
+    case 'match':
+      break;
+  }
 
-  return fields.map((field) => {
-    const { element, support } = field;
-    if (support.status !== 'fillable') {
-      return { field, status: support.status, value: null };
-    }
-    if (filled.has(element)) {
-      return { field, status: 'filled', value: currentValue(field) };
-    }
-    if (skipped.get(element) === 'has-value') {
-      return { field, status: 'kept', value: currentValue(field) };
-    }
-    return { field, status: 'no-value', value: null };
-  });
+  const matched = {
+    ...base,
+    target: support.field,
+    evidence: support.evidence,
+  };
+  if (!values) {
+    return { ...matched, status: 'no-profile', reason: REASON.noProfile };
+  }
+
+  const existing = currentValue(field);
+  if (existing !== null) {
+    return {
+      ...matched,
+      status: 'keep',
+      value: existing,
+      reason: 'You already entered this. ApplyKit leaves it as it is.',
+    };
+  }
+
+  const planned =
+    support.field === 'country'
+      ? planCountry(field, values.country)
+      : planText(values.text[support.field]);
+  if ('reason' in planned) {
+    return { ...matched, status: planned.status, reason: planned.reason };
+  }
+
+  const { element } = field;
+  if (
+    !(element instanceof HTMLSelectElement) &&
+    element.maxLength > 0 &&
+    planned.fillValue.length > element.maxLength
+  ) {
+    return { ...matched, status: 'manual', reason: REASON.tooLong };
+  }
+  return {
+    ...matched,
+    status: 'fill',
+    value: planned.display,
+    fillValue: planned.fillValue,
+  };
 }
+
+type Planned =
+  | { display: string; fillValue: string }
+  | { status: 'no-value' | 'no-option'; reason: string };
+
+function planText(value: string): Planned {
+  const trimmed = value.trim();
+  return trimmed === ''
+    ? { status: 'no-value', reason: 'Your profile has no value for this.' }
+    : { display: trimmed, fillValue: trimmed };
+}
+
+/**
+ * The country in the representation the field expects. Text fields get the
+ * ISO code when their semantics ask for a code, otherwise the name. Native
+ * selects get the one option that exactly matches the country, or nothing.
+ */
+function planCountry(
+  field: ScannedField,
+  country: CountryValue | null,
+): Planned {
+  if (!country) {
+    return { status: 'no-value', reason: 'Your profile has no country.' };
+  }
+  const { element } = field;
+  if (element instanceof HTMLSelectElement) {
+    const names = new Set(
+      [country.code, country.alpha3, country.name, ...country.aliases].map(
+        comparable,
+      ),
+    );
+    const matching = new Map<string, string>();
+    for (const option of element.options) {
+      if (option.disabled || option.value === '') continue;
+      if (
+        names.has(comparable(option.value)) ||
+        names.has(comparable(option.text))
+      ) {
+        matching.set(option.value, option.text.trim());
+      }
+    }
+    const [only] = matching;
+    if (matching.size === 1 && only) {
+      const [value, text] = only;
+      return { display: text, fillValue: value };
+    }
+    return {
+      status: 'no-option',
+      reason:
+        matching.size === 0
+          ? `None of the options matches ${country.name}.`
+          : `Several options could mean ${country.name}, so ApplyKit leaves it to you.`,
+    };
+  }
+
+  const token = (element.getAttribute('autocomplete') ?? '')
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .at(-1);
+  const maxLength = element.maxLength;
+  if (token === 'country' || maxLength === 2) {
+    return { display: country.code, fillValue: country.code };
+  }
+  if (maxLength === 3 && country.alpha3) {
+    return { display: country.alpha3, fillValue: country.alpha3 };
+  }
+  return { display: country.name, fillValue: country.name };
+}
+
+/** The user's own entry, or null when the control is empty. */
+export function currentValue(field: ScannedField): string | null {
+  const { element } = field;
+  if (element instanceof HTMLSelectElement) {
+    const option = element.selectedOptions[0];
+    if (!option || option.value === '') return null;
+    return option.text.trim() || option.value;
+  }
+  const value = element.value.trim();
+  return value === '' ? null : value;
+}
+
+/** Lower case, accents and punctuation removed, for exact comparisons. */
+export function comparable(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+const HANDLED = new Set<FieldStatus>([
+  'fill',
+  'filled',
+  'reformatted',
+  'keep',
+  'kept',
+]);
+const FAILED = new Set<FieldStatus>(['rejected', 'detached']);
 
 export function needsYou(report: FieldReport): boolean {
-  return (
-    report.status === 'no-value' ||
-    report.status === 'unrecognised' ||
-    report.status === 'unsupported'
-  );
+  return !HANDLED.has(report.status);
+}
+
+export function isFailure(report: FieldReport): boolean {
+  return FAILED.has(report.status);
 }
 
 export function summarise(reports: readonly FieldReport[]): ReportSummary {
   const summary: ReportSummary = {
     filled: 0,
+    reformatted: 0,
     kept: 0,
+    failed: 0,
     needsYou: 0,
     requiredNeedsYou: 0,
     total: reports.length,
   };
   for (const report of reports) {
-    if (report.status === 'fill' || report.status === 'filled') {
+    if (
+      report.status === 'fill' ||
+      report.status === 'filled' ||
+      report.status === 'reformatted'
+    ) {
       summary.filled++;
+      if (report.status === 'reformatted') summary.reformatted++;
     } else if (report.status === 'keep' || report.status === 'kept') {
       summary.kept++;
     } else {
       summary.needsYou++;
+      if (FAILED.has(report.status)) summary.failed++;
       if (report.field.required) summary.requiredNeedsYou++;
     }
   }
@@ -114,18 +311,14 @@ export function summarise(reports: readonly FieldReport[]): ReportSummary {
 }
 
 /**
- * Fields needing the applicant, most urgent first: required before optional,
- * otherwise in page order.
+ * Fields needing the applicant, most urgent first: failed fills, then
+ * required fields, otherwise in page order.
  */
 export function attentionQueue(reports: readonly FieldReport[]): FieldReport[] {
   const pending = reports.filter(needsYou);
   return [
-    ...pending.filter((report) => report.field.required),
-    ...pending.filter((report) => !report.field.required),
+    ...pending.filter(isFailure),
+    ...pending.filter((r) => !isFailure(r) && r.field.required),
+    ...pending.filter((r) => !isFailure(r) && !r.field.required),
   ];
-}
-
-function currentValue(field: ScannedField): string | null {
-  const value = field.element.value.trim();
-  return value === '' ? null : value;
 }

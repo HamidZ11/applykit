@@ -1,24 +1,24 @@
-import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
-import { OPEN_PROFILE } from '@/messages';
-import { hasSavedProfile } from '@/storage/profile-presence';
+import {
+  GET_AUTOFILL_VALUES,
+  OPEN_PROFILE,
+  isAutofillValuesResponse,
+  type AutofillValuesResponse,
+} from '@/messages';
 
 /**
- * Whether the user has saved a profile: null while checking. The panel only
- * uses this to offer profile setup; autofill does not read the profile yet.
+ * Asks the background worker for the values autofill may use, read fresh
+ * from the confirmed profile. The panel never reads storage itself and
+ * never receives the whole profile.
  */
-export function useHasSavedProfile(): boolean | null {
-  const [saved, setSaved] = useState<boolean | null>(null);
-  useEffect(() => {
-    let active = true;
-    void hasSavedProfile().then((value) => {
-      if (active) setSaved(value);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-  return saved;
+export async function requestAutofillValues(): Promise<AutofillValuesResponse> {
+  try {
+    const response: unknown =
+      await browser.runtime.sendMessage(GET_AUTOFILL_VALUES);
+    return isAutofillValuesResponse(response) ? response : { status: 'error' };
+  } catch {
+    return { status: 'error' };
+  }
 }
 
 /** Opens the profile page (onboarding or editing) in a new tab. */

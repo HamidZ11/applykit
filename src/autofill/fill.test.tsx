@@ -1,168 +1,317 @@
 import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { describe, expect, it, vi } from 'vitest';
-import { SAMPLE_PROFILE } from '@/domain/profile';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { sampleValues } from '@/test/autofill-fixtures';
 import { loadFixture, loadHtml } from '@/test/load-fixture';
-import { autofill } from './fill';
+import { fillFields } from './fill';
+import { planFill, type FieldReport } from './report';
+import { scanFields } from './scan';
 
-function input(id: string): HTMLInputElement {
+beforeAll(() => {
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+function control(id: string): HTMLInputElement | HTMLSelectElement {
   const element = document.getElementById(id);
-  if (!(element instanceof HTMLInputElement))
-    throw new Error(`No input #${id}`);
+  if (
+    !(element instanceof HTMLInputElement) &&
+    !(element instanceof HTMLSelectElement)
+  ) {
+    throw new Error(`No control #${id}`);
+  }
   return element;
 }
 
-describe('autofill', () => {
-  it('assigns sample values to the matching fixture fields', () => {
-    const document = loadFixture('basic-application.html');
+function plan(root: ParentNode = document): FieldReport[] {
+  return planFill(scanFields(root), sampleValues());
+}
 
-    const result = autofill(document, SAMPLE_PROFILE);
+describe('fillFields', () => {
+  it('fills the applicant’s details and confirms each was accepted', async () => {
+    loadFixture('full-application.html');
 
-    expect(input('first-name').value).toBe('Alex');
-    expect(input('last-name').value).toBe('Sample');
-    expect(input('email').value).toBe('alex.sample@example.com');
-    expect(result.filled.map((target) => target.field)).toEqual([
-      'firstName',
-      'lastName',
-      'email',
-    ]);
-    expect(result.skipped).toEqual([]);
-    expect(result.missing).toEqual([]);
+    const outcomes = await fillFields(plan());
+
+    expect(control('full-name').value).toBe('Alex Sample');
+    expect(control('email').value).toBe('alex.sample@example.com');
+    expect(control('email-confirm').value).toBe('alex.sample@example.com');
+    expect(control('address2').value).toBe('Flat 2');
+    expect(control('county').value).toBe('Greater London');
+    expect(control('country').value).toBe('GB');
+    expect(control('website').value).toBe('https://alex-sample.example.com');
+    expect(outcomes.filter((r) => r.status === 'filled')).toHaveLength(14);
   });
 
-  it('leaves unrecognised fields untouched', () => {
-    const document = loadFixture('basic-application.html');
-    const hidden = document.querySelector<HTMLInputElement>('[name="job_id"]');
+  it('leaves every other field exactly as it was', async () => {
+    const document = loadFixture('full-application.html');
+    const untouched = [
+      'company-site',
+      'employer-address',
+      'manager-email',
+      'ref-name',
+      'ref-phone',
+      'salary',
+      'dob',
+      'captcha',
+      'trap',
+      'news-email',
+    ];
+    const consent = document.querySelector<HTMLInputElement>(
+      '[name="privacy_consent"]',
+    );
+    const changed = vi.fn();
+    document.addEventListener('input', (event) => {
+      const target = event.target as HTMLElement;
+      if (untouched.includes(target.id)) changed(target.id);
+    });
 
-    autofill(document, SAMPLE_PROFILE);
+    await fillFields(plan());
 
-    expect(hidden?.value).toBe('fixture-001');
+    for (const id of untouched) expect(control(id).value, id).toBe('');
+    expect(control('requisition').value).toBe('OL-2026-0087');
+    expect(consent?.checked).toBe(false);
+    expect(
+      document.querySelector<HTMLInputElement>('[name="sponsorship"]:checked'),
+    ).toBeNull();
+    expect(document.querySelector('textarea')?.value).toBe('');
+    expect(changed).not.toHaveBeenCalled();
   });
 
-  it('dispatches bubbling input and change events for each filled field', () => {
-    const document = loadFixture('basic-application.html');
+  it('dispatches bubbling input and change events for each written field', async () => {
+    loadHtml(`<form id="f">
+      <label>First name <input id="first"></label>
+      <label>Country <select id="country"><option value=""></option><option value="GB">United Kingdom</option></select></label>
+    </form>`);
     const events: string[] = [];
-    const form = document.getElementById('application');
+    const form = document.getElementById('f');
     form?.addEventListener('input', (event) => {
-      expect(event).toBeInstanceOf(InputEvent);
-      events.push(`input:${(event.target as HTMLInputElement).id}`);
+      events.push(`input:${(event.target as HTMLElement).id}`);
     });
     form?.addEventListener('change', (event) => {
-      events.push(`change:${(event.target as HTMLInputElement).id}`);
+      events.push(`change:${(event.target as HTMLElement).id}`);
     });
 
-    autofill(document, SAMPLE_PROFILE);
+    await fillFields(plan());
 
     expect(events).toEqual([
-      'input:first-name',
-      'change:first-name',
-      'input:last-name',
-      'change:last-name',
-      'input:email',
-      'change:email',
+      'input:first',
+      'change:first',
+      'input:country',
+      'change:country',
     ]);
   });
 
-  it('reports profile fields that are missing from the page', () => {
-    loadHtml('<form><label>Email <input name="email"></label></form>');
+  it('never overwrites a value typed after the plan was made', async () => {
+    loadHtml('<label>Email <input id="email"></label>');
+    const planned = plan();
+    control('email').value = 'typed@example.org';
 
-    const result = autofill(document, SAMPLE_PROFILE);
+    const [outcome] = await fillFields(planned);
 
-    expect(result.filled.map((target) => target.field)).toEqual(['email']);
-    expect(result.missing).toEqual(['firstName', 'lastName']);
+    expect(control('email').value).toBe('typed@example.org');
+    expect(outcome).toMatchObject({
+      status: 'kept',
+      value: 'typed@example.org',
+    });
   });
 
-  it('reports every field as missing on a page without a form', () => {
-    loadHtml('<p>Nothing to fill</p>');
+  it('reports a field that left the page instead of claiming it was filled', async () => {
+    loadHtml(
+      '<label>First name <input id="first"></label><label>Last name <input id="last"></label>',
+    );
+    const planned = plan();
+    control('first').closest('label')?.remove();
 
-    const result = autofill(document, SAMPLE_PROFILE);
+    const outcomes = await fillFields(planned, async () => {
+      control('last').closest('label')?.remove();
+      await Promise.resolve();
+    });
 
-    expect(result.filled).toEqual([]);
-    expect(result.missing).toEqual(['firstName', 'lastName', 'email']);
+    expect(outcomes.map((r) => r.status)).toEqual(['detached', 'detached']);
   });
 
-  it('does not overwrite values the user has already entered', () => {
-    loadFixture('basic-application.html');
-    input('first-name').value = 'Typed by user';
+  it('does not write into a field that became disabled or read-only', async () => {
+    loadHtml(
+      '<label>First name <input id="first"></label><label>Last name <input id="last"></label>',
+    );
+    const planned = plan();
+    (control('first') as HTMLInputElement).disabled = true;
+    (control('last') as HTMLInputElement).readOnly = true;
 
-    const result = autofill(document, SAMPLE_PROFILE);
+    const outcomes = await fillFields(planned);
 
-    expect(input('first-name').value).toBe('Typed by user');
-    expect(result.skipped).toMatchObject([
-      { field: 'firstName', reason: 'has-value' },
+    expect(control('first').value).toBe('');
+    expect(control('last').value).toBe('');
+    expect(outcomes.map((r) => r.status)).toEqual(['rejected', 'rejected']);
+  });
+
+  it('reports values the page clears or changes', async () => {
+    loadHtml(`
+      <label>First name <input id="first"></label>
+      <label>Last name <input id="last"></label>
+    `);
+    control('first').addEventListener('change', (event) => {
+      (event.target as HTMLInputElement).value = '';
+    });
+    control('last').addEventListener('change', (event) => {
+      (event.target as HTMLInputElement).value = 'Somebody else';
+    });
+
+    const outcomes = await fillFields(plan());
+
+    expect(outcomes[0]).toMatchObject({
+      status: 'rejected',
+      reason: 'The site cleared this value. Enter it yourself.',
+    });
+    expect(outcomes[1]).toMatchObject({
+      status: 'rejected',
+      reason: 'The site changed this value. Check it.',
+    });
+  });
+
+  it('accepts the site’s own formatting of the same value', async () => {
+    loadHtml(`
+      <label>Postcode <input id="postcode"></label>
+      <label>Phone <input id="phone" type="tel"></label>
+    `);
+    control('postcode').addEventListener('input', (event) => {
+      const input = event.target as HTMLInputElement;
+      input.value = input.value.toLowerCase().replace(' ', '');
+    });
+    control('phone').addEventListener('input', (event) => {
+      (event.target as HTMLInputElement).value = '020 7946 0000';
+    });
+
+    const outcomes = await fillFields(plan());
+
+    expect(outcomes.map((r) => [r.status, r.value])).toEqual([
+      ['reformatted', 'n19gu'],
+      ['reformatted', '020 7946 0000'],
     ]);
   });
 
-  it('skips fields when the profile has no value for them', () => {
-    loadFixture('basic-application.html');
+  it('reports a select that did not keep the chosen option', async () => {
+    loadHtml(`<label>Country <select id="country">
+      <option value="">Choose</option><option value="GB">United Kingdom</option>
+    </select></label>`);
+    control('country').addEventListener('change', (event) => {
+      (event.target as HTMLSelectElement).value = '';
+    });
 
-    const result = autofill(document, { ...SAMPLE_PROFILE, lastName: '' });
+    const [outcome] = await fillFields(plan());
 
-    expect(input('last-name').value).toBe('');
-    expect(result.skipped).toMatchObject([
-      { field: 'lastName', reason: 'no-profile-value' },
-    ]);
+    expect(outcome?.status).toBe('rejected');
   });
 
-  it('never submits the form', () => {
-    const document = loadFixture('basic-application.html');
+  it('never submits the form or clicks anything', async () => {
+    const document = loadFixture('full-application.html');
     const form = document.getElementById('application') as HTMLFormElement;
-    const button = form.querySelector('button[type="submit"]');
     const onSubmit = vi.fn((event: Event) => {
       event.preventDefault();
     });
     const onClick = vi.fn();
     const onKey = vi.fn();
+    const onFocus = vi.fn();
     form.addEventListener('submit', onSubmit);
-    button?.addEventListener('click', onClick);
-    form.addEventListener('keydown', onKey);
+    document.addEventListener('click', onClick, true);
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('focusin', onFocus, true);
     const submit = vi.spyOn(HTMLFormElement.prototype, 'submit');
     const requestSubmit = vi.spyOn(HTMLFormElement.prototype, 'requestSubmit');
 
-    autofill(document, SAMPLE_PROFILE);
+    await fillFields(plan());
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onClick).not.toHaveBeenCalled();
     expect(onKey).not.toHaveBeenCalled();
+    expect(onFocus).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(requestSubmit).not.toHaveBeenCalled();
   });
 
-  it('updates the state of React controlled inputs', () => {
-    (
-      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-    ).IS_REACT_ACT_ENVIRONMENT = true;
+  it('returns fields that were not planned for filling unchanged', async () => {
+    loadFixture('full-application.html');
+    const planned = plan();
 
-    function ControlledForm() {
-      const [firstName, setFirstName] = useState('');
-      return (
-        <>
-          <input
-            name="firstName"
-            value={firstName}
-            onChange={(event) => {
-              setFirstName(event.target.value);
-            }}
-          />
-          <output>{firstName}</output>
-        </>
-      );
-    }
+    const outcomes = await fillFields(planned);
 
+    planned.forEach((report, index) => {
+      if (report.status !== 'fill') expect(outcomes[index]).toBe(report);
+    });
+  });
+});
+
+describe('React-controlled inputs', () => {
+  function render(element: React.ReactElement) {
     const container = loadHtml('<div id="root"></div>').getElementById('root');
     if (!container) throw new Error('No root');
     const root = createRoot(container);
     act(() => {
-      root.render(<ControlledForm />);
+      root.render(element);
+    });
+    return {
+      container,
+      unmount: () => {
+        act(() => {
+          root.unmount();
+        });
+      },
+    };
+  }
+
+  it('updates the component’s state', async () => {
+    function ControlledForm() {
+      const [email, setEmail] = useState('');
+      return (
+        <>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+            }}
+          />
+          <output>{email}</output>
+        </>
+      );
+    }
+    const { container, unmount } = render(<ControlledForm />);
+
+    let outcomes: FieldReport[] = [];
+    await act(async () => {
+      outcomes = await fillFields(plan(container));
     });
 
-    act(() => {
-      autofill(container, SAMPLE_PROFILE);
+    expect(container.querySelector('output')?.textContent).toBe(
+      'alex.sample@example.com',
+    );
+    expect(outcomes[0]?.status).toBe('filled');
+    unmount();
+  });
+
+  it('reports a value the component refuses', async () => {
+    function LockedInput() {
+      const [value] = useState('');
+      return (
+        <input aria-label="City" value={value} onChange={() => undefined} />
+      );
+    }
+    const { container, unmount } = render(<LockedInput />);
+
+    let outcomes: FieldReport[] = [];
+    await act(async () => {
+      outcomes = await fillFields(plan(container));
     });
 
-    expect(container.querySelector('output')?.textContent).toBe('Alex');
-    act(() => {
-      root.unmount();
-    });
+    expect(outcomes[0]?.status).toBe('rejected');
+    expect(container.querySelector('input')?.value).toBe('');
+    unmount();
   });
 });

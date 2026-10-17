@@ -1,6 +1,6 @@
-import type { FillResult } from '@/autofill/fill';
 import { needsYou, type FieldReport } from '@/autofill/report';
 import type { FormControl, ScannedField } from '@/autofill/scan';
+import type { AutofillValuesResponse } from '@/messages';
 
 /**
  * The panel's single source of truth.
@@ -15,13 +15,18 @@ export type PanelMode = 'compact' | 'expanded';
 /** Expanded-mode list filter: everything, what ApplyKit handles, what needs you. */
 export type FieldFilter = 'all' | 'handled' | 'you';
 
+/** The confirmed profile's values, as last read for this panel. */
+export type ValuesState = { status: 'loading' } | AutofillValuesResponse;
+
 export interface PanelState {
   mode: PanelMode;
   filter: FieldFilter;
-  phase: 'ready' | 'done';
+  /** `filling` while values are written and checked; never runs twice. */
+  phase: 'ready' | 'filling' | 'done';
   fields: ScannedField[];
-  /** The latest autofill result, or null before autofill or after a rescan. */
-  result: FillResult | null;
+  values: ValuesState;
+  /** What autofill actually did, or null before autofill or after a rescan. */
+  outcomes: FieldReport[] | null;
   /**
    * The field the user is reviewing, by element so it survives rescans.
    * Shared by both modes: the compact queue's current step and the expanded
@@ -35,7 +40,11 @@ export type PanelAction =
   | { type: 'collapse' }
   | { type: 'set-filter'; filter: FieldFilter }
   | { type: 'select'; element: FormControl | null }
-  | { type: 'autofilled'; fields: ScannedField[]; result: FillResult }
+  | { type: 'values'; values: AutofillValuesResponse }
+  | { type: 'fill-started' }
+  /** Autofill could not start, e.g. the profile was removed meanwhile. */
+  | { type: 'fill-stopped'; values: AutofillValuesResponse }
+  | { type: 'autofilled'; fields: ScannedField[]; outcomes: FieldReport[] }
   | { type: 'rescanned'; fields: ScannedField[] };
 
 export function initialPanelState(fields: ScannedField[]): PanelState {
@@ -44,7 +53,8 @@ export function initialPanelState(fields: ScannedField[]): PanelState {
     filter: 'all',
     phase: 'ready',
     fields,
-    result: null,
+    values: { status: 'loading' },
+    outcomes: null,
     selected: null,
   };
 }
@@ -66,12 +76,18 @@ export function panelReducer(
       return { ...state, filter: action.filter };
     case 'select':
       return { ...state, selected: action.element };
+    case 'values':
+      return { ...state, values: action.values };
+    case 'fill-started':
+      return state.phase === 'ready' ? { ...state, phase: 'filling' } : state;
+    case 'fill-stopped':
+      return { ...state, phase: 'ready', values: action.values };
     case 'autofilled':
       return {
         ...state,
         phase: 'done',
         fields: action.fields,
-        result: action.result,
+        outcomes: action.outcomes,
         selected: keepIfPresent(state.selected, action.fields),
       };
     case 'rescanned':
@@ -79,7 +95,7 @@ export function panelReducer(
         ...state,
         phase: 'ready',
         fields: action.fields,
-        result: null,
+        outcomes: null,
         selected: keepIfPresent(state.selected, action.fields),
       };
   }

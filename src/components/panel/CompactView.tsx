@@ -5,8 +5,7 @@ import { Icon } from '@/components/ui/icons';
 import { StatusGlyph } from './icons';
 import type { FieldFilter } from './panel-state';
 import type { PanelModel } from './usePanel';
-import { openProfile } from './profile-access';
-import { PROFILE_FIELD_LABEL, plural } from './vocabulary';
+import { plural } from './vocabulary';
 
 /** Queue rows shown at once in compact mode; the rest is in the full list. */
 const QUEUE_WINDOW = 5;
@@ -15,85 +14,106 @@ const QUEUE_WINDOW = 5;
  * Compact mode (the default): what ApplyKit will do, then what is left for
  * you. Details open in the expanded mode, on the matching filter.
  */
-export function CompactView({
-  model,
-  hasProfile,
-}: {
-  model: PanelModel;
-  /** Whether a profile is saved; null while checking. */
-  hasProfile: boolean | null;
-}) {
-  return model.phase === 'ready' ? (
-    <ReadyBody model={model} hasProfile={hasProfile} />
-  ) : (
+export function CompactView({ model }: { model: PanelModel }) {
+  return model.phase === 'done' ? (
     <ResultsBody model={model} />
+  ) : (
+    <ReadyBody model={model} />
   );
 }
 
-function ReadyBody({
-  model,
-  hasProfile,
-}: {
-  model: PanelModel;
-  hasProfile: boolean | null;
-}) {
+function ReadyBody({ model }: { model: PanelModel }) {
+  return (
+    <div className="px-3.5 pt-3 pb-3">
+      <PageIdentity model={model} />
+      {model.values.status === 'ready' ? (
+        <Plan model={model} />
+      ) : (
+        <ProfileNotice model={model} />
+      )}
+      <p className="mt-2.5 flex items-center gap-1.5 text-2xs text-ink-3">
+        <Icon icon={ShieldCheck} size={12} />
+        Never submits, never overwrites what you typed
+      </p>
+    </div>
+  );
+}
+
+/** Before autofill: what ApplyKit will fill, keep and leave for you. */
+function Plan({ model }: { model: PanelModel }) {
   const { reports, summary, queue, expand } = model;
   const willFill = reports.filter((r) => r.status === 'fill').length;
   const willKeep = reports.filter((r) => r.status === 'keep').length;
 
   return (
-    <div className="px-3.5 pt-3 pb-3">
-      <PageIdentity model={model} />
-      <ul className="-mx-1.5 mt-2.5">
-        {willFill > 0 && (
-          <PlanLine
-            glyph={<StatusGlyph status="fill" />}
-            title={`Fill ${plural(willFill, 'field')} from your profile`}
-            filter="handled"
-            onOpen={expand}
-          />
-        )}
-        {willKeep > 0 && (
-          <PlanLine
-            glyph={<StatusGlyph status="keep" />}
-            title={`Keep ${plural(willKeep, 'entry', 'entries')} you already typed`}
-            filter="handled"
-            onOpen={expand}
-          />
-        )}
-        {queue.length > 0 && (
-          <PlanLine
-            glyph={
-              <Icon icon={CircleDashed} size={14} className="text-ink-3" />
-            }
-            title={`Leave ${String(queue.length)} for you`}
-            meta={
-              summary.requiredNeedsYou > 0
-                ? `${String(summary.requiredNeedsYou)} required`
-                : undefined
-            }
-            filter="you"
-            onOpen={expand}
-          />
-        )}
-      </ul>
-      <MissingNote model={model} />
-      <p className="mt-2.5 flex items-center gap-1.5 text-2xs text-ink-3">
-        <Icon icon={ShieldCheck} size={12} />
-        Never submits, never overwrites what you typed
-      </p>
-      {hasProfile === false && (
-        <p className="mt-1.5 text-2xs text-ink-3">
-          No profile saved yet.{' '}
-          <button
-            type="button"
-            onClick={openProfile}
-            className="font-medium text-accent hover:text-accent-hover hover:underline"
-          >
-            Set up your profile
-          </button>
-        </p>
+    <ul className="-mx-1.5 mt-2.5">
+      {willFill > 0 && (
+        <PlanLine
+          glyph={<StatusGlyph status="fill" />}
+          title={`Fill ${plural(willFill, 'field')} from your profile`}
+          filter="handled"
+          onOpen={expand}
+        />
       )}
+      {willKeep > 0 && (
+        <PlanLine
+          glyph={<StatusGlyph status="keep" />}
+          title={`Keep ${plural(willKeep, 'entry', 'entries')} you already typed`}
+          filter="handled"
+          onOpen={expand}
+        />
+      )}
+      {queue.length > 0 && (
+        <PlanLine
+          glyph={<Icon icon={CircleDashed} size={14} className="text-ink-3" />}
+          title={`Leave ${String(queue.length)} for you`}
+          meta={
+            summary.requiredNeedsYou > 0
+              ? `${String(summary.requiredNeedsYou)} required`
+              : undefined
+          }
+          filter="you"
+          onOpen={expand}
+        />
+      )}
+    </ul>
+  );
+}
+
+/**
+ * Shown instead of the plan while no confirmed profile is available. The
+ * footer carries the matching action; autofill stays unavailable.
+ */
+function ProfileNotice({ model }: { model: PanelModel }) {
+  const recognised = model.reports.filter((r) => r.target !== null).length;
+  const status = model.values.status;
+  if (status === 'loading') {
+    return (
+      <p className="mt-2.5 text-xs text-ink-3">Reading your saved profile…</p>
+    );
+  }
+  const notice = {
+    missing: {
+      title: 'Set up your profile to autofill',
+      body: `ApplyKit fills forms only from details you have saved and confirmed.${
+        recognised > 0
+          ? ` It recognised ${plural(recognised, 'field')} it could fill here.`
+          : ''
+      }`,
+    },
+    invalid: {
+      title: 'Your saved profile needs checking',
+      body: 'It could not be read as a valid profile. Open it, check your details and save, then rescan.',
+    },
+    error: {
+      title: 'Your profile could not be read',
+      body: 'ApplyKit could not read the browser’s storage. Try again.',
+    },
+  }[status === 'ready' ? 'error' : status];
+  return (
+    <div className="mt-2.5 rounded-sm border border-line bg-sunken/60 px-3 py-2.5">
+      <p className="font-medium">{notice.title}</p>
+      <p className="mt-0.5 text-xs text-ink-2">{notice.body}</p>
     </div>
   );
 }
@@ -141,6 +161,7 @@ function PlanLine({
 function ResultsBody({ model }: { model: PanelModel }) {
   const { summary, queue, selected, expand, toggleSelect } = model;
   const done = summary.filled + summary.kept;
+  const forYou = summary.needsYou - summary.failed;
 
   // A window over the queue that always contains the current field.
   const current = queue.findIndex((r) => r.field.element === selected);
@@ -160,9 +181,12 @@ function ResultsBody({ model }: { model: PanelModel }) {
           {[
             summary.kept > 0 &&
               `Kept ${plural(summary.kept, 'entry', 'entries')} you typed`,
-            summary.needsYou > 0
-              ? `${String(summary.needsYou)} left for you`
-              : 'Nothing left for you',
+            summary.reformatted > 0 &&
+              `${String(summary.reformatted)} reformatted by the site`,
+            summary.failed > 0 && `${String(summary.failed)} not accepted`,
+            forYou > 0
+              ? `${String(forYou)} left for you`
+              : 'Check the form before you submit',
           ]
             .filter(Boolean)
             .join(' · ')}
@@ -218,9 +242,6 @@ function ResultsBody({ model }: { model: PanelModel }) {
           />
         </ul>
       )}
-      <div className="px-3.5">
-        <MissingNote model={model} />
-      </div>
     </div>
   );
 }
@@ -237,15 +258,5 @@ export function PageIdentity({ model }: { model: PanelModel }) {
         {plural(summary.total, 'field')} on this form
       </p>
     </div>
-  );
-}
-
-function MissingNote({ model }: { model: PanelModel }) {
-  if (model.missing.length === 0 || model.summary.total === 0) return null;
-  return (
-    <p className="mt-2 text-xs text-ink-3">
-      Not asked on this form:{' '}
-      {model.missing.map((field) => PROFILE_FIELD_LABEL[field]).join(', ')}
-    </p>
   );
 }

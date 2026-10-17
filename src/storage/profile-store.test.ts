@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { DRAFT_SCHEMA_VERSION, type StoredDraft } from '@/domain/profile-draft';
 import { validDraft, validProfile } from '@/test/profile-fixtures';
-import { hasSavedProfile } from './profile-presence';
 import { browserProfileStore } from './profile-store';
 
 beforeEach(() => {
@@ -17,7 +16,6 @@ async function stored(key: string): Promise<unknown> {
 describe('browserProfileStore', () => {
   it('reports empty when nothing has been saved', async () => {
     expect(await browserProfileStore.load()).toEqual({ status: 'empty' });
-    expect(await hasSavedProfile()).toBe(false);
   });
 
   it('saves a profile and loads it back', async () => {
@@ -32,7 +30,6 @@ describe('browserProfileStore', () => {
       profile,
       unmatchedCountry: null,
     });
-    expect(await hasSavedProfile()).toBe(true);
   });
 
   it('replaces an existing profile when saving an update', async () => {
@@ -85,7 +82,6 @@ describe('browserProfileStore', () => {
       status: 'error',
       message: 'ApplyKit could not read your saved profile from this browser.',
     });
-    expect(await hasSavedProfile()).toBe(false);
   });
 
   it('returns an error when storage cannot be written', async () => {

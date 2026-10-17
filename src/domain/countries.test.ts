@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   COUNTRIES,
+  countryDetails,
   countryName,
   findCountryCode,
   isCountryCode,
@@ -79,4 +80,22 @@ describe('findCountryCode', () => {
       expect(findCountryCode(text)).toBeNull();
     },
   );
+});
+
+describe('countryDetails', () => {
+  it('adds the alpha-3 code to a known country', () => {
+    expect(countryDetails('GB')).toEqual({
+      code: 'GB',
+      alpha3: 'GBR',
+      name: 'United Kingdom',
+      aliases: ['UK', 'Great Britain'],
+    });
+    expect(countryDetails('DE')?.alpha3).toBe('DEU');
+  });
+
+  it('returns null for codes that are not countries', () => {
+    expect(countryDetails('')).toBeNull();
+    expect(countryDetails('XX')).toBeNull();
+    expect(countryDetails('gb')).toBeNull();
+  });
 });

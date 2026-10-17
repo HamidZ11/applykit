@@ -1,26 +1,50 @@
 import type { LucideIcon } from 'lucide-react';
-import { Check, Circle, CircleDashed, CircleHelp, PenLine } from 'lucide-react';
+import {
+  Check,
+  Circle,
+  CircleDashed,
+  CircleHelp,
+  CircleSlash,
+  CircleX,
+  PenLine,
+} from 'lucide-react';
 import type { FieldStatus } from '@/autofill/report';
 import { Icon } from '@/components/ui/icons';
 
 const STATUS_ICON: Record<Exclude<FieldStatus, 'fill'>, LucideIcon> = {
   filled: Check,
+  reformatted: Check,
   keep: PenLine,
   kept: PenLine,
+  rejected: CircleX,
+  detached: CircleSlash,
   'no-value': CircleDashed,
+  'no-profile': CircleDashed,
+  'no-option': CircleHelp,
   unrecognised: CircleHelp,
-  // An empty ring: not an error, just not done yet.
+  conflict: CircleHelp,
+  // An empty ring: not an error, just the applicant's to answer.
   unsupported: Circle,
+  manual: Circle,
+  'other-person': Circle,
 };
 
 const STATUS_COLOR: Record<FieldStatus, string> = {
   fill: 'text-accent',
   filled: 'text-success',
+  reformatted: 'text-success',
   keep: 'text-ink-2',
   kept: 'text-ink-2',
+  rejected: 'text-danger',
+  detached: 'text-danger',
   'no-value': 'text-warning',
+  'no-profile': 'text-ink-3',
+  'no-option': 'text-warning',
   unrecognised: 'text-warning',
+  conflict: 'text-warning',
   unsupported: 'text-ink-3',
+  manual: 'text-ink-3',
+  'other-person': 'text-ink-3',
 };
 
 /** A 14px glyph that pairs with, and never replaces, a status label. */

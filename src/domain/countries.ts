@@ -106,3 +106,19 @@ export function searchCountries(query: string): Country[] {
     )
     .map(({ country }) => country);
 }
+
+export interface CountryDetails extends Country {
+  /** ISO 3166-1 alpha-3, e.g. "GBR". */
+  alpha3: string;
+}
+
+const ALPHA2_TO_ALPHA3 = new Map(
+  codes.map(([alpha2 = '', alpha3 = '']) => [alpha2, alpha3]),
+);
+
+/** Everything known about a country code, or null when it is unknown. */
+export function countryDetails(code: string): CountryDetails | null {
+  const country = BY_CODE.get(code);
+  if (!country) return null;
+  return { ...country, alpha3: ALPHA2_TO_ALPHA3.get(code) ?? '' };
+}

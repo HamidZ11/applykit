@@ -1,9 +1,9 @@
-import type { ProfileField } from '@/domain/profile';
+import type { AutofillField } from './fields';
 import {
-  classify,
-  isFillable,
+  detectControl,
   labelText,
-  type DetectionSource,
+  type Evidence,
+  type ManualReason,
 } from './detect';
 
 export type FormControl =
@@ -24,13 +24,17 @@ export type FieldKind =
   | 'other';
 
 /**
- * What the engine can do with a control today. Kept deliberately honest:
- * `unrecognised` text fields could be filled once ApplyKit knows what they
- * ask for; `unsupported` controls cannot be filled by the engine at all yet.
+ * What the engine can do with a control. `match` fields can be filled from
+ * the profile; everything else is left to the user, with the reason.
  */
 export type FieldSupport =
-  | { status: 'fillable'; field: ProfileField; source: DetectionSource }
+  | { status: 'match'; field: AutofillField; evidence: Evidence[] }
+  | { status: 'conflict'; fields: AutofillField[]; evidence: Evidence[] }
+  | { status: 'other-person'; evidence: Evidence[] }
+  | { status: 'manual'; reason: ManualReason }
+  /** A text field ApplyKit does not recognise. */
   | { status: 'unrecognised' }
+  /** A control type ApplyKit does not fill. */
   | { status: 'unsupported' };
 
 export interface ScannedField {
@@ -44,6 +48,14 @@ export interface ScannedField {
   support: FieldSupport;
 }
 
+export interface ScanOptions {
+  /**
+   * Whether a control is shown to the user. Defaults to the browser's own
+   * check; hidden controls (including honeypots) are never listed or filled.
+   */
+  isVisible?: (element: Element) => boolean;
+}
+
 /** Inputs that are never shown to, or never typed into by, the applicant. */
 const IGNORED_INPUT_TYPES = new Set([
   'hidden',
@@ -54,22 +66,38 @@ const IGNORED_INPUT_TYPES = new Set([
   'password',
 ]);
 
+/** Input types the engine may write text into. */
+const TEXT_INPUT_TYPES = new Set(['text', 'email', 'tel', 'url', 'search']);
+
 const DATE_TYPES = new Set(['date', 'datetime-local', 'month', 'week', 'time']);
+
+function defaultIsVisible(element: Element): boolean {
+  if (element.closest('[hidden], [aria-hidden="true"], [inert]')) return false;
+  return typeof element.checkVisibility === 'function'
+    ? element.checkVisibility({ visibilityProperty: true })
+    : true;
+}
 
 /**
  * Lists every control an applicant can complete in `root`, with what the
  * engine is able to do for each. Read-only: never changes the page.
  *
- * Radio buttons sharing a name are reported once, as one question.
+ * Radio buttons sharing a name are reported once, as one question. When the
+ * page has forms, only the application form (the one with the most
+ * recognised fields) is considered, so search boxes and newsletter sign-ups
+ * elsewhere on the page are never touched.
  */
-export function scanFields(root: ParentNode): ScannedField[] {
+export function scanFields(
+  root: ParentNode,
+  { isVisible = defaultIsVisible }: ScanOptions = {},
+): ScannedField[] {
   const fields: ScannedField[] = [];
   const radioGroups = new Set<string>();
 
   for (const element of root.querySelectorAll<FormControl>(
     'input, select, textarea',
   )) {
-    if (element.disabled) continue;
+    if (element.disabled || !isVisible(element)) continue;
 
     if (isInput(element)) {
       if (IGNORED_INPUT_TYPES.has(element.type) || element.readOnly) continue;
@@ -85,7 +113,28 @@ export function scanFields(root: ParentNode): ScannedField[] {
     fields.push(describe(element, root));
   }
 
-  return fields;
+  return withinApplicationForm(fields);
+}
+
+function withinApplicationForm(fields: ScannedField[]): ScannedField[] {
+  const recognised = new Map<HTMLFormElement, number>();
+  for (const field of fields) {
+    const form = field.element.form;
+    if (form && field.support.status === 'match') {
+      recognised.set(form, (recognised.get(form) ?? 0) + 1);
+    }
+  }
+  let application: HTMLFormElement | null = null;
+  let best = 0;
+  for (const [form, count] of recognised) {
+    if (count > best) {
+      application = form;
+      best = count;
+    }
+  }
+  return application
+    ? fields.filter((field) => field.element.form === application)
+    : fields;
 }
 
 function describe(element: FormControl, root: ParentNode): ScannedField {
@@ -105,11 +154,39 @@ function describe(element: FormControl, root: ParentNode): ScannedField {
 }
 
 function supportOf(element: FormControl): FieldSupport {
-  if (!isInput(element) || !isFillable(element)) {
-    return { status: 'unsupported' };
+  const detection = detectControl(element);
+  if (detection.kind === 'manual') {
+    return { status: 'manual', reason: detection.reason };
   }
-  const match = classify(element);
-  return match ? { status: 'fillable', ...match } : { status: 'unrecognised' };
+  if (detection.kind === 'other-person') {
+    return { status: 'other-person', evidence: detection.evidence };
+  }
+
+  // What the engine can write: text-like inputs, and native selects for the
+  // country only.
+  const writable = isInput(element)
+    ? TEXT_INPUT_TYPES.has(element.type)
+    : element.localName === 'select' &&
+      detection.kind === 'match' &&
+      detection.field === 'country';
+  if (!writable) return { status: 'unsupported' };
+
+  switch (detection.kind) {
+    case 'match':
+      return {
+        status: 'match',
+        field: detection.field,
+        evidence: detection.evidence,
+      };
+    case 'conflict':
+      return {
+        status: 'conflict',
+        fields: detection.fields,
+        evidence: detection.evidence,
+      };
+    case 'none':
+      return { status: 'unrecognised' };
+  }
 }
 
 function kindOf(element: FormControl): FieldKind {

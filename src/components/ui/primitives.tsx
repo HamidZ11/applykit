@@ -38,7 +38,7 @@ export function SecondaryButton({ className = '', ...props }: ButtonProps) {
   return (
     <button
       type="button"
-      className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-sm border border-line bg-white px-2.5 font-medium text-ink-2 shadow-control transition-[background-color,color,transform] duration-100 hover:bg-hover hover:text-ink active:scale-[0.98] ${className}`}
+      className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-sm border border-line bg-white px-2.5 font-medium text-ink-2 shadow-control transition-[background-color,color,transform] duration-100 hover:bg-hover hover:text-ink active:scale-[0.98] disabled:bg-white disabled:text-ink-3 disabled:active:scale-100 ${className}`}
       {...props}
     />
   );

@@ -1,44 +1,62 @@
 import { describe, expect, it } from 'vitest';
 import { loadFixture, loadHtml } from '@/test/load-fixture';
-import { scanFields } from './scan';
+import { scanFields, type ScannedField } from './scan';
+
+/** What the engine decided, in one readable value per field. */
+function outcome({ support }: ScannedField): string {
+  switch (support.status) {
+    case 'match':
+      return support.field;
+    case 'manual':
+      return `manual:${support.reason}`;
+    case 'conflict':
+      return `conflict:${support.fields.join('|')}`;
+    default:
+      return support.status;
+  }
+}
 
 describe('scanFields', () => {
   it('lists every control an applicant completes on the job application', () => {
     const document = loadFixture('job-application.html');
 
-    const rows = scanFields(document).map(
-      ({ label, section, kind, required, support }) => [
-        label,
-        section,
-        kind,
-        required,
-        support.status === 'fillable' ? support.field : support.status,
-      ],
-    );
+    const rows = scanFields(document).map((field) => [
+      field.label,
+      field.section,
+      field.kind,
+      field.required,
+      outcome(field),
+    ]);
 
     expect(rows).toEqual([
       ['First name', 'Personal information', 'text', true, 'firstName'],
       ['Last name', 'Personal information', 'text', true, 'lastName'],
-      ['Preferred name', 'Personal information', 'text', false, 'unrecognised'],
+      [
+        'Preferred name',
+        'Personal information',
+        'text',
+        false,
+        'preferredName',
+      ],
       ['Email', 'Personal information', 'email', true, 'email'],
-      ['Phone', 'Personal information', 'tel', true, 'unrecognised'],
+      ['Phone', 'Personal information', 'tel', true, 'phone'],
       [
         'Current location',
         'Personal information',
         'text',
         true,
-        'unrecognised',
+        'conflict:city|country',
       ],
       ['Résumé / CV', 'Experience', 'file', true, 'unsupported'],
-      ['Portfolio URL', 'Experience', 'url', true, 'unsupported'],
-      ['LinkedIn profile', 'Experience', 'url', false, 'unsupported'],
+      ['Portfolio URL', 'Experience', 'url', true, 'portfolio'],
+      ['LinkedIn profile', 'Experience', 'url', false, 'linkedin'],
       ['Cover letter', 'Experience', 'textarea', false, 'unsupported'],
       [
         'Do you have the right to work in the UK?',
         'Application questions',
         'radio',
         true,
-        'unsupported',
+        'manual:sensitive',
       ],
       ['Notice period', 'Application questions', 'select', true, 'unsupported'],
       [
@@ -46,7 +64,7 @@ describe('scanFields', () => {
         'Application questions',
         'text',
         false,
-        'unrecognised',
+        'manual:sensitive',
       ],
       [
         'How did you hear about this role?',
@@ -60,23 +78,72 @@ describe('scanFields', () => {
         'Privacy',
         'checkbox',
         true,
-        'unsupported',
+        'manual:consent',
       ],
     ]);
   });
 
-  it('agrees with the detector on which fields are fillable', () => {
-    loadFixture('basic-application.html');
+  it('separates the applicant’s details from everything else on a full form', () => {
+    loadFixture('full-application.html');
 
-    const fillable = scanFields(document).filter(
-      (field) => field.support.status === 'fillable',
+    const byId = Object.fromEntries(
+      scanFields(document).map((field) => [
+        field.element.id || field.element.name,
+        outcome(field),
+      ]),
     );
 
-    expect(fillable.map((field) => field.element.id)).toEqual([
-      'first-name',
-      'last-name',
-      'email',
-    ]);
+    expect(byId).toEqual({
+      'full-name': 'fullName',
+      preferred: 'preferredName',
+      email: 'email',
+      'email-confirm': 'email',
+      phone: 'phone',
+      address1: 'addressLine1',
+      address2: 'addressLine2',
+      city: 'city',
+      county: 'region',
+      postcode: 'postcode',
+      country: 'country',
+      linkedin: 'linkedin',
+      github: 'github',
+      website: 'portfolio',
+      'company-site': 'unrecognised',
+      'employer-address': 'other-person',
+      'manager-email': 'other-person',
+      'ref-name': 'other-person',
+      'ref-phone': 'other-person',
+      salary: 'manual:sensitive',
+      dob: 'manual:sensitive',
+      sponsorship: 'manual:sensitive',
+      motivation: 'unsupported',
+      captcha: 'manual:verification',
+      privacy_consent: 'manual:consent',
+    });
+  });
+
+  it('ignores hidden honeypots, disabled fields and other forms', () => {
+    loadFixture('full-application.html');
+
+    const ids = scanFields(document).map((field) => field.element.id);
+
+    expect(ids).not.toContain('trap');
+    expect(ids).not.toContain('requisition');
+    expect(ids).not.toContain('news-email');
+  });
+
+  it('only considers the form with the most recognised fields', () => {
+    loadHtml(`
+      <form id="search"><input name="email" type="email" aria-label="Email"></form>
+      <form id="apply">
+        <label>First name <input></label>
+        <label>Last name <input></label>
+      </form>
+    `);
+
+    expect(scanFields(document).map((field) => field.element.form?.id)).toEqual(
+      ['apply', 'apply'],
+    );
   });
 
   it('skips controls an applicant never completes', () => {
@@ -91,6 +158,52 @@ describe('scanFields', () => {
     `);
 
     expect(scanFields(document)).toEqual([]);
+  });
+
+  it('skips controls hidden from the user', () => {
+    loadHtml(`
+      <div hidden><label>Email <input type="email"></label></div>
+      <div aria-hidden="true"><label>Phone <input type="tel"></label></div>
+      <div inert><label>City <input></label></div>
+      <label>Postcode <input id="shown"></label>
+      <label>Country <input id="styled-away"></label>
+    `);
+
+    const fields = scanFields(document, {
+      isVisible: (element) =>
+        element.id !== 'styled-away' &&
+        !element.closest('[hidden], [aria-hidden="true"], [inert]'),
+    });
+
+    expect(fields.map((field) => field.element.id)).toEqual(['shown']);
+  });
+
+  it('only fills selects that ask for the country', () => {
+    loadHtml(`
+      <label>Country <select><option value="GB">United Kingdom</option></select></label>
+      <label>Title <select><option>Mx</option></select></label>
+      <label>City <select><option>London</option></select></label>
+    `);
+
+    expect(scanFields(document).map(outcome)).toEqual([
+      'country',
+      'unsupported',
+      'unsupported',
+    ]);
+  });
+
+  it('reports a radio group once, as one question', () => {
+    loadHtml(`
+      <fieldset><legend>Notice period</legend>
+        <label><input type="radio" name="notice" value="0"> None</label>
+        <label><input type="radio" name="notice" value="1"> One month</label>
+      </fieldset>
+    `);
+
+    const fields = scanFields(document);
+
+    expect(fields).toHaveLength(1);
+    expect(fields[0]?.label).toBe('Notice period');
   });
 
   it('falls back to placeholder, then name, then a neutral label', () => {
@@ -108,7 +221,7 @@ describe('scanFields', () => {
   });
 
   it('never changes the page', () => {
-    const document = loadFixture('job-application.html');
+    const document = loadFixture('full-application.html');
     const before = document.body.innerHTML;
 
     scanFields(document);

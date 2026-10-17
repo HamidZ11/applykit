@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { autofill } from '@/autofill/fill';
-import { attentionQueue, planFill, reportFill } from '@/autofill/report';
+import { fillFields } from '@/autofill/fill';
+import { attentionQueue, planFill, type FieldReport } from '@/autofill/report';
 import { scanFields, type FormControl } from '@/autofill/scan';
-import { SAMPLE_PROFILE } from '@/domain/profile';
+import { sampleValues } from '@/test/autofill-fixtures';
 import { loadFixture } from '@/test/load-fixture';
 import {
   initialPanelState,
@@ -19,21 +19,25 @@ function element(id: string): FormControl {
   return found as FormControl;
 }
 
-function filledState(): PanelState {
+/** Fills the current document from the fictional test profile. */
+async function fill(): Promise<FieldReport[]> {
+  return fillFields(planFill(scanFields(document), sampleValues()));
+}
+
+async function filledState(): Promise<PanelState> {
   loadFixture('job-application.html');
   const ready = initialPanelState(scanFields(document));
   return panelReducer(ready, {
     type: 'autofilled',
-    result: autofill(document, SAMPLE_PROFILE),
+    outcomes: await fill(),
     fields: scanFields(document),
   });
 }
 
 /** The attention queue after autofilling the job application fixture. */
-function queueAfterFill() {
+async function queueAfterFill() {
   loadFixture('job-application.html');
-  const result = autofill(document, SAMPLE_PROFILE);
-  return attentionQueue(reportFill(scanFields(document), result));
+  return attentionQueue(await fill());
 }
 
 function apply(state: PanelState, actions: PanelAction[]): PanelState {
@@ -49,14 +53,54 @@ describe('panelReducer', () => {
       mode: 'compact',
       filter: 'all',
       phase: 'ready',
-      result: null,
+      values: { status: 'loading' },
+      outcomes: null,
       selected: null,
     });
     expect(state.fields).toHaveLength(15);
   });
 
-  it('switches modes without touching results, fields or selection', () => {
-    const filled = panelReducer(filledState(), {
+  it('stores profile values as they arrive, in any phase', async () => {
+    const values = { status: 'ready', values: sampleValues() } as const;
+
+    const state = panelReducer(await filledState(), { type: 'values', values });
+
+    expect(state.values).toBe(values);
+    expect(state.phase).toBe('done');
+  });
+
+  it('enters the filling phase once, and only from ready', async () => {
+    loadFixture('job-application.html');
+    const ready = initialPanelState(scanFields(document));
+
+    const filling = panelReducer(ready, { type: 'fill-started' });
+
+    expect(filling.phase).toBe('filling');
+    expect(panelReducer(filling, { type: 'fill-started' })).toBe(filling);
+    const done = await filledState();
+    expect(panelReducer(done, { type: 'fill-started' })).toBe(done);
+  });
+
+  it('returns to ready when autofill cannot start', () => {
+    loadFixture('job-application.html');
+    const filling = panelReducer(initialPanelState(scanFields(document)), {
+      type: 'fill-started',
+    });
+
+    const stopped = panelReducer(filling, {
+      type: 'fill-stopped',
+      values: { status: 'missing' },
+    });
+
+    expect(stopped).toMatchObject({
+      phase: 'ready',
+      values: { status: 'missing' },
+      outcomes: null,
+    });
+  });
+
+  it('switches modes without touching results, fields or selection', async () => {
+    const filled = panelReducer(await filledState(), {
       type: 'select',
       element: element('phone'),
     });
@@ -68,15 +112,15 @@ describe('panelReducer', () => {
     expect(collapsed.mode).toBe('compact');
     for (const state of [expanded, collapsed]) {
       expect(state.phase).toBe('done');
-      expect(state.result).toBe(filled.result);
+      expect(state.outcomes).toBe(filled.outcomes);
       expect(state.fields).toBe(filled.fields);
       expect(state.selected).toBe(element('phone'));
       expect(state.filter).toBe(filled.filter);
     }
   });
 
-  it('survives many expand and collapse cycles unchanged', () => {
-    const start = panelReducer(filledState(), {
+  it('survives many expand and collapse cycles unchanged', async () => {
+    const start = panelReducer(await filledState(), {
       type: 'select',
       element: element('location'),
     });
@@ -87,8 +131,8 @@ describe('panelReducer', () => {
     expect(apply(start, toggles)).toEqual(start);
   });
 
-  it('opens the expanded mode on a requested filter and keeps it', () => {
-    const state = apply(filledState(), [
+  it('opens the expanded mode on a requested filter and keeps it', async () => {
+    const state = apply(await filledState(), [
       { type: 'expand', filter: 'you' },
       { type: 'collapse' },
       { type: 'expand' },
@@ -97,7 +141,7 @@ describe('panelReducer', () => {
     expect(state.filter).toBe('you');
   });
 
-  it('keeps the mode and selection through autofill', () => {
+  it('keeps the mode and selection through autofill', async () => {
     loadFixture('job-application.html');
     const before = apply(initialPanelState(scanFields(document)), [
       { type: 'expand' },
@@ -106,7 +150,7 @@ describe('panelReducer', () => {
 
     const after = panelReducer(before, {
       type: 'autofilled',
-      result: autofill(document, SAMPLE_PROFILE),
+      outcomes: await fill(),
       fields: scanFields(document),
     });
 
@@ -114,8 +158,8 @@ describe('panelReducer', () => {
     expect(after.selected).toBe(element('given'));
   });
 
-  it('clears results on rescan but keeps mode and selection', () => {
-    const before = apply(filledState(), [
+  it('clears results on rescan but keeps mode and selection', async () => {
+    const before = apply(await filledState(), [
       { type: 'expand', filter: 'you' },
       { type: 'select', element: element('phone') },
     ]);
@@ -129,13 +173,13 @@ describe('panelReducer', () => {
       mode: 'expanded',
       filter: 'you',
       phase: 'ready',
-      result: null,
+      outcomes: null,
     });
     expect(after.selected).toBe(element('phone'));
   });
 
-  it('drops a selection whose field is gone after a rescan', () => {
-    const before = panelReducer(filledState(), {
+  it('drops a selection whose field is gone after a rescan', async () => {
+    const before = panelReducer(await filledState(), {
       type: 'select',
       element: element('phone'),
     });
@@ -151,22 +195,22 @@ describe('panelReducer', () => {
 });
 
 describe('nextInQueue', () => {
-  it('starts at the most urgent field, then wraps around', () => {
-    const queue = queueAfterFill();
+  it('starts at the most urgent field, then wraps around', async () => {
+    const queue = await queueAfterFill();
 
     const first = nextInQueue(queue, null);
     const second = nextInQueue(queue, first);
     const last = queue.at(-1)?.field.element ?? null;
 
-    expect(first).toBe(element('phone'));
-    expect(second).toBe(element('location'));
+    expect(first).toBe(element('location'));
+    expect(second).toBe(element('resume'));
     expect(nextInQueue(queue, last)).toBe(first);
   });
 
-  it('starts from the top when the selection is not in the queue', () => {
-    const queue = queueAfterFill();
+  it('starts from the top when the selection is not in the queue', async () => {
+    const queue = await queueAfterFill();
 
-    expect(nextInQueue(queue, element('given'))).toBe(element('phone'));
+    expect(nextInQueue(queue, element('given'))).toBe(element('location'));
   });
 
   it('returns null when nothing needs the user', () => {
@@ -177,13 +221,13 @@ describe('nextInQueue', () => {
 describe('matchesFilter', () => {
   it('splits fields into handled and needs-you without overlap', () => {
     loadFixture('job-application.html');
-    const reports = planFill(scanFields(document), SAMPLE_PROFILE);
+    const reports = planFill(scanFields(document), sampleValues());
 
     const handled = reports.filter((r) => matchesFilter(r, 'handled'));
     const you = reports.filter((r) => matchesFilter(r, 'you'));
 
-    expect(handled).toHaveLength(3);
-    expect(you).toHaveLength(12);
+    expect(handled).toHaveLength(7);
+    expect(you).toHaveLength(8);
     expect(reports.filter((r) => matchesFilter(r, 'all'))).toHaveLength(15);
   });
 });

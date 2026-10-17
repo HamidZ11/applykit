@@ -1,22 +1,25 @@
+import { describeEvidence } from '@/autofill/detect';
+import { AUTOFILL_FIELD_LABEL } from '@/autofill/fields';
 import type { FieldReport, FieldStatus } from '@/autofill/report';
 import type { FieldKind, ScannedField } from '@/autofill/scan';
-import type { ProfileField } from '@/domain/profile';
 
-/** Short status label, shared by both concepts so the words mean one thing. */
+/** Short status label, shared by both modes so the words mean one thing. */
 export const STATUS_LABEL: Record<FieldStatus, string> = {
   fill: 'Will fill',
   filled: 'Filled',
+  reformatted: 'Filled, reformatted',
   keep: 'Your entry',
   kept: 'Your entry',
-  'no-value': 'No profile value',
+  rejected: 'Not accepted',
+  detached: 'Left the page',
+  'no-value': 'Not in profile',
+  'no-profile': 'Needs profile',
+  'no-option': 'No matching option',
   unrecognised: 'Not recognised',
+  conflict: 'Unclear',
   unsupported: 'Not supported yet',
-};
-
-export const PROFILE_FIELD_LABEL: Record<ProfileField, string> = {
-  firstName: 'First name',
-  lastName: 'Last name',
-  email: 'Email',
+  manual: 'Answer yourself',
+  'other-person': 'Not about you',
 };
 
 export const KIND_LABEL: Record<FieldKind, string> = {
@@ -34,24 +37,38 @@ export const KIND_LABEL: Record<FieldKind, string> = {
   other: 'Field',
 };
 
-/** One sentence explaining why a field is left to the user. */
+/** One sentence explaining what happens, or happened, to a field. */
 export function explain(report: FieldReport): string {
+  const target = report.target
+    ? AUTOFILL_FIELD_LABEL[report.target].toLowerCase()
+    : 'value';
   switch (report.status) {
     case 'fill':
-      return 'ApplyKit will fill this from your profile.';
+      return `ApplyKit will fill this with your ${target}.`;
     case 'filled':
-      return 'Filled from your profile.';
-    case 'keep':
-      return 'You already typed this. ApplyKit will leave it as is.';
-    case 'kept':
-      return 'You had already typed this, so ApplyKit left it as is.';
-    case 'no-value':
-      return 'Recognised, but your profile has no value for it.';
-    case 'unrecognised':
-      return 'ApplyKit does not know what this field asks for yet.';
+      return `Filled with your ${target}. The site accepted it.`;
     case 'unsupported':
-      return `${KIND_LABEL[report.field.kind]} fields are not supported yet.`;
+      return (
+        report.reason ??
+        `${KIND_LABEL[report.field.kind]} fields are not supported yet.`
+      );
+    default:
+      return report.reason ?? STATUS_LABEL[report.status];
   }
+}
+
+/**
+ * Why ApplyKit treated the field as it did: the profile property it matched
+ * and the page signals it read. Shown as technical detail in expanded mode.
+ */
+export function detectionDetail(report: FieldReport): {
+  target: string | null;
+  evidence: string[];
+} {
+  return {
+    target: report.target ? AUTOFILL_FIELD_LABEL[report.target] : null,
+    evidence: report.evidence.map(describeEvidence),
+  };
 }
 
 /** The page element to point at: the whole question for radio groups. */
@@ -60,29 +77,6 @@ export function locateTarget(field: ScannedField): Element {
     return field.element.closest('fieldset') ?? field.element;
   }
   return field.element;
-}
-
-/**
- * How the engine identified a fillable field, as the attribute it read.
- * Shown as technical metadata, never as the main label.
- */
-export function detectionDetail(field: ScannedField): string | null {
-  const { support, element } = field;
-  if (support.status !== 'fillable') return null;
-  switch (support.source) {
-    case 'autocomplete':
-      return `autocomplete="${element.getAttribute('autocomplete') ?? ''}"`;
-    case 'type':
-      return `type="${element.getAttribute('type') ?? ''}"`;
-    case 'name':
-      return `name="${element.getAttribute('name') ?? ''}"`;
-    case 'id':
-      return `id="${element.id}"`;
-    case 'label':
-      return 'label text';
-    case 'placeholder':
-      return 'placeholder text';
-  }
 }
 
 export function plural(count: number, one: string, many = `${one}s`): string {

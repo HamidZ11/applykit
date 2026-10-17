@@ -11,7 +11,10 @@ import {
 interface FieldRowProps {
   report: FieldReport;
   selected: boolean;
-  /** Expanded mode: show the explanation and detection detail when selected. */
+  /**
+   * Expanded mode: show values, and the explanation and evidence when
+   * selected. Compact mode shows statuses only, never personal values.
+   */
   detailed: boolean;
   /** Briefly highlight a row that autofill just filled. */
   flash?: boolean;
@@ -31,9 +34,10 @@ export function FieldRow({
   onFlashEnd,
   onSelect,
 }: FieldRowProps) {
-  const { field, status, value } = report;
+  const { field, status } = report;
+  const value = detailed ? report.value : null;
   const row = useRef<HTMLLIElement>(null);
-  const detail = detailed && selected ? detectionDetail(field) : null;
+  const detail = detailed && selected ? detectionDetail(report) : null;
 
   useEffect(() => {
     if (selected) row.current?.scrollIntoView({ block: 'nearest' });
@@ -85,10 +89,10 @@ export function FieldRow({
             <span>{STATUS_LABEL[status]}</span>
             <span aria-hidden>·</span>
             <span>{KIND_LABEL[field.kind].toLowerCase()}</span>
-            {detail && (
+            {detail?.target && (
               <>
                 <span aria-hidden>·</span>
-                <span className="truncate">{detail}</span>
+                <span>matched as {detail.target.toLowerCase()}</span>
               </>
             )}
             {field.required && (
@@ -98,6 +102,18 @@ export function FieldRow({
               </>
             )}
           </p>
+          {detail && detail.evidence.length > 0 && (
+            <ul
+              aria-label="Evidence"
+              className="mt-1 font-mono text-2xs text-ink-3"
+            >
+              {detail.evidence.map((item, index) => (
+                <li key={index} className="truncate" title={item}>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </li>

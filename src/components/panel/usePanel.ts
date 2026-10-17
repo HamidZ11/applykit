@@ -1,20 +1,22 @@
-import { useCallback, useMemo, useReducer, useState } from 'react';
-import { autofill as runAutofill } from '@/autofill/fill';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
+import { fillFields } from '@/autofill/fill';
 import {
   attentionQueue,
   planFill,
-  reportFill,
   summarise,
   type FieldReport,
   type ReportSummary,
 } from '@/autofill/report';
 import { scanFields, type FormControl } from '@/autofill/scan';
-import {
-  PROFILE_FIELDS,
-  SAMPLE_PROFILE,
-  type Profile,
-  type ProfileField,
-} from '@/domain/profile';
+import type { AutofillValuesResponse } from '@/messages';
 import { readPageContext, type PageContext } from '@/page/page-context';
 import {
   initialPanelState,
@@ -23,7 +25,11 @@ import {
   type FieldFilter,
   type PanelState,
 } from './panel-state';
+import { requestAutofillValues } from './profile-access';
 import { plural } from './vocabulary';
+
+/** Reads the confirmed profile's values; injectable for tests. */
+export type LoadValues = () => Promise<AutofillValuesResponse>;
 
 export interface PanelModel extends PanelState {
   page: PageContext;
@@ -32,8 +38,6 @@ export interface PanelModel extends PanelState {
   summary: ReportSummary;
   /** Fields the user must complete, most urgent first. */
   queue: FieldReport[];
-  /** Profile fields this form does not ask for. */
-  missing: ProfileField[];
   /** Screen-reader text describing the latest outcome. */
   announcement: string;
   autofill: () => void;
@@ -51,46 +55,85 @@ export interface PanelModel extends PanelState {
 /**
  * The panel's state and actions, shared by the compact and expanded modes.
  *
- * The page is scanned once on open, again after autofill (to read the values
- * actually written) and on an explicit rescan. Nothing else touches the page.
+ * Profile lifecycle: the confirmed profile's values are read when the panel
+ * opens, on every explicit rescan, and again immediately before autofill
+ * writes anything, so a profile edited in another tab is never filled from
+ * a stale copy. Nothing listens for storage changes and nothing is filled
+ * automatically when the profile changes.
+ *
+ * The page is scanned when the panel opens, again right before autofill and
+ * on an explicit rescan. Nothing else touches the page.
  */
 export function usePanel(
-  profile: Profile = SAMPLE_PROFILE,
+  loadValues: LoadValues = requestAutofillValues,
   root: ParentNode = document,
 ): PanelModel {
   const [state, dispatch] = useReducer(panelReducer, root, (r) =>
     initialPanelState(scanFields(r)),
   );
   const [page] = useState(readPageContext);
+  // The newest read wins, so a slow earlier reply never replaces fresh values.
+  const latestRequest = useRef(0);
+  const filling = useRef(false);
 
+  const refreshValues = useCallback(async () => {
+    const request = ++latestRequest.current;
+    const values = await loadValues();
+    if (request === latestRequest.current) dispatch({ type: 'values', values });
+  }, [loadValues]);
+
+  const onOpen = useEffectEvent(() => {
+    void refreshValues();
+  });
+  useEffect(() => {
+    onOpen();
+  }, []);
+
+  const values = state.values.status === 'ready' ? state.values.values : null;
   // Every scan produces a new `fields` array, so plans re-read values the
   // user typed since the last scan.
   const reports = useMemo(
-    () =>
-      state.result
-        ? reportFill(state.fields, state.result)
-        : planFill(state.fields, profile),
-    [state.fields, state.result, profile],
+    () => state.outcomes ?? planFill(state.fields, values),
+    [state.fields, state.outcomes, values],
   );
   const summary = useMemo(() => summarise(reports), [reports]);
   const queue = useMemo(() => attentionQueue(reports), [reports]);
-  const missing = useMemo(() => {
-    const present = new Set(
-      state.fields.flatMap((field) =>
-        field.support.status === 'fillable' ? [field.support.field] : [],
-      ),
-    );
-    return PROFILE_FIELDS.filter((field) => !present.has(field));
-  }, [state.fields]);
+
+  const runAutofill = useCallback(async () => {
+    if (filling.current) return;
+    filling.current = true;
+    dispatch({ type: 'fill-started' });
+    try {
+      // Always the latest saved profile, not the copy read on open.
+      const request = ++latestRequest.current;
+      const latest = await loadValues();
+      if (request === latestRequest.current) {
+        dispatch({ type: 'values', values: latest });
+      }
+      if (latest.status !== 'ready') {
+        dispatch({ type: 'fill-stopped', values: latest });
+        return;
+      }
+      const fields = scanFields(root);
+      const outcomes = await fillFields(planFill(fields, latest.values));
+      dispatch({ type: 'autofilled', fields, outcomes });
+    } catch {
+      // Show the page as it is now rather than a result that is not known.
+      dispatch({ type: 'rescanned', fields: scanFields(root) });
+    } finally {
+      filling.current = false;
+    }
+  }, [loadValues, root]);
 
   const autofill = useCallback(() => {
-    const result = runAutofill(root, profile);
-    dispatch({ type: 'autofilled', fields: scanFields(root), result });
-  }, [root, profile]);
+    void runAutofill();
+  }, [runAutofill]);
 
   const rescan = useCallback(() => {
+    if (filling.current) return;
     dispatch({ type: 'rescanned', fields: scanFields(root) });
-  }, [root]);
+    void refreshValues();
+  }, [root, refreshValues]);
 
   const expand = useCallback((filter?: FieldFilter) => {
     dispatch(filter ? { type: 'expand', filter } : { type: 'expand' });
@@ -129,7 +172,6 @@ export function usePanel(
     reports,
     summary,
     queue,
-    missing,
     announcement: state.phase === 'done' ? describeOutcome(summary) : '',
     autofill,
     rescan,
@@ -144,13 +186,16 @@ export function usePanel(
 
 function describeOutcome(summary: ReportSummary): string {
   const parts = [
-    `Autofill complete. Filled ${plural(summary.filled, 'field')}`,
+    `Autofill finished. Filled ${plural(summary.filled, 'field')}`,
   ];
   if (summary.kept) {
     parts.push(
       `kept ${plural(summary.kept, 'existing entry', 'existing entries')}`,
     );
   }
+  if (summary.failed) {
+    parts.push(`${plural(summary.failed, 'field')} not accepted`);
+  }
   parts.push(`${plural(summary.needsYou, 'field')} need you`);
-  return `${parts.join(', ')}.`;
+  return `${parts.join(', ')}. Nothing was submitted.`;
 }

@@ -1,137 +1,335 @@
-import type { ProfileField } from '@/domain/profile';
-
-/** Which attribute of the element identified it. Ordered strongest first. */
-export type DetectionSource =
-  'autocomplete' | 'type' | 'name' | 'id' | 'label' | 'placeholder';
-
-export interface DetectedField {
-  element: HTMLInputElement;
-  field: ProfileField;
-  source: DetectionSource;
-}
-
-interface FieldRule {
-  /** Standard HTML autocomplete tokens for this field. */
-  autocomplete: readonly string[];
-  /** Patterns matched against normalised text (lowercase, words separated by spaces). */
-  patterns: readonly RegExp[];
-}
-
-const RULES: Record<ProfileField, FieldRule> = {
-  firstName: {
-    autocomplete: ['given-name'],
-    patterns: [/\bfirst name\b/, /\bgiven name\b/, /\bforename\b/, /\bfname\b/],
-  },
-  lastName: {
-    autocomplete: ['family-name'],
-    patterns: [/\blast name\b/, /\bfamily name\b/, /\bsurname\b/, /\blname\b/],
-  },
-  email: {
-    autocomplete: ['email'],
-    patterns: [/\be ?mail\b/],
-  },
-};
-
-const RULE_ENTRIES = Object.entries(RULES) as [ProfileField, FieldRule][];
-
-/** Input types that accept free text. Everything else is never filled. */
-const FILLABLE_INPUT_TYPES = new Set(['text', 'email', 'search', 'tel', '']);
+import type { AutofillField } from './fields';
 
 /**
- * Finds inputs in `root` that correspond to known profile fields.
+ * Field detection: decides what a form control asks for, with the evidence,
+ * before anything is written. Pure DOM reading with no browser-extension or
+ * React dependencies.
  *
- * Pure DOM logic with no browser-extension dependencies, so it can be tested
- * against static fixtures.
+ * Conservative by design. Explicit semantics (`autocomplete`, input type)
+ * are preferred; keyword matching only uses short labels and attribute
+ * names. Anything about someone else (a reference, an employer), anything
+ * sensitive, and anything with disagreeing signals is not matched: a correct
+ * skip is better than a wrong fill.
  */
-export function detectFields(root: ParentNode): DetectedField[] {
-  const detected: DetectedField[] = [];
 
-  for (const element of root.querySelectorAll('input')) {
-    if (!isFillable(element)) continue;
-    const match = classify(element);
-    if (match) detected.push({ element, ...match });
+export type DetectableControl =
+  HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+export type Signal =
+  'autocomplete' | 'type' | 'label' | 'name' | 'id' | 'placeholder';
+
+export interface Evidence {
+  signal: Signal;
+  /** The attribute value or text that was read. */
+  text: string;
+}
+
+export type ManualReason = 'sensitive' | 'consent' | 'verification';
+
+export type Detection =
+  | { kind: 'match'; field: AutofillField; evidence: Evidence[] }
+  /** Signals point at different fields, so it is left to the user. */
+  | { kind: 'conflict'; fields: AutofillField[]; evidence: Evidence[] }
+  /** About someone or something else: a reference, an employer, a company. */
+  | { kind: 'other-person'; evidence: Evidence[] }
+  /** Questions ApplyKit never answers for the user. */
+  | { kind: 'manual'; reason: ManualReason }
+  | { kind: 'none' };
+
+/** `autocomplete` field names (WHATWG) and what they mean for the profile. */
+const AUTOCOMPLETE: Record<string, AutofillField> = {
+  name: 'fullName',
+  'given-name': 'firstName',
+  'family-name': 'lastName',
+  nickname: 'preferredName',
+  email: 'email',
+  tel: 'phone',
+  'tel-national': 'phone',
+  'address-line1': 'addressLine1',
+  'address-line2': 'addressLine2',
+  'address-level2': 'city',
+  'address-level1': 'region',
+  'postal-code': 'postcode',
+  country: 'country',
+  'country-name': 'country',
+};
+
+/** Autocomplete hints that mark a value as not the applicant's own. */
+const AUTOCOMPLETE_NOT_PERSONAL = new Set(['work', 'fax', 'pager']);
+
+/**
+ * Patterns on normalised text (lower case, words separated by single
+ * spaces). Anchored patterns only match a whole label or attribute.
+ */
+const TEXT_RULES: Record<AutofillField, RegExp[]> = {
+  fullName: [
+    /^(?:your |applicant |candidate )?(?:full |legal |full legal )?name$/,
+    /^fullname$/,
+    /\bfull (?:legal )?name\b/,
+    /\bfirst (?:and|&) (?:last|family) names?\b/,
+  ],
+  firstName: [
+    /\bfirst names?\b/,
+    /\bgiven names?\b/,
+    /\bforenames?\b/,
+    /^(?:fname|firstname|first|given)$/,
+    /\bname first\b/,
+  ],
+  lastName: [
+    /\blast names?\b/,
+    /\bsurnames?\b/,
+    /\bfamily names?\b/,
+    /^(?:lname|lastname|last|family)$/,
+    /\bname last\b/,
+  ],
+  preferredName: [
+    /\bpreferred (?:first )?name\b/,
+    /\bknown as\b/,
+    /\bnick ?name\b/,
+  ],
+  email: [/\be ?mail\b/],
+  phone: [/\b(?:phone|telephone|tel|mobile|cell)\b/, /\bcontact number\b/],
+  addressLine1: [
+    /\baddress (?:line )?1\b/,
+    /\bstreet(?: address)?\b/,
+    /\bline 1\b/,
+  ],
+  addressLine2: [
+    /\baddress (?:line )?2\b/,
+    /\b(?:apartment|suite|apt)\b/,
+    /\bline 2\b/,
+  ],
+  city: [/\b(?:city|town|locality|municipality)\b/],
+  region: [/\b(?:county|state|region|province)\b/],
+  postcode: [/\bpost ?code\b/, /\bpostal code\b/, /\bzip(?: ?code)?\b/],
+  country: [/\bcountry\b/],
+  linkedin: [/\blinked ?in\b/],
+  github: [/\bgit ?hub\b/],
+  portfolio: [
+    /\bportfolio\b/,
+    /\bpersonal (?:website|site|url|web ?page|home ?page)\b/,
+    /^(?:your )?(?:website|web site|home ?page|url|website url|web address)$/,
+  ],
+};
+
+/** Address parts are short labels; longer text is likely a question. */
+const SHORT_ONLY = new Set<AutofillField>(['city', 'region', 'country']);
+const MAX_WORDS = 8;
+const MAX_SHORT_WORDS = 4;
+
+/**
+ * Words that turn a matching label into something else, such as a phone
+ * extension or a dialling code. They veto the field whatever other signals
+ * say, unless they only appear in an instruction ("including country code").
+ */
+const EXCLUDE: Partial<Record<AutofillField, RegExp>> = {
+  phone:
+    /\b(?:ext|extension|prefix)\b|\b(?:phone|tel|telephone|mobile) (?:type|code)\b|\b(?:country|area|dial(?:l?ing)?|calling) code\b/,
+  country: /\b(?:code|dial(?:l?ing)?|calling|prefix)\b/,
+};
+const INSTRUCTION = /\b(?:include|including|incl|with)\b/;
+
+function excluded(field: AutofillField, text: string): boolean {
+  return (EXCLUDE[field]?.test(text) ?? false) && !INSTRUCTION.test(text);
+}
+
+/** Never answered automatically. */
+const SENSITIVE =
+  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|pay|wage|disabilit\w*|disabled|gender|sex|ethnic\w*|race|religio\w*|belief|sexual\w*|orientation|age|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizenship|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste)\b/;
+const CONSENT =
+  /\b(?:consent|agree\w*|declar\w*|terms|privacy|acknowledg\w*|certify|newsletter|marketing|subscribe|opt in)\b/;
+const VERIFICATION = /captcha|turnstile|g-recaptcha/i;
+
+/** Someone or something other than the applicant. */
+const OTHER_PERSON =
+  /\b(?:references?|referees?|employers?|company|organi[sz]ation|hiring|recruiter|manager|supervisor|emergency|next of kin|guardian|parent|spouse|partner|agency|business|work|office|school|university|college|previous|former|landlord|contact person)\b/;
+
+export function detectControl(control: DetectableControl): Detection {
+  const texts = textSignals(control);
+  const context = sectionText(control);
+  const all = [...texts.map((t) => t.normalised), context].join(' | ');
+
+  const identifiers = [
+    control.name,
+    control.id,
+    control.className,
+    ...texts.map((t) => t.raw),
+  ].join(' ');
+  if (VERIFICATION.test(identifiers)) {
+    return { kind: 'manual', reason: 'verification' };
+  }
+  if (SENSITIVE.test(all)) return { kind: 'manual', reason: 'sensitive' };
+  if (CONSENT.test(all)) return { kind: 'manual', reason: 'consent' };
+
+  const candidates = new Map<AutofillField, Evidence[]>();
+  const add = (field: AutofillField, evidence: Evidence) => {
+    const list = candidates.get(field);
+    if (list) list.push(evidence);
+    else candidates.set(field, [evidence]);
+  };
+
+  const autocomplete = (control.getAttribute('autocomplete') ?? '')
+    .trim()
+    .toLowerCase();
+  const tokens = autocomplete.split(/\s+/).filter(Boolean);
+  const notPersonal = tokens.some((token) =>
+    AUTOCOMPLETE_NOT_PERSONAL.has(token),
+  );
+  const semantic = AUTOCOMPLETE[tokens.at(-1) ?? ''];
+  if (semantic && !notPersonal) {
+    add(semantic, { signal: 'autocomplete', text: autocomplete });
   }
 
-  return detected;
-}
+  if (control instanceof HTMLInputElement) {
+    const type = control.type;
+    if (type === 'email') add('email', { signal: 'type', text: type });
+    if (type === 'tel') add('phone', { signal: 'type', text: type });
+  }
 
-/** Whether the engine is able to write to this input at all. */
-export function isFillable(element: HTMLInputElement): boolean {
-  const type = (element.getAttribute('type') ?? '').toLowerCase();
-  return (
-    FILLABLE_INPUT_TYPES.has(type) && !element.disabled && !element.readOnly
-  );
-}
+  for (const { signal, raw, normalised } of texts) {
+    for (const field of matchText(normalised))
+      add(field, { signal, text: raw });
+  }
 
-/** Which profile field a fillable input corresponds to, if any. */
-export function classify(
-  element: HTMLInputElement,
-): { field: ProfileField; source: DetectionSource } | null {
-  const autocomplete = autocompleteToken(element);
-  if (autocomplete) {
-    const byAutocomplete = RULE_ENTRIES.find(([, rule]) =>
-      rule.autocomplete.includes(autocomplete),
-    );
-    if (byAutocomplete) {
-      return { field: byAutocomplete[0], source: 'autocomplete' };
+  for (const field of [...candidates.keys()]) {
+    if (texts.some((t) => excluded(field, t.normalised))) {
+      candidates.delete(field);
     }
   }
 
-  if (element.type === 'email') return { field: 'email', source: 'type' };
+  const evidence = [...candidates.values()].flat();
+  if (notPersonal || OTHER_PERSON.test(all)) {
+    return evidence.length > 0 || notPersonal
+      ? { kind: 'other-person', evidence }
+      : { kind: 'none' };
+  }
 
-  const signals: [DetectionSource, string][] = [
-    ['name', element.name],
-    ['id', element.id],
-    ['label', labelText(element)],
-    ['placeholder', element.placeholder],
+  // A specific name part is more precise than a generic "Name" label.
+  if (
+    candidates.has('fullName') &&
+    (candidates.has('firstName') || candidates.has('lastName'))
+  ) {
+    candidates.delete('fullName');
+  }
+  // "Preferred first name" is the preferred name, not the first name.
+  if (candidates.has('preferredName')) candidates.delete('firstName');
+
+  const fields = [...candidates.keys()];
+  const [only] = fields;
+  if (fields.length === 1 && only) {
+    return { kind: 'match', field: only, evidence: candidates.get(only) ?? [] };
+  }
+  if (fields.length > 1) return { kind: 'conflict', fields, evidence };
+  return { kind: 'none' };
+}
+
+/** The fields a piece of normalised text refers to. */
+function matchText(text: string): AutofillField[] {
+  const words = text.split(' ').length;
+  if (words > MAX_WORDS) return [];
+  // "First and last name" is one full-name field, not two.
+  const fullNameOnly = TEXT_RULES.fullName.some((pattern) =>
+    pattern.test(text),
+  );
+  const matches: AutofillField[] = [];
+  for (const [field, patterns] of Object.entries(TEXT_RULES) as [
+    AutofillField,
+    RegExp[],
+  ][]) {
+    if (fullNameOnly && (field === 'firstName' || field === 'lastName')) {
+      continue;
+    }
+    if (SHORT_ONLY.has(field) && words > MAX_SHORT_WORDS) continue;
+    if (!patterns.some((pattern) => pattern.test(text))) continue;
+    if (excluded(field, text)) continue;
+    matches.push(field);
+  }
+  return matches;
+}
+
+interface TextSignal {
+  signal: Signal;
+  raw: string;
+  normalised: string;
+}
+
+function textSignals(control: DetectableControl): TextSignal[] {
+  const raw: [Signal, string][] = [
+    ['label', labelText(control)],
+    ['name', control.name],
+    ['id', control.id],
+    ['placeholder', 'placeholder' in control ? control.placeholder : ''],
   ];
-
-  for (const [source, raw] of signals) {
-    const text = normalise(raw);
-    if (!text) continue;
-    const match = RULE_ENTRIES.find(([, rule]) =>
-      rule.patterns.some((pattern) => pattern.test(text)),
-    );
-    if (match) return { field: match[0], source };
-  }
-
-  return null;
+  return raw
+    .map(([signal, text]) => ({
+      signal,
+      raw: text.replace(/\s+/g, ' ').trim(),
+      normalised: normalise(text),
+    }))
+    .filter((signal) => signal.normalised !== '');
 }
 
-/** The field-name token of an autocomplete attribute, e.g. "section-a shipping email" → "email". */
-function autocompleteToken(element: HTMLInputElement): string {
-  const tokens = (element.getAttribute('autocomplete') ?? '')
-    .trim()
-    .toLowerCase()
-    .split(/\s+/);
-  return tokens.at(-1) ?? '';
-}
-
-export function labelText(
-  element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
-): string {
+/** Legends and group labels around the control, e.g. "Reference 1". */
+function sectionText(control: DetectableControl): string {
   const parts: string[] = [];
-
-  for (const label of element.labels ?? []) {
-    parts.push(label.textContent);
+  let node: Element | null = control.parentElement;
+  while (node) {
+    if (node instanceof HTMLFieldSetElement) {
+      parts.push(node.querySelector(':scope > legend')?.textContent ?? '');
+    } else if (node.getAttribute('role') === 'group') {
+      parts.push(node.getAttribute('aria-label') ?? '');
+    }
+    node = node.parentElement;
   }
+  return normalise(parts.join(' '));
+}
 
-  const labelledBy = element.getAttribute('aria-labelledby');
+export function labelText(control: DetectableControl): string {
+  const parts: string[] = [];
+  for (const label of control.labels ?? []) parts.push(ownText(label));
+  const labelledBy = control.getAttribute('aria-labelledby');
   if (labelledBy) {
     for (const id of labelledBy.split(/\s+/)) {
-      parts.push(element.ownerDocument.getElementById(id)?.textContent ?? '');
+      const element = control.ownerDocument.getElementById(id);
+      if (element) parts.push(ownText(element));
     }
   }
-
-  parts.push(element.getAttribute('aria-label') ?? '');
-  return parts.join(' ');
+  parts.push(control.getAttribute('aria-label') ?? '');
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 
-/** "applicant[firstName]" → "applicant first name" */
+/**
+ * An element's text without the contents of controls inside it, so a label
+ * wrapped around a select is not read as its list of options.
+ */
+function ownText(node: Node): string {
+  let text = '';
+  for (const child of node.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      text += child.textContent ?? '';
+    } else if (
+      child instanceof Element &&
+      !child.matches('select, textarea, button, script, style, template')
+    ) {
+      text += ` ${ownText(child)} `;
+    }
+  }
+  return text;
+}
+
+/** "applicant[addressLine1]" → "applicant address line 1" */
 export function normalise(text: string): string {
   return text
     .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([a-zA-Z])(\d)/g, '$1 $2')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+
+/** How evidence is shown to people, e.g. `autocomplete="given-name"`. */
+export function describeEvidence(evidence: Evidence): string {
+  return evidence.signal === 'label' || evidence.signal === 'placeholder'
+    ? `${evidence.signal} “${evidence.text}”`
+    : `${evidence.signal}="${evidence.text}"`;
 }

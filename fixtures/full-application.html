@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Platform Engineer · Orrin Labs Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional application form for profile autofill. The company, role and
+      every detail are invented. It mixes the applicant's own details (which
+      ApplyKit fills from a saved profile) with fields it must skip: details
+      about an employer, a hiring manager and a reference, sensitive and
+      consent questions, a CAPTCHA, a disabled field, a hidden honeypot and a
+      separate newsletter form. Used by unit tests and manual testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #0f6b5c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      fieldset fieldset > legend {
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 16px;
+      }
+      label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      .req {
+        color: #cf222e;
+      }
+      input:not([type='checkbox'], [type='radio']),
+      select,
+      textarea {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+      .choice {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 400;
+        margin-top: 10px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 4px 0 0;
+      }
+      button {
+        margin-top: 28px;
+        padding: 10px 18px;
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--brand);
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      output {
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar"><span class="logo"></span>Orrin Labs</div>
+    </header>
+    <main>
+      <h1>Platform Engineer</h1>
+      <p class="meta">Manchester · Remote-friendly · Full-time · Engineering</p>
+
+      <form id="application" action="/submitted" method="post">
+        <fieldset>
+          <legend>About you</legend>
+          <label for="full-name">Full name <span class="req">*</span></label>
+          <input
+            id="full-name"
+            name="applicant[full_name]"
+            autocomplete="name"
+            required
+          />
+          <label for="preferred">Preferred name (optional)</label>
+          <input id="preferred" name="applicant[preferred_name]" />
+          <div class="row">
+            <div>
+              <label for="email"
+                >Email address <span class="req">*</span></label
+              >
+              <input
+                id="email"
+                name="applicant[email]"
+                type="email"
+                autocomplete="email"
+                required
+              />
+            </div>
+            <div>
+              <label for="email-confirm"
+                >Confirm email address <span class="req">*</span></label
+              >
+              <input
+                id="email-confirm"
+                name="applicant[email_confirmation]"
+                type="email"
+                required
+              />
+            </div>
+          </div>
+          <label for="phone">Mobile number</label>
+          <input id="phone" name="applicant[phone]" type="tel" />
+        </fieldset>
+
+        <fieldset>
+          <legend>Home address</legend>
+          <label for="address1">Address line 1</label>
+          <input id="address1" name="address1" autocomplete="address-line1" />
+          <label for="address2">Address line 2</label>
+          <input id="address2" name="address2" />
+          <div class="row">
+            <div>
+              <label for="city">Town or city</label>
+              <input id="city" name="city" />
+            </div>
+            <div>
+              <label for="county">County</label>
+              <input id="county" name="county" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="postcode">Postcode</label>
+              <input id="postcode" name="postcode" />
+            </div>
+            <div>
+              <label for="country">Country</label>
+              <select id="country" name="country" autocomplete="country">
+                <option value="">Select a country…</option>
+                <option value="FR">France</option>
+                <option value="IE">Ireland</option>
+                <option value="GB">United Kingdom</option>
+                <option value="US">United States</option>
+              </select>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Links</legend>
+          <label for="linkedin">LinkedIn profile</label>
+          <input id="linkedin" name="linkedin_url" type="url" />
+          <label for="github">GitHub</label>
+          <input id="github" name="github_url" type="url" />
+          <label for="website">Personal website</label>
+          <input id="website" name="personal_site" type="url" />
+        </fieldset>
+
+        <fieldset>
+          <legend>Current employment</legend>
+          <label for="company-site">Company website</label>
+          <input id="company-site" name="employment[company_url]" type="url" />
+          <label for="employer-address">Employer address line 1</label>
+          <input id="employer-address" name="employment[address1]" />
+          <label for="manager-email">Hiring manager’s email</label>
+          <input id="manager-email" name="manager_email" type="email" />
+        </fieldset>
+
+        <fieldset>
+          <legend>Reference</legend>
+          <label for="ref-name">Full name</label>
+          <input id="ref-name" name="reference[name]" />
+          <label for="ref-phone">Phone</label>
+          <input id="ref-phone" name="reference[phone]" type="tel" />
+        </fieldset>
+
+        <fieldset>
+          <legend>Application questions</legend>
+          <label for="salary">Salary expectation (GBP)</label>
+          <input id="salary" name="salary_expectation" />
+          <label for="dob">Date of birth</label>
+          <input id="dob" name="dob" />
+          <fieldset>
+            <legend>
+              Will you now or in the future require visa sponsorship?
+            </legend>
+            <label class="choice"
+              ><input type="radio" name="sponsorship" value="yes" /> Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" name="sponsorship" value="no" /> No</label
+            >
+          </fieldset>
+          <label for="motivation">Why do you want to join Orrin Labs?</label>
+          <textarea id="motivation" name="motivation"></textarea>
+          <label for="captcha">Type the characters shown</label>
+          <input id="captcha" name="captcha_answer" />
+          <label class="choice">
+            <input type="checkbox" name="privacy_consent" required />
+            I agree to the candidate privacy notice <span class="req">*</span>
+          </label>
+        </fieldset>
+
+        <label for="requisition">Requisition</label>
+        <input
+          id="requisition"
+          name="requisition"
+          value="OL-2026-0087"
+          disabled
+        />
+        <div hidden style="display: none">
+          <label for="trap">Leave this empty</label>
+          <input id="trap" name="email_address_2" type="email" tabindex="-1" />
+        </div>
+        <button type="submit">Submit application</button>
+      </form>
+
+      <form id="newsletter" action="/newsletter" method="post">
+        <label for="news-email">Email for job alerts</label>
+        <input id="news-email" name="email" type="email" />
+        <button type="submit">Subscribe</button>
+      </form>
+
+      <output id="status">Fixture · submitted: no · input events: 0</output>
+    </main>
+
+    <script>
+      // Lets reviewers confirm what the page observed.
+      const form = document.getElementById('application');
+      const status = document.getElementById('status');
+      let submitted = false;
+      let inputEvents = 0;
+      const render = () => {
+        status.textContent = `Fixture · submitted: ${submitted ? 'YES' : 'no'} · input events: ${inputEvents}`;
+      };
+      form.addEventListener('input', () => {
+        inputEvents += 1;
+        render();
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitted = true;
+        render();
+      });
+    </script>
+  </body>
+</html>

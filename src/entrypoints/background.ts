@@ -1,8 +1,20 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
-import { isOpenProfileMessage } from '@/messages';
+import { isGetAutofillValuesMessage, isOpenProfileMessage } from '@/messages';
+import { loadAutofillValues } from '@/storage/autofill-source';
+import { browserProfileStore } from '@/storage/profile-store';
 
 export default defineBackground(() => {
+  // The profile is only read here and by the profile page. Content scripts
+  // receive the few values autofill needs by message, so keep stored data
+  // out of their reach where the browser supports it.
+  const local = browser.storage.local as Partial<
+    Pick<typeof browser.storage.local, 'setAccessLevel'>
+  >;
+  void Promise.resolve()
+    .then(() => local.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' }))
+    .catch(() => undefined);
+
   // Clicking the toolbar button grants temporary access to the current tab
   // (activeTab), which is the only way the panel is ever injected.
   browser.action.onClicked.addListener((tab) => {
@@ -26,9 +38,28 @@ export default defineBackground(() => {
     if (reason === 'install') void browser.runtime.openOptionsPage();
   });
 
-  // The panel asks for the profile page; content scripts cannot open
-  // extension pages themselves.
-  browser.runtime.onMessage.addListener((message: unknown) => {
-    if (isOpenProfileMessage(message)) void browser.runtime.openOptionsPage();
-  });
+  browser.runtime.onMessage.addListener(
+    (message: unknown, sender, sendResponse: (response: unknown) => void) => {
+      // Only ApplyKit's own scripts may ask.
+      if (sender.id !== browser.runtime.id) return undefined;
+
+      // Content scripts cannot open extension pages themselves.
+      if (isOpenProfileMessage(message)) {
+        void browser.runtime.openOptionsPage();
+        return undefined;
+      }
+
+      // Read on every request, so the panel always uses the latest saved
+      // profile. Never logs values.
+      if (isGetAutofillValuesMessage(message)) {
+        loadAutofillValues(browserProfileStore)
+          .then(sendResponse)
+          .catch(() => {
+            sendResponse({ status: 'error' });
+          });
+        return true; // The response is sent asynchronously.
+      }
+      return undefined;
+    },
+  );
 });
