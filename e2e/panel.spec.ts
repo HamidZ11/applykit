@@ -11,11 +11,12 @@ interface Manifest {
   web_accessible_resources?: unknown[];
 }
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, saveProfile }) => {
+  await saveProfile();
   await page.goto(FIXTURE);
 });
 
-test('declares only activeTab and scripting, with no host access', async ({
+test('declares only activeTab, scripting and storage, with no host access', async ({
   worker,
 }) => {
   const manifest = await worker.evaluate(() =>
@@ -26,7 +27,7 @@ test('declares only activeTab and scripting, with no host access', async ({
     ).chrome.runtime.getManifest(),
   );
 
-  expect(manifest.permissions).toEqual(['activeTab', 'scripting']);
+  expect(manifest.permissions).toEqual(['activeTab', 'scripting', 'storage']);
   expect(manifest.host_permissions).toBeUndefined();
   expect(manifest.content_scripts).toBeUndefined();
   expect(manifest.web_accessible_resources).toBeUndefined();
@@ -79,7 +80,7 @@ test('toggles on repeated toolbar clicks without duplicating the panel', async (
   await expect(panel).not.toHaveCount(2);
 });
 
-test('fills first name, last name and email with sample data', async ({
+test('fills first name, last name and email from the saved profile', async ({
   page,
   clickToolbar,
 }) => {
@@ -90,7 +91,7 @@ test('fills first name, last name and email with sample data', async ({
   await expect(page.locator('#last-name')).toHaveValue('Sample');
   await expect(page.locator('#email')).toHaveValue('alex.sample@example.com');
   await expect(page.getByRole('dialog', PANEL).getByRole('status')).toHaveText(
-    'Autofill complete. Filled 3 fields, 0 fields need you.',
+    'Autofill finished. Filled 3 fields, 0 fields need you. Nothing was submitted.',
   );
   // Fields ApplyKit does not recognise are left alone.
   await expect(page.locator('[name=job_id]')).toHaveValue('fixture-001');
@@ -143,6 +144,45 @@ test('preserves values the user already entered', async ({
   await expect(
     page.getByRole('dialog', PANEL).getByRole('status'),
   ).toContainText('Filled 2 fields, kept 1 existing entry');
+});
+
+test('offers profile setup instead of autofill when no profile is saved', async ({
+  page,
+  saveProfile,
+  clickToolbar,
+}) => {
+  await saveProfile(null);
+  await clickToolbar(page);
+
+  const panel = page.getByRole('dialog', PANEL);
+  await expect(panel).toContainText('Set up your profile to autofill');
+  await expect(panel.getByRole('button', AUTOFILL)).toHaveCount(0);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#first-name')).toHaveValue('');
+
+  const opened = page.context().waitForEvent('page');
+  await panel
+    .locator('footer')
+    .getByRole('button', { name: 'Set up your profile' })
+    .click();
+  expect((await opened).url()).toContain('/options.html');
+});
+
+test('uses a profile saved while the panel was open after a rescan', async ({
+  page,
+  saveProfile,
+  clickToolbar,
+}) => {
+  await saveProfile(null);
+  await clickToolbar(page);
+  const panel = page.getByRole('dialog', PANEL);
+  await expect(panel).toContainText('No profile saved');
+
+  await saveProfile();
+  await panel.getByRole('button', { name: 'Rescan the page' }).click();
+  await panel.getByRole('button', AUTOFILL).click();
+
+  await expect(page.locator('#first-name')).toHaveValue('Alex');
 });
 
 test('never submits the form', async ({ page, clickToolbar }) => {

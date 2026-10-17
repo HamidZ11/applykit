@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { E2E_PROFILE } from './profile';
 import {
   test as base,
   chromium,
@@ -20,6 +21,11 @@ interface ExtensionFixtures {
   extensionId: string;
   /** Clicks the ApplyKit toolbar button for the tab showing `page`. */
   clickToolbar: (page: Page) => Promise<void>;
+  /**
+   * Saves a profile as the profile page would, or removes it with null.
+   * Defaults to the fictional E2E profile.
+   */
+  saveProfile: (profile?: object | null) => Promise<void>;
 }
 
 type ProbeState = 'pending' | 'granted' | 'denied';
@@ -37,6 +43,12 @@ interface ChromeInWorker {
         target: { tabId: number };
         func: () => boolean;
       }) => Promise<unknown>;
+    };
+    storage: {
+      local: {
+        set: (items: Record<string, unknown>) => Promise<void>;
+        remove: (key: string) => Promise<void>;
+      };
     };
   };
   __applykitProbe?: ProbeState;
@@ -96,6 +108,20 @@ export const test = base.extend<ExtensionFixtures>({
 
   extensionId: async ({ worker }, use) => {
     await use(new URL(worker.url()).host);
+  },
+
+  saveProfile: async ({ context }, use) => {
+    await use(async (profile = E2E_PROFILE) => {
+      // The live worker: it may have restarted since the fixture started.
+      const worker = context.serviceWorkers().at(-1);
+      if (!worker) throw new Error('No extension service worker');
+      await worker.evaluate(async (stored) => {
+        const { local } = (globalThis as unknown as ChromeInWorker).chrome
+          .storage;
+        if (stored === null) await local.remove('profile');
+        else await local.set({ profile: stored });
+      }, profile);
+    });
   },
 
   clickToolbar: async ({ context, extensionId, profileDir }, use) => {

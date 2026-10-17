@@ -9,6 +9,10 @@ import { expect, test } from './extension';
 const FIXTURE = '/job-application.html';
 const TYPED_EMAIL = 'a.sample@example.org';
 
+test.beforeEach(async ({ saveProfile }) => {
+  await saveProfile();
+});
+
 async function openWithTypedEmail(
   page: Page,
   clickToolbar: (page: Page) => Promise<void>,
@@ -73,12 +77,14 @@ test('reports honest outcomes on a realistic form without errors', async ({
   await panel.getByRole('button', { name: /^Autofill/ }).click();
 
   await expect(panel.getByRole('status')).toHaveText(
-    'Autofill complete. Filled 2 fields, kept 1 existing entry, 12 fields need you.',
+    'Autofill finished. Filled 6 fields, kept 1 existing entry, 8 fields need you. Nothing was submitted.',
   );
   await expect(page.locator('#given')).toHaveValue('Alex');
   await expect(page.locator('#family')).toHaveValue('Sample');
+  await expect(page.locator('#preferred')).toHaveValue('Al');
+  await expect(page.locator('#phone')).toHaveValue('+44 20 7946 0000');
   await expect(page.locator('#email')).toHaveValue(TYPED_EMAIL);
-  for (const selector of ['#preferred', '#phone', '#location', '#salary']) {
+  for (const selector of ['#location', '#salary']) {
     await expect(page.locator(selector)).toHaveValue('');
   }
   await expect(page.locator('#notice')).toHaveValue('');
@@ -96,10 +102,10 @@ test.describe('compact mode', () => {
     const panel = await openWithTypedEmail(page, clickToolbar);
 
     await expect(panel).toHaveAttribute('data-mode', 'compact');
-    await expect(panel).toContainText('Fill 2 fields from your profile');
+    await expect(panel).toContainText('Fill 6 fields from your profile');
     await expect(panel).toContainText('Keep 1 entry you already typed');
-    await expect(panel).toContainText('Leave 12 for you');
-    await expect(panel).toContainText('7 required');
+    await expect(panel).toContainText('Leave 8 for you');
+    await expect(panel).toContainText('5 required');
   });
 
   test('runs from the keyboard and steps through what needs you', async ({
@@ -112,14 +118,13 @@ test.describe('compact mode', () => {
     await expect(page.locator('#given')).toHaveValue('Alex');
 
     await page.keyboard.press('Enter');
-    await expect(panel.getByRole('button', { name: /^Phone/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await expectLocatorOver(page, page.locator('#phone'));
+    await expect(
+      panel.getByRole('button', { name: /^Current location/ }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await expectLocatorOver(page, page.locator('#location'));
 
     await page.keyboard.press('Enter');
-    await expectLocatorOver(page, page.locator('#location'));
+    await expectLocatorOver(page, page.locator('#resume'));
     await expect(page.locator('#status')).toContainText('submitted: no');
   });
 
@@ -158,12 +163,12 @@ test.describe('expanded mode', () => {
     clickToolbar,
   }) => {
     const panel = await openWithTypedEmail(page, clickToolbar);
-    await panel.getByRole('button', { name: /^Leave 12 for you/ }).click();
+    await panel.getByRole('button', { name: /^Leave 8 for you/ }).click();
 
     await expect(
       panel.getByRole('tab', { name: /^Needs you/ }),
     ).toHaveAttribute('aria-selected', 'true');
-    await expect(fieldList(panel).getByRole('listitem')).toHaveCount(12);
+    await expect(fieldList(panel).getByRole('listitem')).toHaveCount(8);
   });
 
   test('explains a selected field and points at it on the page', async ({
@@ -175,7 +180,9 @@ test.describe('expanded mode', () => {
     await panel.getByRole('button', { name: 'Show all fields' }).click();
 
     await panel.getByRole('button', { name: /^First name/ }).click();
-    await expect(panel).toContainText('Filled from your profile.');
+    await expect(panel).toContainText(
+      'Filled with your first name. The site accepted it.',
+    );
     await expect(panel).toContainText('autocomplete="given-name"');
 
     await panel.getByRole('button', { name: /^Do you have the right/ }).click();
@@ -209,18 +216,18 @@ test('switching modes keeps results, values and the current field', async ({
 
   for (let i = 0; i < 3; i++) {
     await panel.getByRole('button', { name: 'Show all fields' }).click();
-    await expect(panel.getByRole('button', { name: /^Phone/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(
+      panel.getByRole('button', { name: /^Current location/ }),
+    ).toHaveAttribute('aria-pressed', 'true');
     await panel.getByRole('button', { name: 'Show summary' }).click();
-    await expect(panel).toContainText('Filled 2 fields');
+    await expect(panel).toContainText('Filled 6 fields');
   }
 
   await expect(page.locator('applykit-panel')).toHaveCount(1);
   await expect(page.locator('#given')).toHaveValue('Alex');
   await expect(page.locator('#email')).toHaveValue(TYPED_EMAIL);
-  // Only the two fills produced input events; mode switches produced none.
-  await expect(page.locator('#status')).toContainText('input events: 3');
+  // The typed email and the six fills produced input events; mode switches
+  // produced none.
+  await expect(page.locator('#status')).toContainText('input events: 7');
   await expect(page.locator('#status')).toContainText('submitted: no');
 });
