@@ -101,6 +101,12 @@ export function FieldRow({
                 <span>required</span>
               </>
             )}
+            {field.section && (
+              <>
+                <span aria-hidden>·</span>
+                <span className="truncate">in “{field.section}”</span>
+              </>
+            )}
           </p>
           {detail && detail.evidence.length > 0 && (
             <ul

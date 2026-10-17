@@ -1,4 +1,10 @@
 import { useState } from 'react';
+import {
+  CATEGORY_LABEL,
+  CATEGORY_ORDER,
+  categoryOf,
+  type FieldCategory,
+} from '@/autofill/categories';
 import type { FieldReport } from '@/autofill/report';
 import { PageIdentity } from './CompactView';
 import { FieldRow, fieldKey } from './FieldRow';
@@ -6,8 +12,9 @@ import { matchesFilter, type FieldFilter } from './panel-state';
 import type { PanelModel } from './usePanel';
 
 /**
- * Expanded mode: every field on the form, grouped by the form's own
- * sections, with filters. After autofill the same rows are the report.
+ * Expanded mode: every field on the form, grouped by topic (personal
+ * information, education, sensitive disclosures…), with filters. After
+ * autofill the same rows are the report.
  */
 export function ExpandedView({ model }: { model: PanelModel }) {
   const { phase, filter, setFilter, summary, selected, toggleSelect } = model;
@@ -19,7 +26,9 @@ export function ExpandedView({ model }: { model: PanelModel }) {
     setSeenPhase(phase);
     setFlash(phase === 'done');
   }
-  const visible = visibleReports(model);
+  const groups = groupByCategory(
+    model.reports.filter((report) => matchesFilter(report, model.filter)),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -41,15 +50,15 @@ export function ExpandedView({ model }: { model: PanelModel }) {
         aria-label="Fields on this form"
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-line pb-1"
       >
-        {visible.length === 0 ? (
+        {groups.length === 0 ? (
           <p className="px-3.5 py-4 text-xs text-ink-2">
             No fields in this view.
           </p>
         ) : (
-          groupBySection(visible).map(([section, items]) => (
-            <section key={section} aria-label={section}>
+          groups.map(([category, items]) => (
+            <section key={category} aria-label={CATEGORY_LABEL[category]}>
               <div className="sticky top-0 z-10 flex h-7 items-center bg-canvas/95 px-3.5 text-2xs font-medium tracking-[0.01em] text-ink-3 backdrop-blur-[2px]">
-                <span className="truncate">{section}</span>
+                <span className="truncate">{CATEGORY_LABEL[category]}</span>
                 <span className="flex-1" />
                 <span className="font-mono tabular-nums">{items.length}</span>
               </div>
@@ -78,9 +87,14 @@ export function ExpandedView({ model }: { model: PanelModel }) {
   );
 }
 
-/** The reports the expanded list currently shows, in page order. */
+/**
+ * The reports the expanded list currently shows, in the order shown: by
+ * group, then page order. Arrow keys move through them in this order.
+ */
 export function visibleReports(model: PanelModel): FieldReport[] {
-  return model.reports.filter((report) => matchesFilter(report, model.filter));
+  return groupByCategory(
+    model.reports.filter((report) => matchesFilter(report, model.filter)),
+  ).flatMap(([, items]) => items);
 }
 
 function FilterTabs({
@@ -133,13 +147,19 @@ function FilterTabs({
   );
 }
 
-function groupBySection(reports: FieldReport[]): [string, FieldReport[]][] {
-  const groups = new Map<string, FieldReport[]>();
+/** Non-empty groups in a fixed order; fields keep page order within each. */
+function groupByCategory(
+  reports: FieldReport[],
+): [FieldCategory, FieldReport[]][] {
+  const groups = new Map<FieldCategory, FieldReport[]>();
   for (const report of reports) {
-    const section = report.field.section ?? 'Other fields';
-    const group = groups.get(section);
+    const category = categoryOf(report.field);
+    const group = groups.get(category);
     if (group) group.push(report);
-    else groups.set(section, [report]);
+    else groups.set(category, [report]);
   }
-  return [...groups];
+  return CATEGORY_ORDER.flatMap((category) => {
+    const group = groups.get(category);
+    return group ? [[category, group] as [FieldCategory, FieldReport[]]] : [];
+  });
 }

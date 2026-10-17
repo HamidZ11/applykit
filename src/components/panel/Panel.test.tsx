@@ -210,6 +210,51 @@ describe('Panel with a saved profile', () => {
     expect(button(/^First name/).textContent).toContain('Alex');
   });
 
+  it('groups the full list by topic, without empty groups', () => {
+    click('Show all fields');
+
+    const groups = [
+      ...host.querySelectorAll<HTMLElement>(
+        '[aria-label="Fields on this form"] section',
+      ),
+    ].map((section) => [
+      section.getAttribute('aria-label'),
+      section.querySelectorAll('li').length,
+    ]);
+
+    expect(groups.map(([name]) => name)).toEqual([
+      'Personal information',
+      'Contact details',
+      'Address',
+      'Employment',
+      'Application questions',
+    ]);
+    expect(groups.every(([, count]) => Number(count) > 0)).toBe(true);
+    // Every field appears exactly once.
+    expect(groups.reduce((sum, [, count]) => sum + Number(count), 0)).toBe(15);
+  });
+
+  it('moves through the list in the order it is shown', () => {
+    click('Show all fields');
+    const shown = [
+      ...host.querySelectorAll<HTMLButtonElement>(
+        '[aria-label="Fields on this form"] li > button',
+      ),
+    ].map((row) => row.textContent);
+
+    const visited: (string | undefined)[] = [];
+    shown.forEach(() => {
+      press('ArrowDown');
+      visited.push(
+        host.querySelector<HTMLButtonElement>(
+          '[aria-label="Fields on this form"] li > button[aria-pressed="true"]',
+        )?.textContent,
+      );
+    });
+
+    expect(visited).toEqual(shown);
+  });
+
   it('keeps results and values through repeated mode switches', async () => {
     await autofill();
     const announced = announcement();
