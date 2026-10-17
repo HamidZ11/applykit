@@ -56,9 +56,17 @@ browser window with it loaded. Development builds request extra permissions
 (`tabs`, `http://localhost/*`) for WXT's reload tooling; production builds
 do not.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs `pnpm check` (typecheck, lint, format
+check, unit tests, production build) on pushes to `main` and on pull
+requests. Browser tests are not part of CI yet.
+
 ## Browser tests
 
-`pnpm test:e2e` builds the extension and runs `e2e/` in headless Chromium
+`pnpm test:e2e` builds a test variant of the extension into
+`.output/chrome-mv3-e2e` (identical except that the panel's shadow root is
+open, so tests can see inside it) and runs `e2e/` in headless Chromium
 against the pages in `fixtures/`. The tests cover toolbar activation,
 opening, closing and repeated toggling, autofill from a saved fictional
 profile (seeded through the service worker), the missing-profile path, input
@@ -188,11 +196,17 @@ Limitations:
 - CV import reads text only: no scanned or image-only PDFs (no OCR), no
   password-protected PDFs, no older .doc files, 5 MB and 10 pages at most.
   Extraction is rule-based and conservative: unusual layouts yield fewer
-  suggestions, and addresses and country are never taken from a CV. PDF
-  import needs Chrome 140 or later.
+  suggestions. Of the address, only the town or city is suggested, and
+  contact details and links are read only from the CV's header or contact
+  section. Some PDFs (encrypted ones, some fonts) need Chrome 147 or later;
+  older versions may report the file as damaged.
 - One profile per browser; no import, export or sync.
-- Visibility uses the browser's own check; fields hidden by unusual
-  techniques (for example moved off-screen) may still be listed.
+- Visibility uses the browser's own check plus size, opacity and
+  off-page position, so common honeypots are skipped; other hiding
+  techniques may still be listed.
+- When several fields ask for the same detail, only the first is filled
+  (confirmation fields such as "Confirm email" excepted), since the others
+  may belong to a second contact or a reference.
 - Fields inside iframes or other shadow roots are not detected.
 - The panel cannot be moved. Expanded, it is 380×600 px at the
   bottom-right and can cover the right edge of a form at 1280×720.

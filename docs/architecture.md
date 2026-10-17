@@ -236,3 +236,7 @@ Details and reasoning are in ADR 0010.
   writing and never overwritten; afterwards the value is read back and
   reported as filled, reformatted, rejected or detached.
 - Autofill never clicks, presses keys, focuses anything or submits.
+- Fields asking for a detail already matched earlier on the form are left
+  to the user, except confirmation fields.
+- The panel's shadow root is closed in production; browser tests build a
+  variant with an open root into `.output/chrome-mv3-e2e`.

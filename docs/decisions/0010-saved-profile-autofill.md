@@ -95,4 +95,37 @@ replaces an older one, whatever order they finish in.
   "Company website" fields that are really personal, or selects without a
   placeholder. That is intended.
 - `setAccessLevel` and React-controlled inputs reverting after a task are
-  covered by unit tests in jsdom, not yet in a real browser.
+  covered by unit tests in jsdom, not yet in a real browser. Where
+  `setAccessLevel` is missing (Safari, Firefox) or fails, it is ignored;
+  content scripts still never read storage, so the restriction is defence
+  in depth rather than the boundary.
+
+## Amendments after the engineering review
+
+- Section context also comes from `<section>`, `role="group"` or
+  `role="region"` labels (`aria-label` or `aria-labelledby`) and from the
+  nearest heading before the control within its section. Headings are
+  checked against a narrower list of other-person words, because they
+  often carry job titles ("Engineering Manager").
+- When several controls match the same profile value, only the first is
+  filled; the rest are reported as `duplicate`, except confirmation fields
+  ("Confirm email"). This catches reference and contact sections the rules
+  above miss.
+- Controls outside any `<form>` count as one more form when choosing the
+  application, so pages built without a form element are not ignored in
+  favour of a newsletter form.
+- A placeholder example ("e.g. LinkedIn", "name@company.com") never decides
+  a match on a labelled control, and email or URL examples in placeholders
+  are not read as context.
+- Select placeholders (an empty value, a disabled option, or text such as
+  "Select…") count as empty. A select that shows its first real option
+  only because nothing was selected is left to the user.
+- Visibility also rejects transparent, tiny and off-page controls, which is
+  how honeypots are usually hidden.
+- The panel's shadow root is closed in production builds, so page scripts
+  cannot read previewed values or press its buttons. Browser tests use a
+  separate build (`WXT_E2E=true`, `.output/chrome-mv3-e2e`) with an open
+  root.
+- Known and accepted: WXT announces the content script to the page with a
+  message containing the extension ID. The panel's host element already
+  reveals ApplyKit to a page it is opened on.

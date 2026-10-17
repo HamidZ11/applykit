@@ -18,7 +18,10 @@ remote code (Manifest V3).
   - PDF: `pdfjs-dist` (Mozilla PDF.js), the established browser PDF parser.
     Its worker is bundled into the extension; fonts, system fonts,
     WebAssembly and forms are disabled because only text is needed.
-    Requires Chrome 140+ / Safari 18.2+ (`Uint8Array.prototype.toHex`).
+    Requires `Uint8Array.prototype.toHex` (Chrome 140+); some documents
+    (encrypted PDFs, some fonts) also need `Map.prototype.getOrInsertComputed`
+    (Chrome 145+) and `Math.sumPrecise` (Chrome 147+). The Safari minimum is
+    unconfirmed. See the engineering review notes in ADR 0010.
   - DOCX: `mammoth`, raw-text extraction only, so no HTML is produced.
   - Considered: `unpdf` (a wrapper around the same PDF.js) and hand-parsing
     DOCX XML (less code, but reimplements an established library).

@@ -1,6 +1,7 @@
 # 0007: Versioned profile in extension storage, validated with Zod
 
-- Status: Accepted
+- Status: Accepted; the panel's access to the profile is superseded by
+  [ADR 0010](0010-saved-profile-autofill.md)
 - Date: 2026-10-17
 
 ## Context
@@ -29,12 +30,14 @@ import, multiple profiles and export.
   `profileBackup`.
 - The floating panel only checks whether a profile exists
   (`profile-presence.ts`), so Zod is not bundled into the content script.
+  _Superseded by ADR 0010: the panel no longer reads storage; the
+  background worker sends it narrow autofill values._
 
 ## Consequences
 
 - A future schema version needs a migration from version 1 before parsing;
   today a different version is reported as `invalid` and kept as a backup.
 - Autofill still uses the fictional sample profile; connecting the saved
-  profile is a separate, deliberate step.
+  profile is a separate, deliberate step. _Done in ADR 0010._
 - Personal data is never logged; storage errors are reported with generic
   messages.
