@@ -4,9 +4,9 @@ A free, open-source, privacy-first browser extension that saves time on
 repetitive job applications. Everything stays on your device: no account, no
 backend, no tracking.
 
-> **Status: unified panel.** The panel is compact by default and expands
-> into a full field list, built on the tested autofill engine with fictional
-> sample data. ApplyKit is not yet useful for real applications.
+> **Status: panel and profile.** The panel is compact by default and expands
+> into a full field list. Onboarding saves your profile in this browser, but
+> autofill does not use it yet: it still fills fictional sample data.
 
 ## Technology
 
@@ -105,6 +105,18 @@ Limitations:
    **not** submitted. Close with ✕, Escape (from compact), or the toolbar
    button.
 
+## Setting up your profile
+
+1. Run `pnpm build` and load (or reload) `.output/chrome-mv3`.
+2. On a fresh install the profile page opens by itself, once. Otherwise
+   open it from the ApplyKit panel's profile button (person icon), or via
+   `chrome://extensions` → ApplyKit → **Extension options**.
+3. Work through Personal details, Education, Experience and Links, then
+   **Save profile** on the Review step. Education, experience and links can
+   be left empty.
+4. Reopen the page later to edit; it opens on an overview of the saved
+   profile. Use fictional data while testing.
+
 ## Current functionality
 
 - Toolbar button opens and closes a floating panel on the current tab.
@@ -123,12 +135,19 @@ Limitations:
   `input` and `change` events so framework-controlled inputs (e.g. React)
   update.
 - Never overwrites values already entered, and never submits a form.
-- Requests only `activeTab` and `scripting`: no access to any site until you
-  click the toolbar button on it.
+- Profile onboarding and editing in a full tab: personal details,
+  education, experience and links, validated and saved in
+  `browser.storage.local`. Opens once on install; reopen it from the
+  panel's profile button or the extension's Options.
+- Requests only `activeTab`, `scripting` and `storage`: no access to any
+  site until you click the toolbar button on it, and nothing leaves the
+  browser.
 
 ## Known limitations
 
-- Sample data only; there is no profile, storage, onboarding or CV import yet.
+- Autofill still uses fictional sample data; the saved profile is not
+  connected to it yet. No CV import.
+- One profile per browser; no import, export or sync.
 - Only three fields, only `<input>` elements, and only English labels.
 - No visibility check: a visually hidden text input matching a known field
   would be filled.

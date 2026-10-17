@@ -6,11 +6,14 @@ ApplyKit is a free, open-source, local-first browser extension that saves
 time on repetitive job applications. Chrome is the first target; Safari must
 keep working from the same code.
 
-Planned capabilities (build only when asked, one at a time): onboarding in a
-full browser tab; CV upload and extraction; profile, education, employment
-and application details; a floating in-page interface; field detection;
-autofill; review of uncertain or unsupported fields; reusable answers. A
-separate marketing website comes later.
+Built so far: the floating panel (compact and expanded), autofill of three
+fields from sample data, and profile onboarding/editing in a full tab with
+local storage. The saved profile is not yet connected to autofill.
+
+Still to come (build only when asked, one at a time): autofill from the
+saved profile and more field types; CV upload and extraction; application
+details and reusable answers; review of uncertain fields. A separate
+marketing website comes later.
 
 No authentication, subscriptions, backend, external databases or AI APIs.
 User data never leaves the device. Do not invent requirements beyond these.
@@ -27,7 +30,7 @@ Read `docs/architecture.md` before changing structure, and the ADRs in
   without React or an extension runtime.
 - Import explicitly; WXT auto-imports are disabled.
 - Use `wxt/browser`, never `chrome.*`, and avoid Chromium-only assumptions.
-- Permissions stay at `activeTab` + `scripting`. Any new permission or host
+- Permissions stay at `activeTab` + `scripting` + `storage`. Any new permission or host
   access needs an ADR and the user's approval.
 - No `web_accessible_resources` unless an ADR justifies it.
 - Autofill never submits, clicks, sends keys or overwrites user-entered values.

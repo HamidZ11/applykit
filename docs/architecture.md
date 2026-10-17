@@ -14,7 +14,14 @@ src/
       style.css         Tailwind and the panel's design tokens
   components/
     panel/              The panel: state, hook, modes, rows, locator, primitives
-  domain/               Domain types and models (Profile, sample data)
+    options/            Profile onboarding and editing page (full tab)
+  components/ui/        Buttons and icons shared by the panel and profile page
+  components/onboarding/ Onboarding steps, form controls, draft reducer
+  domain/               Domain types: autofill sample profile, UserProfile,
+                        profile validation schema
+  storage/              Extension storage access (profile store, presence)
+  styles/theme.css      Design tokens shared by both surfaces
+  messages.ts           Panel ↔ background message types
   autofill/             Detection, scanning, filling and reporting: pure DOM
   page/                 Reading from the host page: context, font loading
   test/                 Test helpers
@@ -23,8 +30,7 @@ scripts/                Development scripts (fixture server)
 e2e/                    Playwright browser tests
 ```
 
-Directories are created when code needs them. Storage (`src/storage/`) will
-be added with the first feature that requires it.
+Directories are created when code needs them.
 
 ## Entrypoints
 
@@ -91,6 +97,32 @@ Toolbar click
     a locator ring over it on the page
 ```
 
+## Profile and onboarding
+
+The options page (`src/entrypoints/options`, opened in a full tab) runs
+`OnboardingApp`: first-run onboarding when no profile is saved, profile
+editing afterwards. It opens once on first install, and from the panel's
+header button (the panel sends `applykit:open-profile`; the background calls
+`runtime.openOptionsPage()`).
+
+```
+OnboardingApp
+  → profileStore.load()           empty | loaded | invalid | error
+  → onboardingReducer             one draft for all steps, errors, furthest step
+  → Continue: validateSection()   the current step only; records may be empty
+  → Save: validateDraft()         whole draft, normalised (trim, https://)
+      profileFromDraft()          adds metadata (version, created, updated)
+      profileStore.save()         storage.local `profile`
+```
+
+Validation boundaries: the form validates on Continue and Save, never while
+typing; errors clear as fields change. Storage validates on every read. The
+domain model (`user-profile.ts`) has no validation or storage code; the schema
+(`profile-schema.ts`) has no storage code; the store has no UI code.
+
+The saved profile is not yet used by autofill, which still fills the
+fictional sample profile.
+
 ## Boundaries
 
 1. **Entrypoints** know about WXT and browser APIs. They contain wiring, not
@@ -107,8 +139,9 @@ Toolbar click
 5. **Page helpers** (`src/page`) read from the host page (title, host) and
    register fonts. The panel never modifies the page's DOM; the field
    locator is drawn inside ApplyKit's own shadow root.
-6. **Storage** (not yet built) will wrap WXT's `storage` utility behind a
-   small typed module so the rest of the code never handles storage keys.
+6. **Storage** (`src/storage`) is the only code that touches extension
+   storage. It validates everything it reads and returns results instead of
+   throwing (ADR 0007).
 
 ## Browser integration strategy
 
@@ -117,8 +150,8 @@ Toolbar click
   [ADR 0004](decisions/0004-manifest-v3-for-all-browsers.md).
 - Browser APIs are accessed through `wxt/browser`, the promise-based
   `browser` namespace that works in Chrome and Safari.
-- Permissions are kept to `activeTab` and `scripting`. Adding a permission
-  requires a decision record.
+- Permissions are `activeTab`, `scripting` and `storage` (ADR 0002,
+  ADR 0007). Adding a permission requires a decision record.
 - Panel CSS and fonts are bundled into the content script (no
   `web_accessible_resources`), so pages cannot detect the extension by
   probing its files. Fonts are registered with the `FontFace` API; see
