@@ -29,7 +29,10 @@ export async function fillFields(
 
     // The page may have changed since the plan was made.
     if (!element.isConnected) return detached(report);
-    if (element.disabled || ('readOnly' in element && element.readOnly)) {
+    if (
+      element.matches(':disabled') ||
+      ('readOnly' in element && element.readOnly)
+    ) {
       return {
         ...report,
         status: 'rejected',

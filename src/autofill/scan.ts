@@ -2,6 +2,7 @@ import { isEducationField, type AutofillField } from './fields';
 import {
   controlContext,
   detectControl,
+  duringScan,
   formOf,
   nameOf,
   placeholderOf,
@@ -149,7 +150,8 @@ function isCustomDropdown(element: FormControl): boolean {
     element.getAttribute('role') === 'combobox' ||
     (popup !== null && POPUP_ROLES.has(popup)) ||
     // ARIA 1.0 comboboxes wrap their text input in the combobox element.
-    element.parentElement?.closest('[role="combobox"]') != null
+    // Inputs inside a combobox or popup wrapper belong to that widget.
+    element.parentElement?.closest(CUSTOM_CONTROLS) != null
   );
 }
 
@@ -166,16 +168,47 @@ const OUTSIDE_APPLICATION =
   'nav, [role="navigation"], [role="search"], [role="menubar"], [role="menu"], [role="toolbar"], [role="banner"]';
 
 /**
+ * Navigation, site search, menus, and the page's own header and footer
+ * (but not a header inside the application form or main content).
+ */
+function isPageFurniture(element: Element): boolean {
+  if (element.closest(OUTSIDE_APPLICATION)) return true;
+  const edge = element.closest('header, footer, [role="contentinfo"], search');
+  return (
+    edge !== null &&
+    edge.parentElement?.closest(
+      'form, main, [role="main"], section, article',
+    ) == null
+  );
+}
+
+/** A native control that can actually be answered: shown and editable. */
+function isAnswerable(
+  control: Element,
+  isVisible: (element: Element) => boolean,
+): boolean {
+  return (
+    isFormControl(control) &&
+    !(control instanceof HTMLInputElement && control.type === 'hidden') &&
+    !control.matches(':disabled') &&
+    !('readOnly' in control && control.readOnly) &&
+    isVisible(control)
+  );
+}
+
+/**
  * Whether a custom control element should be listed as a field on its own.
  * Evidence comes from roles and ARIA relationships only, never from class
- * names, so one logical question is counted once.
+ * names, so one logical question is counted once. `owned` holds the ids
+ * other elements control or own (popup lists), collected once per scan.
  */
 function isCustomField(
   element: HTMLElement,
   isVisible: (element: Element) => boolean,
+  owned: ReadonlySet<string>,
 ): boolean {
   if (isFormControl(element)) return false;
-  if (element.closest(OUTSIDE_APPLICATION)) return false;
+  if (isPageFurniture(element)) return false;
   if (
     element.getAttribute('aria-disabled') === 'true' ||
     element.hasAttribute('disabled') ||
@@ -184,14 +217,19 @@ function isCustomField(
     return false;
   }
   if (!isVisible(element)) return false;
-  // A native control inside represents the question (and is reported as a
-  // custom dropdown itself).
-  if (element.querySelector('input:not([type="hidden"]), select, textarea')) {
+  // An answerable native control inside represents the question (and is
+  // reported as a custom dropdown itself). Hidden, read-only or disabled
+  // backing inputs do not.
+  if (
+    [...element.querySelectorAll('input, select, textarea')].some((control) =>
+      isAnswerable(control, isVisible),
+    )
+  ) {
     return false;
   }
   // Counted once: the outermost of nested candidates.
   if (element.parentElement?.closest(CUSTOM_CONTROLS)) return false;
-  if (element.getAttribute('role') === 'listbox' && isPopup(element)) {
+  if (element.getAttribute('role') === 'listbox' && owned.has(element.id)) {
     return false;
   }
   // Without a name there is nothing to tell the user, and too little
@@ -199,22 +237,17 @@ function isCustomField(
   return labelText(element) !== '';
 }
 
-/** A listbox that belongs to a combobox or button rather than standing alone. */
-function isPopup(listbox: HTMLElement): boolean {
-  const { id } = listbox;
-  if (!id) return false;
-  const pattern = new RegExp(`(?:^|\\s)${escapeRegExp(id)}(?:\\s|$)`);
-  return [
-    ...listbox.ownerDocument.querySelectorAll('[aria-controls], [aria-owns]'),
-  ].some((owner) =>
-    ['aria-controls', 'aria-owns'].some((attribute) =>
-      pattern.test(owner.getAttribute(attribute) ?? ''),
-    ),
-  );
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Ids that some element controls or owns: popups of other controls. */
+function ownedIds(root: ParentNode): Set<string> {
+  const ids = new Set<string>();
+  for (const owner of root.querySelectorAll('[aria-controls], [aria-owns]')) {
+    for (const attribute of ['aria-controls', 'aria-owns']) {
+      for (const id of (owner.getAttribute(attribute) ?? '').split(/\s+/)) {
+        if (id) ids.add(id);
+      }
+    }
+  }
+  return ids;
 }
 
 const DATE_TYPES = new Set(['date', 'datetime-local', 'month', 'week', 'time']);
@@ -260,22 +293,31 @@ export function scanFields(
   root: ParentNode,
   { isVisible = defaultIsVisible }: ScanOptions = {},
 ): ScannedField[] {
+  return duringScan(() => scanWithin(root, isVisible));
+}
+
+function scanWithin(
+  root: ParentNode,
+  isVisible: (element: Element) => boolean,
+): ScannedField[] {
   const fields: ScannedField[] = [];
   const radioGroups = new Set<string>();
+  const owned = ownedIds(root);
 
   for (const element of root.querySelectorAll<HTMLElement>(
     `input, select, textarea, ${CUSTOM_CONTROLS}`,
   )) {
     if (!isFormControl(element)) {
-      if (isCustomField(element, isVisible)) {
+      if (isCustomField(element, isVisible, owned)) {
         fields.push(describe(element, root));
       }
       continue;
     }
-    if (element.disabled || !isVisible(element)) continue;
+    // `:disabled` includes controls disabled by their fieldset.
+    if (element.matches(':disabled') || !isVisible(element)) continue;
     // Site search and navigation are never part of an application, also on
     // pages without a form element.
-    if (element.closest(OUTSIDE_APPLICATION)) continue;
+    if (isPageFurniture(element)) continue;
 
     if (isInput(element)) {
       if (IGNORED_INPUT_TYPES.has(element.type) || element.readOnly) continue;

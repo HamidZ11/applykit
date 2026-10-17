@@ -296,7 +296,11 @@ const OTHER_NAMES =
 const EXCLUDE: Partial<Record<AutofillField, RegExp>> = {
   phone:
     /\b(?:ext|extension|prefix)\b|\b(?:phone|tel|telephone|mobile) (?:type|code)\b|\b(?:country|area|dial(?:l?ing)?|calling) code\b/,
-  country: /\b(?:code|dial(?:l?ing)?|calling|prefix)\b/,
+  country:
+    /\b(?:code|dial(?:l?ing)?|calling|prefix)\b|\b(?:preferred|desired|target|willing|relocat\w*)\b/,
+  // Where the applicant would like to work is not where they live.
+  city: /\b(?:preferred|desired|target|willing|relocat\w*)\b/,
+  region: /\b(?:preferred|desired|target|willing|relocat\w*)\b/,
   // Previous or additional names are not the current name.
   fullName: OTHER_NAMES,
   firstName: OTHER_NAMES,
@@ -305,7 +309,9 @@ const EXCLUDE: Partial<Record<AutofillField, RegExp>> = {
   // "University ID", "University email": about the institution, not it.
   institution:
     /\b(?:id|number|no|email|e mail|phone|telephone|address|city|town|country|postcode|website|url|code|ranking|financial|bank)\b/,
-  qualification: /\b(?:number|id|code|reference|certificate number)\b/,
+  // Professional or language qualifications are not the saved education.
+  qualification:
+    /\b(?:number|id|code|reference|certificate number|professional|language|teaching|driving|vocational)\b/,
 };
 const INSTRUCTION = /\b(?:include|including|incl|with)\b/;
 
@@ -315,7 +321,7 @@ function excluded(field: AutofillField, text: string): boolean {
 
 /** Never answered automatically. */
 const SENSITIVE =
-  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|pay|wage|disabilit\w*|disabled|gender|sex|ethnic\w*|race|religio\w*|belief|sexual\w*|orientation|age|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|origin|native|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*)\b/;
+  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|pay|wage|disabilit\w*|disabled|gender|sex|ethnic\w*|race|religio\w*|belief|sexual\w*|orientation|age|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|origin|native|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*|authori[sz]ation|authori[sz]ed to work|eligib\w* to work|entitle\w* to work|permission to work|work eligibility|immigration)\b/;
 
 /**
  * The same, for technical `name` and `id` attributes of a labelled control.
@@ -324,9 +330,9 @@ const SENSITIVE =
  * appear in wording people read, or when the control has no label at all.
  */
 const SENSITIVE_IDENTIFIER =
-  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|disabilit\w*|disabled|gender|ethnic\w*|religio\w*|sexual\w*|orientation|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*)\b/;
+  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|disabilit\w*|disabled|gender|ethnic\w*|religio\w*|sexual\w*|orientation|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*|authori[sz]ation|authori[sz]ed to work|eligib\w* to work|entitle\w* to work|permission to work|work eligibility|immigration)\b/;
 const CONSENT =
-  /\b(?:consent|agree\w*|declar\w*|terms|privacy|acknowledg\w*|certify|newsletter|marketing|subscribe|opt in)\b/;
+  /\b(?:consent|agree\w*|declar\w*|terms|privacy|acknowledg\w*|certify|newsletter|marketing|subscribe|opt in|signature|signed|sign here)\b/;
 const VERIFICATION = /captcha|turnstile|g-recaptcha/i;
 
 /** Someone or something other than the applicant. */
@@ -387,7 +393,11 @@ export function detectControl(control: DetectableControl): Detection {
   ) {
     return { kind: 'manual', reason: 'sensitive' };
   }
-  if (CONSENT.test(all)) return { kind: 'manual', reason: 'consent' };
+  // A "Declaration" heading makes the fields under it (often "Full name"
+  // as a typed signature) part of the declaration.
+  if (CONSENT.test(all) || CONSENT.test(heading)) {
+    return { kind: 'manual', reason: 'consent' };
+  }
 
   const candidates = new Map<AutofillField, Evidence[]>();
   const add = (field: AutofillField, evidence: Evidence) => {
@@ -514,8 +524,13 @@ function callingCodeOptions(control: DetectableControl): string | null {
 }
 
 /** The fields a piece of normalised text refers to. */
+/** "Did you attend…", "Which city…": a question, not a field name. */
+const QUESTION =
+  /^(?:did|do|does|are|is|have|has|were|was|will|would|which|what|where|when|how|can|could)\b/;
+
 function matchText(text: string): AutofillField[] {
   const words = text.split(' ').length;
+  const question = QUESTION.test(text);
   if (words > MAX_WORDS) return [];
   // "First and last name" is one full-name field, not two.
   const fullNameOnly = TEXT_RULES.fullName.some((pattern) =>
@@ -529,7 +544,8 @@ function matchText(text: string): AutofillField[] {
     if (fullNameOnly && (field === 'firstName' || field === 'lastName')) {
       continue;
     }
-    if (SHORT_ONLY.has(field) && words > MAX_SHORT_WORDS) continue;
+    if (SHORT_ONLY.has(field) && (words > MAX_SHORT_WORDS || question))
+      continue;
     if (!patterns.some((pattern) => pattern.test(text))) continue;
     if (excluded(field, text)) continue;
     matches.push(field);
@@ -539,7 +555,7 @@ function matchText(text: string): AutofillField[] {
 
 /** The education fields a piece of normalised text refers to. */
 function matchEducation(text: string, inEducation: boolean): EducationField[] {
-  if (text.split(' ').length > MAX_WORDS) return [];
+  if (text.split(' ').length > MAX_WORDS || QUESTION.test(text)) return [];
   const matches: EducationField[] = [];
   for (const [field, rules] of Object.entries(EDUCATION_RULES) as [
     EducationField,
@@ -632,15 +648,41 @@ const HEADINGS = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
 const SECTIONS = 'fieldset, section, [role="group"], [role="region"]';
 
 /**
+ * Headings per scope, kept only while a scan runs (`duringScan`), so a
+ * long form is not searched again for every control.
+ */
+let headingCache: WeakMap<Element, Element[]> | null = null;
+
+function headingsIn(scope: Element): Element[] {
+  const cached = headingCache?.get(scope);
+  if (cached) return cached;
+  const headings = [...scope.querySelectorAll(HEADINGS)];
+  headingCache?.set(scope, headings);
+  return headings;
+}
+
+/** Runs one scan with heading lookups cached; the cache ends with it. */
+export function duringScan<T>(scan: () => T): T {
+  headingCache = new WeakMap();
+  try {
+    return scan();
+  } finally {
+    headingCache = null;
+  }
+}
+
+/**
  * The nearest heading before the control within its section (its fieldset
  * or labelled group, else its form, else the page): many forms mark
  * sections such as "Reference 1" with headings rather than fieldsets.
  */
 function headingElementBefore(control: DetectableControl): Element | null {
-  const scope =
-    control.closest(SECTIONS) ?? formOf(control) ?? control.ownerDocument.body;
+  const section = control.closest(SECTIONS);
+  const scope = section ?? formOf(control) ?? control.ownerDocument.body;
   let nearest: Element | null = null;
-  for (const heading of scope.querySelectorAll(HEADINGS)) {
+  for (const heading of headingsIn(scope)) {
+    // A heading inside another section describes that section only.
+    if (heading.closest(SECTIONS) !== section) continue;
     if (
       heading.compareDocumentPosition(control) &
       Node.DOCUMENT_POSITION_FOLLOWING
@@ -679,7 +721,11 @@ export function labelText(control: DetectableControl): string {
   if (labelledBy) {
     for (const id of labelledBy.split(/\s+/)) {
       const element = control.ownerDocument.getElementById(id);
-      if (element) parts.push(ownText(element));
+      // Some widgets name themselves ("labelId selectId"), which would
+      // make their current value part of the label.
+      if (element && element !== control && !control.contains(element)) {
+        parts.push(ownText(element));
+      }
     }
   }
   parts.push(control.getAttribute('aria-label') ?? '');
