@@ -102,6 +102,11 @@ old (pnpm enforces a minimum release age; do not add exclusions).
   profile, never the user's own Chrome profile. Do not launch visible
   browser windows or run repeated stress loops of browser tests without the
   user's permission; ask before any headed run.
+- Browser tests are not part of `pnpm check` and run only when the user
+  allows. Future browser tests must reuse browser instances where practical
+  (one headless browser per run, not per test) and must not steal focus.
+  The current harness still launches one browser per test; fix this before
+  running it routinely.
 - Browser tests (`e2e/`, Playwright) drive the built extension. Wait on
   observable state with auto-retrying assertions, never fixed delays. Each
   test must be able to fail: pair "nothing happened" assertions with a
@@ -111,8 +116,10 @@ old (pnpm enforces a minimum release age; do not add exclusions).
 
 ## Design approval process
 
-The visual direction has **not** been chosen. Current UI is a technical
-placeholder.
+The approved direction is the unified panel: compact by default, expandable
+into the full field list (see `docs/design/panel-exploration.md` and
+ADR 0006). Refine within it rather than redesigning. The steps below apply to
+new surfaces such as onboarding.
 
 1. The user supplies screenshots and references. Intended qualities: Linear's
    precision, Raycast's polished utility interactions, clean typography,

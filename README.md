@@ -4,11 +4,9 @@ A free, open-source, privacy-first browser extension that saves time on
 repetitive job applications. Everything stays on your device: no account, no
 backend, no tracking.
 
-> **Status: design exploration.** On the `design/panel-exploration` branch
-> the panel exists as two competing concepts, Command Dock and Field
-> Inspector, built on the same tested engine and fictional sample data. No
-> direction has been chosen yet. ApplyKit is not yet useful for real
-> applications.
+> **Status: unified panel.** The panel is compact by default and expands
+> into a full field list, built on the tested autofill engine with fictional
+> sample data. ApplyKit is not yet useful for real applications.
 
 ## Technology
 
@@ -30,50 +28,46 @@ pnpm install
 
 ## Commands
 
-| Command                | What it does                                                                    |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| `pnpm dev:dock`        | Development build of the Command Dock concept, with reload                      |
-| `pnpm dev:inspector`   | Development build of the Field Inspector concept, with reload                   |
-| `pnpm build`           | Production builds of both concepts (see below for paths)                        |
-| `pnpm build:dock`      | Production build of the Command Dock only                                       |
-| `pnpm build:inspector` | Production build of the Field Inspector only                                    |
-| `pnpm build:safari`    | Safari build (Manifest V3) of the Command Dock, unverified                      |
-| `pnpm zip`             | Zip the Command Dock production build                                           |
-| `pnpm fixtures`        | Serve the local test pages on http://127.0.0.1:4321                             |
-| `pnpm test`            | Run unit tests once (`pnpm test:watch` to watch)                                |
-| `pnpm test:e2e`        | Build both concepts, then test each in Chromium (Playwright)                    |
-| `pnpm capture`         | Build, then save screenshots and videos of both concepts to `artifacts/design/` |
-| `pnpm typecheck`       | TypeScript checks                                                               |
-| `pnpm lint`            | ESLint                                                                          |
-| `pnpm format`          | Format with Prettier (`format:check` to verify only)                            |
-| `pnpm check`           | Typecheck, lint, format check, unit tests, build, browser tests                 |
+| Command             | What it does                                                      |
+| ------------------- | ----------------------------------------------------------------- |
+| `pnpm build`        | Production build for Chrome, output `.output/chrome-mv3`          |
+| `pnpm dev`          | Development build with reload (opens a browser window; see below) |
+| `pnpm build:safari` | Production build for Safari (Manifest V3), unverified             |
+| `pnpm zip`          | Zip the production build                                          |
+| `pnpm fixtures`     | Serve the local test pages on http://127.0.0.1:4321               |
+| `pnpm test`         | Run unit tests once (`pnpm test:watch` to watch)                  |
+| `pnpm typecheck`    | TypeScript checks                                                 |
+| `pnpm lint`         | ESLint                                                            |
+| `pnpm format`       | Format with Prettier (`format:check` to verify only)              |
+| `pnpm check`        | Typecheck, lint, format check, unit tests and build (no browser)  |
+| `pnpm test:e2e`     | Build, then run browser tests in headless Chromium (see below)    |
 
 ## Loading the extension in Chrome
 
 1. Run `pnpm build`.
-2. Open `chrome://extensions` and enable **Developer mode**.
-3. Click **Load unpacked** and choose `.output/command-dock/chrome-mv3`.
-   Repeat with `.output/field-inspector/chrome-mv3` to load the second
-   concept. They are named "ApplyKit · Command Dock" and "ApplyKit · Field
-   Inspector", so both can be installed side by side.
-4. Pin them from the extensions menu so their toolbar buttons are visible.
+2. Open `chrome://extensions` and enable **Developer mode**. A separate
+   Chrome profile keeps your everyday one untouched.
+3. Click **Load unpacked** and choose `.output/chrome-mv3`.
+4. Pin ApplyKit from the extensions menu so its toolbar button is visible.
 
-`pnpm dev:dock` and `pnpm dev:inspector` try to open a browser with the
-development build loaded. If they do not, load
-`.output/<concept>/chrome-mv3-dev` the same way. Development builds
-request extra permissions (`tabs`, `http://localhost/*`) for WXT's reload
-tooling; production builds do not.
+`pnpm dev` builds to `.output/chrome-mv3-dev` and WXT tries to open a
+browser window with it loaded. Development builds request extra permissions
+(`tabs`, `http://localhost/*`) for WXT's reload tooling; production builds
+do not.
 
 ## Browser tests
 
-`pnpm test:e2e` builds both concepts and runs `e2e/` in a real Chromium
-against each build (one Playwright project per concept), using the pages in
-`fixtures/`. The shared tests cover toolbar activation, opening, closing and
-repeated toggling, autofill, input and change events, preserving typed
-values, never submitting, unsupported pages such as `chrome://`, honest
-outcome reporting and the absence of console errors. Concept-specific tests
-cover each concept's own interactions, including pointing at fields on the
-page.
+`pnpm test:e2e` builds the extension and runs `e2e/` in headless Chromium
+against the pages in `fixtures/`. The tests cover toolbar activation,
+opening, closing and repeated toggling, autofill, input and change events,
+preserving typed values, never submitting, unsupported pages such as
+`chrome://`, honest outcome reporting, both panel modes, switching between
+them, and pointing at fields on the page.
+
+Browser tests are not part of `pnpm check` and are run only on request: the
+current harness launches a separate browser for every test, which is
+disruptive on macOS. It should be changed to reuse one headless browser per
+run before it is used routinely (see CLAUDE.md).
 
 One-time setup: `pnpm exec playwright install chromium`.
 
@@ -84,40 +78,44 @@ Limitations:
   (`Extensions.triggerAction`), which runs the same handler as a real click.
 - Extensions load only in Chromium (Chrome for Testing); branded Google
   Chrome ignores `--load-extension`. Each test uses a throwaway profile.
-- The extension's service worker restarts shortly after browser start, and a
-  click that lands mid-restart is lost. The test helper confirms delivery with
-  a probe listener and retries only when the click provably did not arrive.
+- Simulated clicks can be lost while the service worker restarts, or
+  occasionally arrive without the activeTab grant. The test helper detects
+  both with a probe and retries only when ApplyKit provably did nothing.
+  The grant check has not yet been run.
 - These tests say nothing about Safari. Safari has not been run at all.
 - Tests run in Chromium's new headless mode and have only been run on macOS.
 
-## Reviewing the two panel concepts
+## Trying ApplyKit
 
-1. Run `pnpm build` and load both concepts (see above).
+1. Run `pnpm build` and load `.output/chrome-mv3` (see above).
 2. In a second terminal, run `pnpm fixtures`.
 3. Open http://127.0.0.1:4321/job-application.html, a fictional application
    with 15 fields, of which the engine can fill three.
 4. Optionally type into a field first (for example Email) to see that
    ApplyKit keeps it.
-5. Click a concept's toolbar button, then **Autofill**. Fields are filled
-   with fictional values (`Alex Sample`, `alex.sample@example.com`).
-6. Review what is left: in the Command Dock press ↵ (or **Go to first** /
-   **Next field**) to step through it; in the Field Inspector use
-   **Review required**, the filter tabs, or click any row. The field is
-   outlined on the page.
-7. The line under the form confirms the input events and that the form was
-   **not** submitted. Close with ✕, Escape, or the toolbar button.
-
-The design notes, screenshots and comparison are in
-[docs/design/panel-exploration.md](docs/design/panel-exploration.md).
+5. Click the ApplyKit toolbar button. The compact panel states what it will
+   do. Press ↵ or click **Autofill**. Fields are filled with fictional values
+   (`Alex Sample`, `alex.sample@example.com`).
+6. Work through what is left: ↵ (**Go to first** / **Next field**) steps
+   through fields that need you, outlining each on the page.
+7. Expand with the ⤢ button in the header, or click any plan line, to see
+   every field by section, filter it, and select a field for an explanation.
+   Collapse with ⤡ or Escape; nothing is lost.
+8. The line under the form confirms the input events and that the form was
+   **not** submitted. Close with ✕, Escape (from compact), or the toolbar
+   button.
 
 ## Current functionality
 
 - Toolbar button opens and closes a floating panel on the current tab.
 - The panel is rendered in a shadow root, isolated from page styles, with
   bundled Instrument Sans and IBM Plex Mono fonts.
+- Compact mode summarises the plan and, after autofill, the fields left for
+  you, required first. Expanded mode lists every field by section with
+  filters and per-field explanations. Both share one state.
 - Lists every field an applicant completes, with what ApplyKit will do or
   did to each: fill, keep the user's entry, not recognised, or not
-  supported yet. Required fields are prioritised.
+  supported yet.
 - Points at any listed field on the page without modifying the page.
 - Detects first name, last name and email inputs using `autocomplete`,
   input type, `name`, `id`, labels and placeholders.
@@ -135,8 +133,8 @@ The design notes, screenshots and comparison are in
 - No visibility check: a visually hidden text input matching a known field
   would be filled.
 - Fields inside iframes or other shadow roots are not detected.
-- Two exploratory panel designs; neither has been chosen, and neither can be
-  collapsed or moved, so both can cover part of a form on smaller screens.
+- The panel cannot be moved. Expanded, it is 380×600 px at the
+  bottom-right and can cover the right edge of a form at 1280×720.
 - Safari: the build succeeds but has not been packaged with Xcode or run in
   Safari.
 - No extension icons yet; Chrome shows a generated placeholder.

@@ -1,9 +1,9 @@
 # Panel design exploration
 
-- Status: Awaiting selection. No direction has been chosen.
-- Branch: `design/panel-exploration`
-- Captures: `pnpm capture` writes screenshots and videos of both concepts to
-  `artifacts/design/` (not committed).
+- Status: Concluded. The user chose "Command Dock by default, expandable into
+  Field Inspector", implemented as the unified panel (ADR 0006).
+- Both original concepts are preserved at commit `3bb2d12` on
+  `design/panel-exploration`, including their capture script.
 
 ## Task
 
@@ -82,7 +82,24 @@ shown next to each result.
 | Scales to large forms    | Summary stays three lines                   | List grows; filters and sections help  |
 | Exposes engine gaps      | As one count ("leave 12")                   | Row by row (12 of 15 today)            |
 
-## Open questions for review
+## Outcome
+
+The unified panel keeps the Dock's compact plan, primary action, footer and
+↵ queue stepping, and the Inspector's sectioned list, filters, per-field
+explanation and detection detail. Changes from the concepts:
+
+- One position for both modes (bottom-right, 380 px); the Inspector's
+  top-right, full-height placement is gone.
+- The Dock's inline plan disclosures became links into the expanded list on
+  the matching filter.
+- The Inspector's footer summary and "Review required" button gave way to
+  the Dock's footer, so the primary action is in the same place in both
+  modes.
+- The field ring now holds while a field is selected in either mode (the
+  Dock's ring used to fade out).
+- Escape collapses the expanded mode before it closes the panel.
+
+## Open questions at the time of review
 
 - Which composition should become the panel, and which parts of the other
   concept should it absorb?

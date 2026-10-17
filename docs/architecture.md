@@ -11,19 +11,16 @@ src/
   entrypoints/          WXT entrypoints: browser integration only
     background.ts       Toolbar click → inject the panel into the active tab
     panel.content/      Runtime content script: mounts the panel in a shadow root
-      concept.tsx       Picks the panel concept for this build
       style.css         Tailwind and the panel's design tokens
-  components/           React UI
-    shared/             Session hook, locator, vocabulary, icons, primitives
-    command-dock/       Concept A (design exploration)
-    field-inspector/    Concept B (design exploration)
+  components/
+    panel/              The panel: state, hook, modes, rows, locator, primitives
   domain/               Domain types and models (Profile, sample data)
   autofill/             Detection, scanning, filling and reporting: pure DOM
   page/                 Reading from the host page: context, font loading
   test/                 Test helpers
 fixtures/               Static HTML pages for unit, browser and manual tests
 scripts/                Development scripts (fixture server)
-e2e/                    Playwright tests and design capture
+e2e/                    Playwright browser tests
 ```
 
 Directories are created when code needs them. Storage (`src/storage/`) will
@@ -34,7 +31,7 @@ be added with the first feature that requires it.
 | Entrypoint       | Context              | Responsibility                                                                                |
 | ---------------- | -------------------- | --------------------------------------------------------------------------------------------- |
 | `background.ts`  | Service worker       | Listens for toolbar clicks; injects `content-scripts/panel.js` with `scripting.executeScript` |
-| `panel.content/` | Page, isolated world | Mounts or removes the React panel; loads fonts; plays enter and exit transitions              |
+| `panel.content/` | Page, isolated world | Mounts or removes the React panel; loads fonts; plays transitions; restores page focus        |
 
 The content script uses `registration: 'runtime'`, so WXT leaves it out of the
 manifest and grants no host permissions. It is only ever injected after the
@@ -42,27 +39,54 @@ user clicks the toolbar button, which grants temporary `activeTab` access to
 that one tab. A second click closes the panel; a click during mounting is
 handled so a duplicate can never appear.
 
-### Panel concepts (design exploration only)
+## Panel
 
-Two panel designs are built from the same code, selected at build time with
-`APPLYKIT_CONCEPT` (`command-dock` or `field-inspector`). Each builds to
-`.output/<concept>/chrome-mv3` with its own extension name, and the unused
-concept is removed from the bundle. This exists only until a direction is
-chosen; the chosen concept then becomes the panel and the switch is removed.
+One floating panel with two presentation modes:
+
+- **Compact** (default): the plan before autofill, then the fields left for
+  the user, required first, stepped through with ↵.
+- **Expanded**: every field grouped by the form's sections, with filters and
+  a per-field explanation of status and detection.
+
+Both modes are 380 px wide and anchored bottom-right; expanding only grows
+the panel upward, to at most 600 px or the viewport height. The header
+toggle, any compact plan line and "View all" expand; the toggle and Escape
+collapse.
+
+### Shared state
+
+There is one source of truth, `panelReducer` (`panel-state.ts`), held by
+`usePanel` in the root `Panel` component:
+
+| State      | Meaning                                                   |
+| ---------- | --------------------------------------------------------- |
+| `mode`     | `compact` or `expanded`                                   |
+| `filter`   | Expanded list filter: all, handled, needs you             |
+| `phase`    | `ready` before autofill, `done` after                     |
+| `fields`   | The latest `scanFields` result                            |
+| `result`   | The latest `autofill` result                              |
+| `selected` | The field under review, by element (shared by both modes) |
+
+Reports, counts and the attention queue are derived from `fields` and
+`result` on render. Mode and filter actions change only `mode` and `filter`:
+they never rescan, autofill or clear results and selection. The page is
+scanned on open, after autofill (to read written values) and on an explicit
+rescan; `autofill` runs only from the primary action.
 
 ## Data flow
 
 ```
 Toolbar click
   → background: scripting.executeScript(tab, panel.js)      [activeTab grant]
-  → panel.content: load fonts, mount concept in shadow root (or close it)
-  → useAutofillSession:
+  → panel.content: load fonts, mount Panel in shadow root (or close it)
+  → usePanel (panelReducer):
       scanFields(document)           every control, with what the engine can do
       planFill(fields, profile)      fill / keep / not recognised / unsupported
-  → user clicks Autofill
+  → user presses ↵ or clicks Autofill
       autofill(document, profile)    unchanged engine: detect, fill, never submit
       reportFill(fields, result)     filled / kept / left for the user
-  → concept renders the report; selecting a field draws a locator ring over it
+  → compact or expanded mode renders the same report; selecting a field draws
+    a locator ring over it on the page
 ```
 
 ## Boundaries
