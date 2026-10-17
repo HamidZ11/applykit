@@ -37,6 +37,7 @@ export const KIND_LABEL: Record<FieldKind, string> = {
   file: 'File upload',
   checkbox: 'Checkbox',
   radio: 'Choice',
+  custom: 'Custom dropdown',
   other: 'Field',
 };
 

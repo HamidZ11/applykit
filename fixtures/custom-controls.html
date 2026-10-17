@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Analyst Internship · Corvel Partners Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional application built mostly from custom, accessible dropdowns
+      (standard ARIA patterns, no framework class names), as on many large
+      applicant tracking systems. ApplyKit should list each question once,
+      leave custom dropdowns to the user with guidance, and ignore page
+      furniture: the language menu and site search in the header, a hidden
+      decoy, a disabled control and popup lists. The dropdowns do not open in
+      this fixture; it only needs their structure. Every name is invented.
+      Used by unit tests and manual testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #0f6b5c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      fieldset fieldset > legend {
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 16px;
+      }
+      label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      .req {
+        color: #cf222e;
+      }
+      input:not([type='checkbox'], [type='radio']),
+      select,
+      textarea {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+      .choice {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 400;
+        margin-top: 10px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 4px 0 0;
+      }
+      button {
+        margin-top: 28px;
+        padding: 10px 18px;
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--brand);
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      output {
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar">
+        <span class="logo"></span>Corvel Partners
+        <nav aria-label="Site">
+          <button type="button" aria-haspopup="listbox" aria-label="Language">
+            English
+          </button>
+        </nav>
+        <div role="search">
+          <input
+            id="site-search"
+            role="combobox"
+            aria-label="Search jobs"
+            aria-controls="site-search-results"
+            aria-expanded="false"
+          />
+        </div>
+      </div>
+    </header>
+    <main>
+      <h1>Analyst Internship 2027</h1>
+      <p class="meta">Edinburgh · Research</p>
+
+      <form id="application" action="/submitted" method="post">
+        <h2>Personal information</h2>
+        <div class="row">
+          <div>
+            <label for="first">First name</label>
+            <input id="first" name="firstName" />
+          </div>
+          <div>
+            <label for="last">Last name</label>
+            <input id="last" name="lastName" />
+          </div>
+        </div>
+        <label for="email">Email address</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          value="already.typed@example.org"
+        />
+
+        <h2>Contact details</h2>
+        <span id="residence-label">Country of residence</span>
+        <div
+          id="residence"
+          role="combobox"
+          tabindex="0"
+          aria-labelledby="residence-label"
+          aria-controls="residence-options"
+          aria-expanded="false"
+          aria-haspopup="listbox"
+        >
+          Select…
+        </div>
+        <ul id="residence-options" role="listbox" hidden>
+          <li role="option">United Kingdom</li>
+          <li role="option">Ireland</li>
+        </ul>
+        <label for="calling-code">Country calling code</label>
+        <button
+          id="calling-code"
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+        >
+          Select…
+        </button>
+        <input type="hidden" name="callingCode" value="" />
+
+        <h2>University education</h2>
+        <label for="nativeSelect">University</label>
+        <select id="nativeSelect" name="university">
+          <option value="">Select…</option>
+          <option value="1">University of Elsewhere</option>
+          <option value="2">University of Example</option>
+        </select>
+        <span id="qual-label">Qualification</span>
+        <button
+          id="qual-button"
+          type="button"
+          aria-haspopup="listbox"
+          aria-labelledby="qual-label"
+          aria-controls="qual-options"
+          aria-expanded="false"
+        >
+          Select…
+        </button>
+        <input type="hidden" name="qualification" value="" />
+        <ul id="qual-options" role="listbox" hidden>
+          <li role="option">Bachelor's degree</li>
+          <li role="option">Master's degree</li>
+        </ul>
+        <label for="grad-year">Graduation year</label>
+        <input
+          id="grad-year"
+          name="graduationYear"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="grad-year-options"
+          aria-expanded="false"
+        />
+        <ul id="grad-year-options" role="listbox" hidden></ul>
+
+        <section aria-labelledby="edu-1">
+          <h3 id="edu-1">Education 1</h3>
+          <span id="edu-1-inst-label">Institution</span>
+          <button
+            id="edu-1-inst"
+            type="button"
+            aria-haspopup="listbox"
+            aria-labelledby="edu-1-inst-label"
+          >
+            Select…
+          </button>
+        </section>
+        <section aria-labelledby="edu-2">
+          <h3 id="edu-2">Education 2</h3>
+          <span id="edu-2-inst-label">Institution</span>
+          <button
+            id="edu-2-inst"
+            type="button"
+            aria-haspopup="listbox"
+            aria-labelledby="edu-2-inst-label"
+          >
+            Select…
+          </button>
+        </section>
+
+        <h2>Diversity monitoring</h2>
+        <span id="gender-label">Gender</span>
+        <div
+          id="gender"
+          role="combobox"
+          tabindex="0"
+          aria-labelledby="gender-label"
+          aria-expanded="false"
+        >
+          Prefer not to say
+        </div>
+
+        <h2>Availability</h2>
+        <span id="start-label">Earliest start month</span>
+        <ul
+          id="start-month"
+          role="listbox"
+          aria-labelledby="start-label"
+          tabindex="0"
+        >
+          <li role="option">June 2027</li>
+          <li role="option">July 2027</li>
+        </ul>
+        <span id="office-label">Office (applications closed)</span>
+        <div
+          id="office"
+          role="combobox"
+          aria-labelledby="office-label"
+          aria-disabled="true"
+        >
+          Edinburgh
+        </div>
+        <div id="decoy" role="combobox" aria-label="Website" hidden></div>
+
+        <div id="conditional"></div>
+        <button type="button" id="add-question">
+          I was referred by someone
+        </button>
+
+        <button type="submit">Submit application</button>
+      </form>
+
+      <output id="status">Fixture · submitted: no · input events: 0</output>
+    </main>
+
+    <script>
+      // Lets reviewers confirm what the page observed.
+      const form = document.getElementById('application');
+      const status = document.getElementById('status');
+      let submitted = false;
+      let inputEvents = 0;
+      const render = () => {
+        status.textContent = `Fixture · submitted: ${submitted ? 'YES' : 'no'} · input events: ${inputEvents}`;
+      };
+      form.addEventListener('input', () => {
+        inputEvents += 1;
+        render();
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitted = true;
+        render();
+      });
+
+      // A conditional question that appears after the page loads.
+      document.getElementById('add-question').addEventListener('click', () => {
+        const slot = document.getElementById('conditional');
+        if (slot.childElementCount > 0) return;
+        const label = document.createElement('span');
+        label.id = 'source-label';
+        label.textContent = 'How did you hear about us?';
+        const control = document.createElement('div');
+        control.id = 'source';
+        control.setAttribute('role', 'combobox');
+        control.setAttribute('tabindex', '0');
+        control.setAttribute('aria-labelledby', 'source-label');
+        control.textContent = 'Select…';
+        slot.append(label, control);
+      });
+    </script>
+  </body>
+</html>

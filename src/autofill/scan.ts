@@ -41,6 +41,8 @@ export type FieldKind =
   | 'file'
   | 'checkbox'
   | 'radio'
+  /** A custom control such as an ARIA combobox: reported, never written. */
+  | 'custom'
   | 'other';
 
 /**
@@ -145,8 +147,74 @@ function isCustomDropdown(element: FormControl): boolean {
   const popup = element.getAttribute('aria-haspopup');
   return (
     element.getAttribute('role') === 'combobox' ||
-    (popup !== null && POPUP_ROLES.has(popup))
+    (popup !== null && POPUP_ROLES.has(popup)) ||
+    // ARIA 1.0 comboboxes wrap their text input in the combobox element.
+    element.parentElement?.closest('[role="combobox"]') != null
   );
+}
+
+/**
+ * Custom controls that are not native inputs: comboboxes, buttons that open
+ * a listbox, and listboxes shown on the page. Menus ("aria-haspopup=menu"
+ * or "true") are left out: they are navigation and actions, not answers.
+ */
+const CUSTOM_CONTROLS =
+  '[role="combobox"], [role="listbox"], [aria-haspopup="listbox"]';
+
+/** Page furniture whose dropdowns are never part of an application. */
+const OUTSIDE_APPLICATION =
+  'nav, [role="navigation"], [role="search"], [role="menubar"], [role="menu"], [role="toolbar"], [role="banner"]';
+
+/**
+ * Whether a custom control element should be listed as a field on its own.
+ * Evidence comes from roles and ARIA relationships only, never from class
+ * names, so one logical question is counted once.
+ */
+function isCustomField(
+  element: HTMLElement,
+  isVisible: (element: Element) => boolean,
+): boolean {
+  if (isFormControl(element)) return false;
+  if (element.closest(OUTSIDE_APPLICATION)) return false;
+  if (
+    element.getAttribute('aria-disabled') === 'true' ||
+    element.hasAttribute('disabled') ||
+    element.closest('fieldset[disabled]')
+  ) {
+    return false;
+  }
+  if (!isVisible(element)) return false;
+  // A native control inside represents the question (and is reported as a
+  // custom dropdown itself).
+  if (element.querySelector('input:not([type="hidden"]), select, textarea')) {
+    return false;
+  }
+  // Counted once: the outermost of nested candidates.
+  if (element.parentElement?.closest(CUSTOM_CONTROLS)) return false;
+  if (element.getAttribute('role') === 'listbox' && isPopup(element)) {
+    return false;
+  }
+  // Without a name there is nothing to tell the user, and too little
+  // evidence that it is a question at all.
+  return labelText(element) !== '';
+}
+
+/** A listbox that belongs to a combobox or button rather than standing alone. */
+function isPopup(listbox: HTMLElement): boolean {
+  const { id } = listbox;
+  if (!id) return false;
+  const pattern = new RegExp(`(?:^|\\s)${escapeRegExp(id)}(?:\\s|$)`);
+  return [
+    ...listbox.ownerDocument.querySelectorAll('[aria-controls], [aria-owns]'),
+  ].some((owner) =>
+    ['aria-controls', 'aria-owns'].some((attribute) =>
+      pattern.test(owner.getAttribute(attribute) ?? ''),
+    ),
+  );
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 const DATE_TYPES = new Set(['date', 'datetime-local', 'month', 'week', 'time']);
@@ -195,10 +263,19 @@ export function scanFields(
   const fields: ScannedField[] = [];
   const radioGroups = new Set<string>();
 
-  for (const element of root.querySelectorAll<FormControl>(
-    'input, select, textarea',
+  for (const element of root.querySelectorAll<HTMLElement>(
+    `input, select, textarea, ${CUSTOM_CONTROLS}`,
   )) {
+    if (!isFormControl(element)) {
+      if (isCustomField(element, isVisible)) {
+        fields.push(describe(element, root));
+      }
+      continue;
+    }
     if (element.disabled || !isVisible(element)) continue;
+    // Site search and navigation are never part of an application, also on
+    // pages without a form element.
+    if (element.closest(OUTSIDE_APPLICATION)) continue;
 
     if (isInput(element)) {
       if (IGNORED_INPUT_TYPES.has(element.type) || element.readOnly) continue;
@@ -279,7 +356,7 @@ function firstOfEachDetail(fields: ScannedField[]): ScannedField[] {
   });
 }
 
-function describe(element: FormControl, root: ParentNode): ScannedField {
+function describe(element: FieldElement, root: ParentNode): ScannedField {
   const question =
     isInput(element) && element.type === 'radio'
       ? element.closest('fieldset')
@@ -298,7 +375,7 @@ function describe(element: FormControl, root: ParentNode): ScannedField {
   };
 }
 
-function supportOf(element: FormControl): FieldSupport {
+function supportOf(element: FieldElement): FieldSupport {
   const detection = detectControl(element);
   if (detection.kind === 'manual') {
     return { status: 'manual', reason: detection.reason };
@@ -309,7 +386,7 @@ function supportOf(element: FormControl): FieldSupport {
 
   // Custom dropdowns built on a text input commit a choice through their own
   // scripts; typing into them would not select anything.
-  if (isCustomDropdown(element)) {
+  if (!isFormControl(element) || isCustomDropdown(element)) {
     return {
       status: 'unsupported',
       custom: {
@@ -349,7 +426,8 @@ function supportOf(element: FormControl): FieldSupport {
   }
 }
 
-function kindOf(element: FormControl): FieldKind {
+function kindOf(element: FieldElement): FieldKind {
+  if (!isFormControl(element)) return 'custom';
   if (isTextArea(element)) return 'textarea';
   if (!isInput(element)) return 'select';
 
@@ -372,14 +450,14 @@ function kindOf(element: FormControl): FieldKind {
 }
 
 function fieldLabel(
-  element: FormControl,
+  element: FieldElement,
   question: HTMLFieldSetElement | null,
 ): string {
   const candidates = [
     question ? legendText(question) : '',
     labelText(element),
     placeholderOf(element),
-    element.name,
+    nameOf(element),
   ];
   for (const candidate of candidates) {
     const text = cleanLabel(candidate);
@@ -389,7 +467,7 @@ function fieldLabel(
 }
 
 function sectionOf(
-  element: FormControl,
+  element: FieldElement,
   question: HTMLFieldSetElement | null,
 ): string | null {
   // For a radio group the nearest fieldset is the question itself, so the
@@ -400,8 +478,11 @@ function sectionOf(
   return cleanLabel(legendText(section)) || null;
 }
 
-function isRequired(element: FormControl, root: ParentNode): boolean {
-  if (element.required || element.getAttribute('aria-required') === 'true') {
+function isRequired(element: FieldElement, root: ParentNode): boolean {
+  if (
+    (isFormControl(element) && element.required) ||
+    element.getAttribute('aria-required') === 'true'
+  ) {
     return true;
   }
   if (isInput(element) && element.type === 'radio' && element.name) {
@@ -424,10 +505,10 @@ function cleanLabel(text: string): string {
     .trim();
 }
 
-function isInput(element: FormControl): element is HTMLInputElement {
+function isInput(element: Element): element is HTMLInputElement {
   return element.localName === 'input';
 }
 
-function isTextArea(element: FormControl): element is HTMLTextAreaElement {
+function isTextArea(element: Element): element is HTMLTextAreaElement {
   return element.localName === 'textarea';
 }

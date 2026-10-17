@@ -363,3 +363,158 @@ describe('a heading-based internship form', () => {
     ]);
   });
 });
+
+describe('custom controls', () => {
+  /** What each listed field is: its id and what ApplyKit found. */
+  function listed(): [string, string, string][] {
+    return scanFields(document).map((field) => [
+      field.element.id || nameOf(field.element),
+      field.kind,
+      outcome(field) +
+        (field.support.status === 'unsupported' && field.support.custom?.field
+          ? `:${field.support.custom.field}`
+          : ''),
+    ]);
+  }
+
+  it('lists each question of a custom-control form once', () => {
+    loadFixture('custom-controls.html');
+
+    expect(listed()).toEqual([
+      ['first', 'text', 'firstName'],
+      ['last', 'text', 'lastName'],
+      ['email', 'email', 'email'],
+      ['residence', 'custom', 'unsupported:country'],
+      ['calling-code', 'custom', 'unsupported:phoneCountryCode'],
+      ['nativeSelect', 'select', 'institution'],
+      ['qual-button', 'custom', 'unsupported:qualification'],
+      ['grad-year', 'text', 'unsupported:educationEnd'],
+      ['edu-1-inst', 'custom', 'unsupported:institution'],
+      ['edu-2-inst', 'custom', 'unsupported:institution'],
+      ['gender', 'custom', 'manual:sensitive'],
+      ['start-month', 'custom', 'unsupported'],
+    ]);
+  });
+
+  it('ignores navigation, site search, popups, hidden and disabled controls', () => {
+    loadFixture('custom-controls.html');
+
+    const ids = listed().map(([id]) => id);
+
+    for (const id of [
+      'site-search',
+      'residence-options',
+      'qual-options',
+      'grad-year-options',
+      'office',
+      'decoy',
+    ]) {
+      expect(ids, id).not.toContain(id);
+    }
+    expect(ids.filter((id) => id === '')).toEqual([]);
+  });
+
+  it('lists a question added after the first scan on the next scan', () => {
+    loadFixture('custom-controls.html');
+    const before = scanFields(document).length;
+    document
+      .getElementById('conditional')
+      ?.insertAdjacentHTML(
+        'beforeend',
+        '<span id="source-label">How did you hear about us?</span><div id="source" role="combobox" tabindex="0" aria-labelledby="source-label"></div>',
+      );
+
+    const after = scanFields(document);
+
+    expect(after).toHaveLength(before + 1);
+    expect(after.find((f) => f.element.id === 'source')?.label).toBe(
+      'How did you hear about us?',
+    );
+  });
+
+  it('counts a combobox and its text input once (ARIA 1.0 pattern)', () => {
+    loadHtml(`<form>
+      <div role="combobox" aria-label="Country" aria-owns="c-list">
+        <input id="c-input" aria-autocomplete="list" aria-label="Country">
+      </div>
+      <ul id="c-list" role="listbox"><li role="option">Ireland</li></ul>
+    </form>`);
+
+    const fields = scanFields(document);
+
+    expect(fields.map((f) => f.element.id)).toEqual(['c-input']);
+    // Typing into it would not choose anything, so it is never filled.
+    const [only] = fields;
+    if (!only) throw new Error('No field');
+    expect(outcome(only)).toBe('unsupported');
+  });
+
+  it('counts nested custom elements once', () => {
+    loadHtml(`<form>
+      <div id="outer" role="combobox" aria-label="Institution">
+        <button id="inner" type="button" aria-haspopup="listbox" aria-label="Open">▾</button>
+      </div>
+    </form>`);
+
+    expect(scanFields(document).map((f) => f.element.id)).toEqual(['outer']);
+  });
+
+  it('keeps identically labelled dropdowns in different sections apart', () => {
+    loadFixture('custom-controls.html');
+
+    const institutions = scanFields(document).filter(
+      (f) => f.label === 'Institution',
+    );
+
+    expect(institutions).toHaveLength(2);
+    expect(institutions[0]?.group).not.toBe(institutions[1]?.group);
+  });
+
+  it('lists a standalone listbox but never its options', () => {
+    loadHtml(`<form>
+      <ul id="lb" role="listbox" aria-label="Preferred team">
+        <li role="option" id="o1">Research</li><li role="option" id="o2">Data</li>
+      </ul>
+    </form>`);
+
+    expect(scanFields(document).map((f) => f.element.id)).toEqual(['lb']);
+  });
+
+  it('does not list menus or unlabelled widgets', () => {
+    loadHtml(`<form>
+      <button type="button" aria-haspopup="menu" aria-label="More actions">⋯</button>
+      <button type="button" aria-haspopup="true" aria-label="Help">?</button>
+      <div role="combobox"></div>
+    </form>`);
+
+    expect(scanFields(document)).toEqual([]);
+  });
+
+  it('protects referees and employers in custom dropdowns too', () => {
+    loadHtml(`<form>
+      <section aria-label="Reference 1">
+        <span id="rc">Country</span>
+        <div id="ref-country" role="combobox" tabindex="0" aria-labelledby="rc"></div>
+      </section>
+      <span id="ec">Employer country</span>
+      <div id="emp-country" role="combobox" tabindex="0" aria-labelledby="ec"></div>
+    </form>`);
+
+    expect(scanFields(document).map(outcome)).toEqual([
+      'other-person',
+      'other-person',
+    ]);
+  });
+});
+
+describe('page furniture', () => {
+  it('ignores site search on an application built without a form', () => {
+    loadHtml(`
+      <header><div role="search"><label>Search <input id="q" type="search"></label></div></header>
+      <nav><label>Email updates <input id="nav-email" type="email"></label></nav>
+      <main><label>Email <input id="email" type="email"></label></main>
+    `);
+
+    expect(scanFields(document).map((f) => f.element.id)).toEqual(['email']);
+  });
+});
