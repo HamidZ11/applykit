@@ -15,7 +15,7 @@
     "zip": "wxt zip",
     "fixtures": "node scripts/serve-fixtures.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
