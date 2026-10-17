@@ -7,7 +7,11 @@ import {
   Info,
   ShieldCheck,
 } from 'lucide-react';
-import { validateDraft, validateSection } from '@/domain/profile-schema';
+import {
+  savedProfileIssues,
+  validateDraft,
+  validateSection,
+} from '@/domain/profile-schema';
 import { profileFromDraft, type UserProfile } from '@/domain/user-profile';
 import {
   browserProfileStore,
@@ -298,6 +302,12 @@ export function OnboardingApp({
 
   const copy = STEP_COPY[state.step];
   const index = stepIndex(state.step);
+  // A saved profile stays readable when today's rules are stricter than
+  // the ones it was saved under; say so rather than hiding it.
+  const savedIssues =
+    state.saved && !state.dirty
+      ? Object.keys(savedProfileIssues(state.saved)).length
+      : 0;
   const unmatchedCountry =
     load.status === 'loaded' && state.saved?.personal.address.country === ''
       ? load.unmatchedCountry
@@ -366,6 +376,16 @@ export function OnboardingApp({
                     editing={editing}
                     onStartOver={discard}
                   />
+                )}
+                {savedIssues > 0 && unmatchedCountry === null && (
+                  <Banner tone="warning">
+                    Some saved details no longer pass ApplyKit’s checks (
+                    {savedIssues === 1
+                      ? '1 detail'
+                      : `${String(savedIssues)} details`}
+                    ). Autofill still uses them. Review your profile, then save
+                    to see what to change.
+                  </Banner>
                 )}
                 {unmatchedCountry !== null && (
                   <Banner tone="warning">

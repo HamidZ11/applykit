@@ -33,7 +33,12 @@ export interface StoredDraft {
 // draft. Storage quota bounds the total size.
 const text = z.string();
 
-const draftShape = z.object({
+/**
+ * The shape of a profile's content, without content rules. Used for drafts
+ * and for reading saved profiles back (profile-schema.ts): unfinished or
+ * older data is kept, and the form reports what needs fixing.
+ */
+export const profileShape = z.object({
   personal: z.object({
     firstName: text,
     lastName: text,
@@ -51,40 +56,34 @@ const draftShape = z.object({
       country: text,
     }),
   }),
-  education: z
-    .array(
-      z.object({
-        id: z.string().min(1),
-        institution: text,
-        qualification: text,
-        fieldOfStudy: text,
-        startDate: text,
-        endDate: text,
-        grade: text,
-      }),
-    )
-    .max(100),
-  employment: z
-    .array(
-      z.object({
-        id: z.string().min(1),
-        employer: text,
-        title: text,
-        employmentType: z.enum([...EMPLOYMENT_TYPES, '']).catch(''),
-        startDate: text,
-        endDate: text,
-        current: z.boolean(),
-        description: text,
-      }),
-    )
-    .max(100),
+  education: z.array(
+    z.object({
+      id: z.string().min(1),
+      institution: text,
+      qualification: text,
+      fieldOfStudy: text,
+      startDate: text,
+      endDate: text,
+      grade: text,
+    }),
+  ),
+  employment: z.array(
+    z.object({
+      id: z.string().min(1),
+      employer: text,
+      title: text,
+      employmentType: z.enum([...EMPLOYMENT_TYPES, '']).catch(''),
+      startDate: text,
+      endDate: text,
+      current: z.boolean(),
+      description: text,
+    }),
+  ),
   links: z.object({
     linkedin: text,
     github: text,
     portfolio: text,
-    other: z
-      .array(z.object({ id: z.string().min(1), label: text, url: text }))
-      .max(100),
+    other: z.array(z.object({ id: z.string().min(1), label: text, url: text })),
   }),
 }) satisfies z.ZodType<ProfileDraft>;
 
@@ -94,7 +93,7 @@ const storedDraftSchema = z.object({
   basedOn: z.iso.datetime().nullable(),
   step: z.string(),
   furthest: z.number().int().min(0).max(10),
-  draft: draftShape,
+  draft: profileShape,
 }) satisfies z.ZodType<StoredDraft>;
 
 /** Parses untrusted stored data; null unless it is a usable draft. */

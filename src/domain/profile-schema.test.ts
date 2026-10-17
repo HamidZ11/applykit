@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   normaliseDraft,
   parseStoredProfile,
+  savedProfileIssues,
   validateDraft,
   validateSection,
 } from './profile-schema';
@@ -343,18 +344,8 @@ describe('parseStoredProfile', () => {
     ],
     ['a missing section', { ...stored(), education: undefined }],
     [
-      'an invalid email',
-      { ...stored(), personal: { ...stored().personal, email: 'x' } },
-    ],
-    [
-      'a version 2 profile with a country name instead of a code',
-      {
-        ...stored(),
-        personal: {
-          ...stored().personal,
-          address: { ...stored().personal.address, country: 'United Kingdom' },
-        },
-      },
+      'a record without an id',
+      { ...stored(), education: [{ institution: 'X' }] },
     ],
   ])('rejects %s', (_case, value) => {
     expect(parseStoredProfile(value)).toBeNull();
@@ -379,5 +370,128 @@ describe('profileFromDraft', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-02-01T00:00:00.000Z',
     });
+  });
+});
+
+describe('saved profiles from earlier versions and rules', () => {
+  /** Profiles as each schema version stored them (fictional data). */
+  const personal = {
+    firstName: 'Alex',
+    lastName: 'Sample',
+    preferredName: '',
+    email: 'alex.sample@example.com',
+    phone: '+44 20 7946 0000',
+  };
+  const rest = {
+    education: [
+      {
+        id: 'e1',
+        institution: 'University of Example',
+        qualification: 'BSc Computer Science',
+        fieldOfStudy: 'Computer Science',
+        startDate: '2021-09',
+        endDate: '2024-06',
+        grade: 'First',
+      },
+    ],
+    employment: [],
+    links: { linkedin: '', github: '', portfolio: '', other: [] },
+  };
+  const meta = (schemaVersion: number) => ({
+    schemaVersion,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  });
+  const address = {
+    line1: '1 Example Street',
+    line2: '',
+    city: 'London',
+    region: '',
+    postcode: 'N1 9GU',
+  };
+
+  it.each([
+    [
+      'version 1',
+      {
+        personal: {
+          ...personal,
+          address: { ...address, country: 'United Kingdom' },
+        },
+        ...rest,
+        metadata: meta(1),
+      },
+    ],
+    [
+      'version 2',
+      {
+        personal: { ...personal, address: { ...address, country: 'GB' } },
+        ...rest,
+        metadata: meta(2),
+      },
+    ],
+    [
+      'version 3',
+      {
+        personal: {
+          ...personal,
+          useFirstNameAsPreferred: true,
+          address: { ...address, country: 'GB' },
+        },
+        ...rest,
+        metadata: meta(3),
+      },
+    ],
+  ])('reads a %s profile', (_version, stored) => {
+    const result = parseStoredProfile(JSON.parse(JSON.stringify(stored)));
+
+    expect(result?.profile).toMatchObject({
+      personal: {
+        email: 'alex.sample@example.com',
+        address: { country: 'GB' },
+      },
+      education: [{ institution: 'University of Example' }],
+      metadata: { schemaVersion: 3, updatedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    expect(result && savedProfileIssues(result.profile)).toEqual({});
+  });
+
+  it('keeps a profile readable when it no longer passes today’s rules', () => {
+    const profile = profileFromDraft(
+      validDraft(),
+      null,
+      new Date('2026-01-01T00:00:00Z'),
+    );
+    // Values a later rule change could reject, saved when they were valid.
+    const older = {
+      ...profile,
+      personal: {
+        ...profile.personal,
+        email: 'not-an-address',
+        address: { ...profile.personal.address, country: 'United Kingdom' },
+      },
+    };
+
+    const result = parseStoredProfile(JSON.parse(JSON.stringify(older)));
+
+    expect(result?.profile.personal.firstName).toBe('Alex');
+    expect(savedProfileIssues(older)).toMatchObject({
+      'personal.email': expect.any(String) as string,
+      'personal.address.country': expect.any(String) as string,
+    });
+  });
+
+  it('keeps settings missing from an older save at their safe default', () => {
+    const profile = profileFromDraft(
+      validDraft(),
+      null,
+      new Date('2026-01-01T00:00:00Z'),
+    );
+    const personal: Record<string, unknown> = { ...profile.personal };
+    Reflect.deleteProperty(personal, 'useFirstNameAsPreferred');
+
+    const result = parseStoredProfile({ ...profile, personal });
+
+    expect(result?.profile.personal.useFirstNameAsPreferred).toBe(false);
   });
 });

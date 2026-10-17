@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { findCountryCode, isCountryCode } from './countries';
+import { profileShape } from './profile-draft';
 import {
   EMPLOYMENT_TYPES,
   PROFILE_SCHEMA_VERSION,
@@ -201,14 +202,30 @@ export const userProfileSchema = draftSchema.extend({
 }) satisfies z.ZodType<UserProfile>;
 
 /**
- * Stored profiles may have an empty country: a version 1 profile whose free
- * text could not be matched to a country keeps its other data, and the user
- * is asked to choose the country rather than losing the profile.
+ * Saved profiles are read back by shape, not by today's form rules. Those
+ * rules applied when the profile was saved; if they later change (a code
+ * change, a new country list, a library update), a profile that was valid
+ * stays readable and usable for autofill, and the profile page asks the
+ * user to review what no longer passes (`savedProfileIssues`). Only data
+ * that is not a profile at all, or from an unknown version, is rejected.
  */
-const storedProfileSchema = draftSchema.extend({
-  personal: personalWith(z.union([country, z.literal('')])),
+const storedProfileSchema = profileShape.extend({
   metadata: metadataSchema,
 }) satisfies z.ZodType<UserProfile>;
+
+/**
+ * What a saved profile no longer passes under today's form rules, keyed
+ * like form errors. Empty when it can be saved again as it is.
+ */
+export function savedProfileIssues(profile: UserProfile): FieldErrors {
+  const result = validateDraft({
+    personal: profile.personal,
+    education: profile.education,
+    employment: profile.employment,
+    links: profile.links,
+  });
+  return result.ok ? {} : result.errors;
+}
 
 /** The parts of a profile that are validated independently, one per step. */
 export type ProfileSection = 'personal' | 'education' | 'employment' | 'links';

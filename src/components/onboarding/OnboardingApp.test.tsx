@@ -408,6 +408,22 @@ describe('editing a saved profile', () => {
     expect(button('Saved').disabled).toBe(true);
   });
 
+  it('opens a saved profile that today’s rules reject, and says so', async () => {
+    const existing = validProfile('2026-01-01T00:00:00.000Z');
+    existing.personal.email = 'not-an-address';
+    const { store } = memoryStore({
+      status: 'loaded',
+      profile: existing,
+      unmatchedCountry: null,
+    });
+
+    await render(store);
+
+    expect(heading()).toBe('Your profile');
+    expect(host.textContent).toContain('Alex');
+    expect(host.textContent).toContain('no longer pass ApplyKit’s checks');
+  });
+
   it('passes no version for a first save', async () => {
     const { store } = memoryStore();
     await render(store);
