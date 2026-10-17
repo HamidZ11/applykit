@@ -8,12 +8,13 @@ keep working from the same code.
 
 Built so far: the floating panel (compact and expanded), profile
 onboarding/editing in a full tab with local storage and drafts, local CV
-import with review, and autofill of personal, contact, address and link
-fields from the confirmed saved profile (ADR 0010).
+import with review, and autofill of personal, contact, address, link and
+education fields from the confirmed saved profile, including split calling
+codes and preferred names (ADR 0010, ADR 0011).
 
-Still to come (build only when asked, one at a time): education and
-employment autofill; application details and reusable answers; review of
-uncertain fields. A separate marketing website comes later.
+Still to come (build only when asked, one at a time): employment autofill;
+custom dropdown widgets; application details and reusable answers; review
+of uncertain fields. A separate marketing website comes later.
 
 No authentication, subscriptions, backend, external databases or AI APIs.
 User data never leaves the device. Do not invent requirements beyond these.
@@ -109,7 +110,9 @@ old (pnpm enforces a minimum release age; do not add exclusions).
 - Every autofill change keeps the safety tests: no submission, no overwriting,
   hidden and disabled inputs untouched, React-controlled inputs updated,
   rejected values reported, other people's details and sensitive questions
-  skipped. `fixtures/full-application.html` covers these together.
+  skipped. `fixtures/full-application.html` covers these together;
+  `fixtures/education-application.html` covers heading-only sections,
+  calling codes and education.
 - Tests fill from `src/test/autofill-fixtures.ts` (fictional); the extension
   itself has no sample data.
 - Browser tests and design captures run headless only, in a throwaway

@@ -53,7 +53,7 @@ One floating panel with two presentation modes:
 
 - **Compact** (default): the plan before autofill, then the fields left for
   the user, required first, stepped through with ↵.
-- **Expanded**: every field grouped by the form's sections, with filters and
+- **Expanded**: every field grouped by topic (`categories.ts`), with filters and
   a per-field explanation of status and detection.
 
 Both modes are 380 px wide and anchored bottom-right; expanding only grows
@@ -118,7 +118,7 @@ header button (the panel sends `applykit:open-profile`; the background calls
 
 ```
 OnboardingApp
-  → profileStore.load()           empty | loaded | invalid | error (v1 migrated)
+  → profileStore.load()           empty | loaded | invalid | error (v1, v2 migrated)
   → profileStore.loadDraft()      restore, discard if obsolete (planDraftRestore)
   → WelcomeScreen                 first run only, until "Get started"
   → onboardingReducer             one draft for all steps, errors, furthest step
@@ -213,11 +213,19 @@ profile", "Open your profile" or "Try again" instead of Autofill.
 
 ## Autofill rules
 
-Details and reasoning are in ADR 0010.
+Details and reasoning are in ADR 0010 and ADR 0011.
 
-- Fields: full, first, last and preferred name; email; phone; address lines
-  1 and 2, town or city, region or county, postcode, country; LinkedIn,
-  GitHub, portfolio or website.
+- Fields: full, first, last and preferred name; email; phone, or its
+  calling code and national number separately; address lines 1 and 2, town
+  or city, region or county, postcode, country; LinkedIn, GitHub,
+  portfolio or website; institution, qualification, field of study, start
+  and graduation dates, and grade from one saved education record.
+- Modules in `src/autofill`: `detect` (what a control asks), `scan` (every
+  control, with support and section), `report` and `plan-education` (the
+  plan: value or reason per field), `fill` (write and verify), plus pure
+  rules in `education`, `dates`, `options` and `categories`. The background
+  derives `AutofillValues` in `profile-values` (phone parsing, record
+  levels).
 - Detection signals: `autocomplete` token, input `type`, label text
   (`<label>`, `aria-labelledby`, `aria-label`), `name`, `id`,
   `placeholder`, and fieldset legends or labelled groups for context.
@@ -227,16 +235,22 @@ Details and reasoning are in ADR 0010.
   work, visa, salary, disability, demographics, date of birth), consent
   and declarations, CAPTCHAs, values longer than `maxlength`, and fields
   outside the application form.
-- Writable controls: text, email, tel, url and search inputs, and native
-  selects for the country (exact option match only). Never hidden,
-  disabled, read-only or password controls, checkboxes, radios, textareas,
-  file inputs or custom widgets.
+- Writable controls: text, email, tel, url and search inputs; month and
+  number inputs for education dates; native selects for country, calling
+  code and education fields (exact or explicitly equivalent options only).
+  Never hidden, disabled, read-only or password controls, checkboxes,
+  radios, textareas, file inputs or custom dropdowns.
+- Preferred names use the first name only when the user chose that in
+  their profile. Education records are chosen per section of the form;
+  several fitting records leave the fields for review. Dates are never
+  given a day the profile does not have.
 - Values are set through the native prototype setter, then a bubbling
   `input` and `change` are dispatched. A field is re-checked just before
   writing and never overwritten; afterwards the value is read back and
   reported as filled, reformatted, rejected or detached.
 - Autofill never clicks, presses keys, focuses anything or submits.
 - Fields asking for a detail already matched earlier on the form are left
-  to the user, except confirmation fields.
+  to the user, except confirmation fields; education fields repeat once per
+  section.
 - The panel's shadow root is closed in production; browser tests build a
   variant with an open root into `.output/chrome-mv3-e2e`.

@@ -5,9 +5,9 @@ repetitive job applications. Everything stays on your device: no account, no
 backend, no tracking.
 
 > **Status: profile autofill.** Save your profile once (by hand or from your
-> CV), then fill your personal, contact, address and link details on
-> application forms. ApplyKit leaves everything else to you and never
-> submits.
+> CV), then fill your personal, contact, address, link and education
+> details on application forms. ApplyKit leaves everything else to you and
+> never submits.
 
 ## Technology
 
@@ -104,7 +104,9 @@ Limitations:
    application that mixes your own details with a reference, an employer,
    a hiring manager, sensitive questions, a CAPTCHA, a consent box, a
    hidden honeypot and a separate newsletter form.
-   (`job-application.html` is a shorter form.)
+   (`job-application.html` is a shorter form; `education-application.html`
+   is a long single-page internship form with a separate calling code,
+   university and school sections, and sections marked only by headings.)
 4. Click the ApplyKit toolbar button. Without a saved profile the panel
    says so and offers **Set up your profile**; it fills nothing. Save a
    profile with fictional details (see below), then click the rescan button
@@ -116,7 +118,8 @@ Limitations:
    left for you. ↵ (**Go to first** / **Next field**) steps through fields
    that need you, outlining each on the page.
 7. Expand with the ⤢ button in the header, or click any plan line, to see
-   every field by section with its value. Select a field to see why it was
+   every field grouped by topic (personal information, education, sensitive
+   disclosures…) with its value. Select a field to see why it was
    filled or skipped, and the evidence (label, `autocomplete`, name). Collapse
    with ⤡ or Escape; nothing is lost.
 8. Edit your profile in another tab, then click ↻: the panel uses the
@@ -162,6 +165,16 @@ Limitations:
   email; phone; address lines, town or city, county or region, postcode
   and country; LinkedIn, GitHub and portfolio or website. Without a saved
   profile, autofill is unavailable.
+- Preferred-name fields get your saved preferred name, or your first name
+  only if you ticked that option in your profile.
+- Phone numbers are split into international calling code and number for
+  forms that ask for them separately, including calling-code dropdowns.
+- Education: institution, qualification, field of study, start and
+  graduation dates and grade, from the one saved record a form section
+  asks about (university or school). When several records could fit, the
+  fields are left for you with "Several records fit".
+- The full list groups fields by topic, so long forms do not end up under
+  "Other fields".
 - Detects fields from `autocomplete`, input type, labels, `name`, `id`,
   placeholders and surrounding sections, and skips any field whose signals
   disagree.
@@ -185,8 +198,17 @@ Limitations:
 
 ## Known limitations
 
-- Autofill covers personal, contact, address and link fields only; not
-  education, employment or written answers.
+- Autofill covers personal, contact, address, link and education fields;
+  not employment history or written answers.
+- Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
+  and similar platforms) are listed as not supported, not filled.
+  Compatibility has been tried on one real application only.
+- Education dates are filled only where the field's format is clear (month
+  inputs, year or month dropdowns, "MM/YYYY"-style hints, year-only
+  fields); never where a day is needed. Several saved degrees, or a form
+  that does not say which record it means, leave education for you.
+- Phone numbers must include their country code or match your saved
+  country; their length is checked, not whether the number is in use.
 - Detection rules are English only. They are conservative: some fields a
   person would fill are left to you, for example a select without an empty
   first option (treated as already answered), or a "Website" field inside
