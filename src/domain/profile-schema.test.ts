@@ -1,0 +1,280 @@
+import { describe, expect, it } from 'vitest';
+import {
+  normaliseDraft,
+  parseStoredProfile,
+  validateDraft,
+  validateSection,
+} from './profile-schema';
+import { validDraft } from '@/test/profile-fixtures';
+import {
+  emptyDraft,
+  newEducationRecord,
+  newEmploymentRecord,
+  newOtherLink,
+  profileFromDraft,
+} from './user-profile';
+
+describe('personal details', () => {
+  it('accepts a complete draft with optional fields left empty', () => {
+    expect(validateSection('personal', validDraft())).toEqual({});
+  });
+
+  it('requires every required field and nothing optional', () => {
+    const errors = validateSection('personal', emptyDraft());
+
+    expect(Object.keys(errors).sort()).toEqual([
+      'personal.address.city',
+      'personal.address.country',
+      'personal.address.line1',
+      'personal.address.postcode',
+      'personal.email',
+      'personal.firstName',
+      'personal.lastName',
+      'personal.phone',
+    ]);
+    expect(errors['personal.firstName']).toBe('Enter your first name');
+  });
+
+  it('treats whitespace-only values as missing', () => {
+    const draft = validDraft();
+    draft.personal.firstName = '   ';
+
+    expect(validateSection('personal', draft)['personal.firstName']).toBe(
+      'Enter your first name',
+    );
+  });
+
+  it.each([
+    ['not-an-email', 'personal.email'],
+    ['alex@', 'personal.email'],
+  ])('rejects the email %j', (email, key) => {
+    const draft = validDraft();
+    draft.personal.email = email;
+
+    expect(validateSection('personal', draft)[key]).toMatch(/email address/);
+  });
+
+  it.each(['123', 'call me', '+44 (0)20 7946 0000 ext 99999999'])(
+    'rejects the phone number %j',
+    (phone) => {
+      const draft = validDraft();
+      draft.personal.phone = phone;
+
+      expect(validateSection('personal', draft)['personal.phone']).toBeTruthy();
+    },
+  );
+
+  it.each(['+1 (555) 010-0199', '020 7946 0000', '07700900123'])(
+    'accepts the phone number %j',
+    (phone) => {
+      const draft = validDraft();
+      draft.personal.phone = phone;
+
+      expect(validateSection('personal', draft)).toEqual({});
+    },
+  );
+
+  it('rejects an implausible postcode', () => {
+    const draft = validDraft();
+    draft.personal.address.postcode = '!!';
+
+    expect(
+      validateSection('personal', draft)['personal.address.postcode'],
+    ).toBe('Enter a valid postcode');
+  });
+});
+
+describe('education', () => {
+  it('accepts no records at all', () => {
+    expect(validateSection('education', validDraft())).toEqual({});
+  });
+
+  it('reports errors by record id, not position', () => {
+    const draft = validDraft();
+    const record = newEducationRecord();
+    draft.education.push(record);
+
+    const errors = validateSection('education', draft);
+
+    expect(errors[`education.${record.id}.institution`]).toBe(
+      'Enter the institution',
+    );
+    expect(errors[`education.${record.id}.grade`]).toBeUndefined();
+  });
+
+  it('rejects an end date before the start date', () => {
+    const draft = validDraft();
+    draft.education.push({
+      ...newEducationRecord(),
+      institution: 'Example University',
+      qualification: 'BA',
+      fieldOfStudy: 'History',
+      startDate: '2022-09',
+      endDate: '2021-06',
+    });
+    const id = draft.education[0]?.id ?? '';
+
+    expect(validateSection('education', draft)).toEqual({
+      [`education.${id}.endDate`]: 'The end date must be after the start date',
+    });
+  });
+});
+
+describe('employment', () => {
+  function role(overrides: Partial<ReturnType<typeof newEmploymentRecord>>) {
+    return {
+      ...newEmploymentRecord(),
+      employer: 'Example Ltd',
+      title: 'Designer',
+      startDate: '2020-01',
+      ...overrides,
+    };
+  }
+
+  it('needs an end date unless the role is current', () => {
+    const past = role({ endDate: '' });
+    const current = role({ current: true });
+    const draft = validDraft();
+    draft.employment.push(past, current);
+
+    expect(validateSection('employment', draft)).toEqual({
+      [`employment.${past.id}.endDate`]:
+        'Enter when you left, or mark this as your current role',
+    });
+  });
+
+  it('ignores a leftover end date on a current role when normalising', () => {
+    const draft = validDraft();
+    draft.employment.push(role({ current: true, endDate: '2021-01' }));
+
+    const result = validateDraft(draft);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.draft.employment[0]?.endDate).toBe('');
+  });
+
+  it('limits the description length', () => {
+    const draft = validDraft();
+    const long = role({ endDate: '2021-01', description: 'x'.repeat(2001) });
+    draft.employment.push(long);
+
+    expect(
+      validateSection('employment', draft)[`employment.${long.id}.description`],
+    ).toMatch(/2,000/);
+  });
+});
+
+describe('links', () => {
+  it('accepts all links empty', () => {
+    expect(validateSection('links', validDraft())).toEqual({});
+  });
+
+  it('adds https:// to addresses typed without it', () => {
+    const draft = validDraft();
+    draft.links.linkedin = 'linkedin.com/in/alex-sample';
+    draft.links.portfolio = '  example.com  ';
+
+    const links = normaliseDraft(draft).links;
+
+    expect(links.linkedin).toBe('https://linkedin.com/in/alex-sample');
+    expect(links.portfolio).toBe('https://example.com');
+    expect(validateSection('links', draft)).toEqual({});
+  });
+
+  it.each([
+    [
+      'linkedin',
+      'https://example.com/alex',
+      'Enter a LinkedIn address on linkedin.com',
+    ],
+    [
+      'github',
+      'https://gitlab.com/alex',
+      'Enter a GitHub address on github.com',
+    ],
+    [
+      'portfolio',
+      'not a url',
+      'Enter a full web address, like https://example.com',
+    ],
+    [
+      'portfolio',
+      'ftp://example.com',
+      'Enter a full web address, like https://example.com',
+    ],
+  ] as const)('rejects %s %j', (field, value, message) => {
+    const draft = validDraft();
+    draft.links[field] = value;
+
+    expect(validateSection('links', draft)[`links.${field}`]).toBe(message);
+  });
+
+  it('accepts subdomains of the expected site', () => {
+    const draft = validDraft();
+    draft.links.linkedin = 'https://uk.linkedin.com/in/alex';
+
+    expect(validateSection('links', draft)).toEqual({});
+  });
+
+  it('requires both a name and an address for other links', () => {
+    const draft = validDraft();
+    const link = newOtherLink();
+    draft.links.other.push(link);
+
+    expect(validateSection('links', draft)).toEqual({
+      [`links.other.${link.id}.label`]: 'Name this link, for example "Blog"',
+      [`links.other.${link.id}.url`]: 'Enter the web address',
+    });
+  });
+});
+
+describe('parseStoredProfile', () => {
+  const stored = () =>
+    profileFromDraft(validDraft(), null, new Date('2026-10-17T12:00:00Z'));
+
+  it('accepts a valid stored profile', () => {
+    const profile = stored();
+
+    expect(parseStoredProfile(JSON.parse(JSON.stringify(profile)))).toEqual(
+      profile,
+    );
+  });
+
+  it.each([
+    ['null', null],
+    ['a string', 'profile'],
+    ['an empty object', {}],
+    [
+      'a future schema version',
+      { ...stored(), metadata: { ...stored().metadata, schemaVersion: 2 } },
+    ],
+    ['a missing section', { ...stored(), education: undefined }],
+    [
+      'an invalid email',
+      { ...stored(), personal: { ...stored().personal, email: 'x' } },
+    ],
+  ])('rejects %s', (_case, value) => {
+    expect(parseStoredProfile(value)).toBeNull();
+  });
+});
+
+describe('profileFromDraft', () => {
+  it('keeps the creation time when updating a profile', () => {
+    const first = profileFromDraft(
+      validDraft(),
+      null,
+      new Date('2026-01-01T00:00:00Z'),
+    );
+    const updated = profileFromDraft(
+      validDraft(),
+      first.metadata,
+      new Date('2026-02-01T00:00:00Z'),
+    );
+
+    expect(updated.metadata).toEqual({
+      schemaVersion: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-02-01T00:00:00.000Z',
+    });
+  });
+});

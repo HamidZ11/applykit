@@ -1,0 +1,327 @@
+import { z } from 'zod';
+import {
+  EMPLOYMENT_TYPES,
+  PROFILE_SCHEMA_VERSION,
+  type EducationRecord,
+  type EmploymentRecord,
+  type PersonalDetails,
+  type ProfessionalLinks,
+  type ProfileDraft,
+  type UserProfile,
+} from './user-profile';
+
+/**
+ * Validation for the profile, used in three places: each onboarding step,
+ * the whole draft before saving, and data read back from storage (which is
+ * treated as untrusted). One schema keeps the three consistent.
+ */
+
+const SHORT = 200;
+const LONG = 2000;
+
+const required = (message: string) =>
+  z.string().trim().min(1, message).max(SHORT, 'This is too long');
+const optional = z.string().trim().max(SHORT, 'This is too long');
+
+const yearMonth = (missing: string) =>
+  z
+    .string()
+    .min(1, missing)
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Enter a month and year');
+
+function digitCount(value: string): number {
+  return value.replace(/\D/g, '').length;
+}
+
+const phone = z
+  .string()
+  .trim()
+  .min(1, 'Enter your phone number')
+  .refine(
+    (value) =>
+      /^\+?[\d\s().-]+$/.test(value) &&
+      digitCount(value) >= 7 &&
+      digitCount(value) <= 15,
+    'Enter a phone number using digits, spaces and an optional +',
+  );
+
+const postcode = z
+  .string()
+  .trim()
+  .min(1, 'Enter your postcode')
+  .regex(/^[A-Za-z0-9][A-Za-z0-9 -]{1,9}$/, 'Enter a valid postcode');
+
+const email = z
+  .string()
+  .trim()
+  .min(1, 'Enter your email address')
+  .pipe(z.email('Enter an email address like name@example.com'));
+
+/** An optional web address; when given, it must be http(s) on a real host. */
+function link(host?: { domain: string; name: string }) {
+  return z
+    .string()
+    .trim()
+    .max(SHORT, 'This is too long')
+    .superRefine((value, ctx) => {
+      if (value === '') return;
+      const url = parseWebUrl(value);
+      if (!url) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Enter a full web address, like https://example.com',
+        });
+      } else if (host && !isOnDomain(url, host.domain)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Enter a ${host.name} address on ${host.domain}`,
+        });
+      }
+    });
+}
+
+export const personalSchema = z.object({
+  firstName: required('Enter your first name'),
+  lastName: required('Enter your last name'),
+  preferredName: optional,
+  email,
+  phone,
+  address: z.object({
+    line1: required('Enter the first line of your address'),
+    line2: optional,
+    city: required('Enter your town or city'),
+    region: optional,
+    postcode,
+    country: required('Enter your country'),
+  }),
+}) satisfies z.ZodType<PersonalDetails>;
+
+export const educationSchema = z
+  .object({
+    id: z.string().min(1),
+    institution: required('Enter the institution'),
+    qualification: required('Enter the degree or qualification'),
+    fieldOfStudy: required('Enter the field of study'),
+    startDate: yearMonth('Enter when you started'),
+    endDate: yearMonth('Enter when you finished, or expect to'),
+    grade: optional,
+  })
+  .superRefine((record, ctx) => {
+    if (record.startDate && record.endDate < record.startDate) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['endDate'],
+        message: 'The end date must be after the start date',
+      });
+    }
+  }) satisfies z.ZodType<EducationRecord>;
+
+export const employmentSchema = z
+  .object({
+    id: z.string().min(1),
+    employer: required('Enter the employer'),
+    title: required('Enter your job title'),
+    employmentType: z.enum([...EMPLOYMENT_TYPES, '']),
+    startDate: yearMonth('Enter when you started'),
+    endDate: z.string(),
+    current: z.boolean(),
+    description: z
+      .string()
+      .trim()
+      .max(LONG, 'Keep this under 2,000 characters'),
+  })
+  .superRefine((record, ctx) => {
+    if (record.current) {
+      if (record.endDate !== '') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['endDate'],
+          message: 'A current role has no end date',
+        });
+      }
+      return;
+    }
+    const end = yearMonth(
+      'Enter when you left, or mark this as your current role',
+    ).safeParse(record.endDate);
+    if (!end.success) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['endDate'],
+        message: end.error.issues[0]?.message ?? 'Enter a month and year',
+      });
+    } else if (record.startDate && record.endDate < record.startDate) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['endDate'],
+        message: 'The end date must be after the start date',
+      });
+    }
+  }) satisfies z.ZodType<EmploymentRecord>;
+
+export const linksSchema = z.object({
+  linkedin: link({ domain: 'linkedin.com', name: 'LinkedIn' }),
+  github: link({ domain: 'github.com', name: 'GitHub' }),
+  portfolio: link(),
+  other: z.array(
+    z.object({
+      id: z.string().min(1),
+      label: required('Name this link, for example "Blog"'),
+      url: link().refine((value) => value !== '', 'Enter the web address'),
+    }),
+  ),
+}) satisfies z.ZodType<ProfessionalLinks>;
+
+const draftSchema = z.object({
+  personal: personalSchema,
+  education: z.array(educationSchema),
+  employment: z.array(employmentSchema),
+  links: linksSchema,
+});
+
+export const userProfileSchema = draftSchema.extend({
+  metadata: z.object({
+    schemaVersion: z.literal(PROFILE_SCHEMA_VERSION),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  }),
+}) satisfies z.ZodType<UserProfile>;
+
+/** The parts of a profile that are validated independently, one per step. */
+export type ProfileSection = 'personal' | 'education' | 'employment' | 'links';
+
+/**
+ * Field errors keyed by path. Records use their id rather than their index,
+ * e.g. `education.<id>.endDate`, so errors stay attached to the right record
+ * when others are added or removed.
+ */
+export type FieldErrors = Record<string, string>;
+
+const SECTION_SCHEMAS: Record<ProfileSection, z.ZodType> = {
+  personal: personalSchema,
+  education: z.array(educationSchema),
+  employment: z.array(employmentSchema),
+  links: linksSchema,
+};
+
+/** Validates one section of the draft. Empty record lists are valid. */
+export function validateSection(
+  section: ProfileSection,
+  draft: ProfileDraft,
+): FieldErrors {
+  const value = normaliseDraft(draft)[section];
+  const result = SECTION_SCHEMAS[section].safeParse(value);
+  return result.success ? {} : toFieldErrors(result.error, [section], draft);
+}
+
+export type DraftValidation =
+  { ok: true; draft: ProfileDraft } | { ok: false; errors: FieldErrors };
+
+/** Validates the whole draft, returning the normalised draft when valid. */
+export function validateDraft(draft: ProfileDraft): DraftValidation {
+  const result = draftSchema.safeParse(normaliseDraft(draft));
+  return result.success
+    ? { ok: true, draft: result.data }
+    : { ok: false, errors: toFieldErrors(result.error, [], draft) };
+}
+
+/** Parses untrusted stored data, returning null unless it is a valid profile. */
+export function parseStoredProfile(value: unknown): UserProfile | null {
+  const result = userProfileSchema.safeParse(value);
+  return result.success ? result.data : null;
+}
+
+/**
+ * Tidies a draft before validation and saving: trims text, adds `https://`
+ * to web addresses typed without it, and clears the end date of a current
+ * role.
+ */
+export function normaliseDraft(draft: ProfileDraft): ProfileDraft {
+  return {
+    personal: trimStrings(draft.personal),
+    education: draft.education.map((record) => trimStrings(record)),
+    employment: draft.employment.map((record) => {
+      const trimmed = trimStrings(record);
+      return trimmed.current ? { ...trimmed, endDate: '' } : trimmed;
+    }),
+    links: {
+      linkedin: withScheme(draft.links.linkedin),
+      github: withScheme(draft.links.github),
+      portfolio: withScheme(draft.links.portfolio),
+      other: draft.links.other.map((other) => ({
+        id: other.id,
+        label: other.label.trim(),
+        url: withScheme(other.url),
+      })),
+    },
+  };
+}
+
+function toFieldErrors(
+  error: z.ZodError,
+  prefix: (string | number)[],
+  draft: ProfileDraft,
+): FieldErrors {
+  const errors: FieldErrors = {};
+  for (const issue of error.issues) {
+    const key = fieldKey([...prefix, ...issue.path], draft);
+    errors[key] ??= issue.message;
+  }
+  return errors;
+}
+
+/** Turns a schema path into an error key, replacing record indexes with ids. */
+function fieldKey(path: PropertyKey[], draft: ProfileDraft): string {
+  const [section, index, ...rest] = path;
+  const list =
+    section === 'education'
+      ? draft.education
+      : section === 'employment'
+        ? draft.employment
+        : null;
+  if (list && typeof index === 'number') {
+    const id = list[index]?.id ?? String(index);
+    return [section, id, ...rest].map(String).join('.');
+  }
+  if (section === 'links' && index === 'other' && typeof rest[0] === 'number') {
+    const id = draft.links.other[rest[0]]?.id ?? String(rest[0]);
+    return ['links', 'other', id, ...rest.slice(1)].map(String).join('.');
+  }
+  return path.map(String).join('.');
+}
+
+function trimStrings<T extends object>(value: T): T {
+  const result: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(value)) {
+    result[key] =
+      typeof field === 'string'
+        ? field.trim()
+        : field !== null && typeof field === 'object' && !Array.isArray(field)
+          ? trimStrings(field)
+          : field;
+  }
+  return result as T;
+}
+
+function withScheme(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === '' || /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function parseWebUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    const hasHost = url.hostname.includes('.') && !url.hostname.endsWith('.');
+    return (url.protocol === 'https:' || url.protocol === 'http:') && hasHost
+      ? url
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isOnDomain(url: URL, domain: string): boolean {
+  const host = url.hostname.toLowerCase();
+  return host === domain || host.endsWith(`.${domain}`);
+}
