@@ -131,6 +131,7 @@ export function PersonalStep({
           />
           <TextField
             label="Postcode"
+            optional
             autoComplete="postal-code"
             value={address.postcode}
             error={error('address.postcode')}

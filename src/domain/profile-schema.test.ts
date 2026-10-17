@@ -27,7 +27,6 @@ describe('personal details', () => {
       'personal.address.city',
       'personal.address.country',
       'personal.address.line1',
-      'personal.address.postcode',
       'personal.email',
       'personal.firstName',
       'personal.lastName',
@@ -493,5 +492,23 @@ describe('saved profiles from earlier versions and rules', () => {
     const result = parseStoredProfile({ ...profile, personal });
 
     expect(result?.profile.personal.useFirstNameAsPreferred).toBe(false);
+  });
+});
+
+describe('postcode', () => {
+  it('may be left empty, for countries without postcodes', () => {
+    const draft = validDraft();
+    draft.personal.address.postcode = '';
+
+    expect(validateSection('personal', draft)).toEqual({});
+  });
+
+  it('is still checked when given', () => {
+    const draft = validDraft();
+    draft.personal.address.postcode = '!!';
+
+    expect(validateSection('personal', draft)).toEqual({
+      'personal.address.postcode': 'Enter a valid postcode',
+    });
   });
 });

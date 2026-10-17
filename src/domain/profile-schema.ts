@@ -47,11 +47,15 @@ const phone = z
     'Enter a phone number using digits, spaces and an optional +',
   );
 
+// Optional: some countries have no postcodes, and a made-up one would be
+// filled into applications.
 const postcode = z
   .string()
   .trim()
-  .min(1, 'Enter your postcode')
-  .regex(/^[A-Za-z0-9][A-Za-z0-9 -]{1,9}$/, 'Enter a valid postcode');
+  .refine(
+    (value) => value === '' || /^[A-Za-z0-9][A-Za-z0-9 -]{1,9}$/.test(value),
+    'Enter a valid postcode',
+  );
 
 const email = z
   .string()
