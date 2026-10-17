@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Summer Internship · Tallis Bank Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional internship application in the style of large applicant
+      tracking systems: one long form, sections marked only by headings, no
+      fieldsets. It exercises preferred names, a separate international
+      calling code, university and school education, an employment section
+      whose dates are not education, references, diversity questions and a
+      custom dropdown. The bank, role and every detail are invented. Used by
+      unit tests and manual testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #0f6b5c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      fieldset fieldset > legend {
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 16px;
+      }
+      label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      .req {
+        color: #cf222e;
+      }
+      input:not([type='checkbox'], [type='radio']),
+      select,
+      textarea {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+      .choice {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 400;
+        margin-top: 10px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 4px 0 0;
+      }
+      button {
+        margin-top: 28px;
+        padding: 10px 18px;
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--brand);
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      output {
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar"><span class="logo"></span>Tallis Bank</div>
+    </header>
+    <main>
+      <h1>Summer Internship 2027</h1>
+      <p class="meta">London · 10 weeks · Technology</p>
+
+      <form id="application" action="/submitted" method="post">
+        <h2>Personal information</h2>
+        <div class="row">
+          <div>
+            <label for="first"
+              >Legal first name <span class="req">*</span></label
+            >
+            <input id="first" name="firstName" required />
+          </div>
+          <div>
+            <label for="last">Last name <span class="req">*</span></label>
+            <input id="last" name="lastName" required />
+          </div>
+        </div>
+        <label for="preferred">Preferred first name</label>
+        <input id="preferred" name="preferredFirstName" />
+
+        <h2>Contact details</h2>
+        <label for="email">Email address <span class="req">*</span></label>
+        <input id="email" name="email" type="email" required />
+        <div class="row">
+          <div>
+            <label for="calling-code"
+              >International telephone calling code
+              <span class="req">*</span></label
+            >
+            <select id="calling-code" name="phoneCountryCode" required>
+              <option value="">Select…</option>
+              <option value="IE">Ireland (+353)</option>
+              <option value="JE">Jersey (+44)</option>
+              <option value="GB">United Kingdom (+44)</option>
+              <option value="US">United States (+1)</option>
+            </select>
+          </div>
+          <div>
+            <label for="phone"
+              >Telephone number <span class="req">*</span></label
+            >
+            <input id="phone" name="phoneNumber" type="tel" required />
+          </div>
+        </div>
+        <label for="country">Country of residence</label>
+        <input
+          id="country"
+          name="residenceCountry"
+          role="combobox"
+          aria-expanded="false"
+          aria-autocomplete="list"
+        />
+
+        <h2>University education</h2>
+        <label for="university">University <span class="req">*</span></label>
+        <select id="university" name="university" required>
+          <option value="">Select…</option>
+          <option value="u1">University of Elsewhere</option>
+          <option value="u2">University of Example</option>
+          <option value="u3">University of Example Online</option>
+        </select>
+        <label for="degree">Qualification <span class="req">*</span></label>
+        <select id="degree" name="degreeType" required>
+          <option value="">Select…</option>
+          <option value="ba">Bachelor's degree</option>
+          <option value="ma">Master's degree</option>
+          <option value="phd">Doctorate</option>
+        </select>
+        <label for="subject">Field of study</label>
+        <input id="subject" name="fieldOfStudy" />
+        <div class="row">
+          <div>
+            <label for="edu-start">Start date</label>
+            <input id="edu-start" name="eduStart" placeholder="MM/YYYY" />
+          </div>
+          <div>
+            <label for="graduation">Expected graduation date</label>
+            <input id="graduation" name="graduation" type="month" />
+          </div>
+        </div>
+        <label for="classification">Degree classification</label>
+        <select id="classification" name="classification">
+          <option value="">Select…</option>
+          <option value="1">First-class honours</option>
+          <option value="21">Upper second-class honours (2:1)</option>
+          <option value="22">Lower second-class honours (2:2)</option>
+        </select>
+
+        <h2>Secondary education</h2>
+        <label for="school">School name</label>
+        <input id="school" name="schoolName" />
+        <label for="school-results">Grades achieved</label>
+        <input id="school-results" name="schoolGrades" />
+        <label for="school-end">Year completed</label>
+        <input id="school-end" name="schoolEnd" />
+
+        <h2>Work experience</h2>
+        <label for="employer">Employer</label>
+        <input id="employer" name="employer" />
+        <label for="job-start">Start date</label>
+        <input id="job-start" name="jobStart" placeholder="MM/YYYY" />
+
+        <h2>Reference</h2>
+        <label for="ref-name">Full name</label>
+        <input id="ref-name" name="refName" />
+        <label for="ref-email">Email address</label>
+        <input id="ref-email" name="refEmail" type="email" />
+
+        <h2>Diversity monitoring</h2>
+        <label for="gender">Gender</label>
+        <select id="gender" name="gender">
+          <option value="">Prefer not to say</option>
+          <option>Woman</option>
+          <option>Man</option>
+          <option>Another term</option>
+        </select>
+        <label for="school-type"
+          >What type of school did you mainly attend?</label
+        >
+        <select id="school-type" name="schoolType">
+          <option value="">Select…</option>
+          <option>State-run or state-funded</option>
+          <option>Independent or fee-paying</option>
+        </select>
+
+        <h2>Application questions</h2>
+        <label for="motivation"
+          >Why are you interested in this programme?</label
+        >
+        <textarea id="motivation" name="motivation"></textarea>
+        <label class="choice">
+          <input type="checkbox" name="privacy" required />
+          I agree to the candidate privacy notice <span class="req">*</span>
+        </label>
+
+        <button type="submit">Submit application</button>
+      </form>
+
+      <output id="status">Fixture · submitted: no · input events: 0</output>
+    </main>
+
+    <script>
+      // Lets reviewers confirm what the page observed.
+      const form = document.getElementById('application');
+      const status = document.getElementById('status');
+      let submitted = false;
+      let inputEvents = 0;
+      const render = () => {
+        status.textContent = `Fixture · submitted: ${submitted ? 'YES' : 'no'} · input events: ${inputEvents}`;
+      };
+      form.addEventListener('input', () => {
+        inputEvents += 1;
+        render();
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitted = true;
+        render();
+      });
+    </script>
+  </body>
+</html>

@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { sampleValues } from '@/test/autofill-fixtures';
+import {
+  educationRecords,
+  fullProfile,
+  sampleValues,
+} from '@/test/autofill-fixtures';
 import { loadFixture, loadHtml } from '@/test/load-fixture';
-import type { AutofillValues } from './fields';
+import type { AutofillValues, EducationValue } from './fields';
 import {
   attentionQueue,
   planFill,
   summarise,
   type FieldReport,
 } from './report';
-import { phoneParts } from './profile-values';
+import { autofillValuesFrom, phoneParts } from './profile-values';
 import { scanFields } from './scan';
 
 function plan(values: AutofillValues | null = sampleValues()): FieldReport[] {
@@ -437,6 +441,8 @@ describe('summarise and attentionQueue', () => {
         kind: 'text',
         required,
         support: { status: 'unrecognised' },
+        context: '',
+        group: null,
       },
       status,
       target: null,
@@ -525,6 +531,296 @@ describe('custom dropdowns', () => {
       target: null,
       reason:
         'This is a custom dropdown. ApplyKit fills only standard form fields so far.',
+    });
+  });
+});
+
+describe('education', () => {
+  /** Fixed so "expected" and "completed" do not depend on the test date. */
+  const NOW = new Date('2026-10-17T12:00:00Z');
+
+  /** Values with the given records, as the background would derive them. */
+  function withEducation(
+    records = educationRecords(),
+    edit?: (record: EducationValue) => void,
+  ): AutofillValues {
+    const profile = fullProfile();
+    profile.education = records;
+    const values = sampleValues();
+    values.education = autofillValuesFrom(profile).education;
+    if (edit) values.education.forEach(edit);
+    return values;
+  }
+
+  function planned(values = withEducation()): FieldReport[] {
+    return planFill(scanFields(document), values, NOW);
+  }
+
+  describe('on a heading-based internship form', () => {
+    it('fills the university section from the degree', () => {
+      loadFixture('education-application.html');
+
+      const reports = planned();
+
+      expect(byId(reports, 'university')).toMatchObject({
+        status: 'fill',
+        fillValue: 'u2',
+        value: 'University of Example',
+        note: 'From your saved BSc Computer Science at University of Example.',
+      });
+      expect(byId(reports, 'degree')).toMatchObject({
+        status: 'fill',
+        value: "Bachelor's degree",
+      });
+      expect(byId(reports, 'subject').fillValue).toBe('Computer Science');
+      expect(byId(reports, 'edu-start').fillValue).toBe('09/2024');
+      expect(byId(reports, 'graduation')).toMatchObject({
+        status: 'fill',
+        fillValue: '2027-06',
+        note: expect.stringContaining('expected graduation') as string,
+      });
+      expect(byId(reports, 'classification')).toMatchObject({
+        status: 'no-value',
+      });
+    });
+
+    it('fills the school section from the A levels', () => {
+      loadFixture('education-application.html');
+
+      const reports = planned();
+
+      expect(byId(reports, 'school').fillValue).toBe(
+        'Example Sixth Form College',
+      );
+      expect(byId(reports, 'school-results').fillValue).toBe('A*AA');
+      expect(byId(reports, 'school-end').fillValue).toBe('2024');
+    });
+
+    it('never fills employment dates or references from education', () => {
+      loadFixture('education-application.html');
+
+      const reports = planned();
+
+      for (const id of ['job-start', 'employer', 'ref-name', 'ref-email']) {
+        expect(byId(reports, id).fillValue, id).toBeNull();
+      }
+    });
+  });
+
+  describe('choosing a record', () => {
+    it('uses the only record when a section does not say which', () => {
+      loadHtml('<h2>Education</h2><label>Institution <input id="i"></label>');
+
+      expect(
+        byId(planned(withEducation(educationRecords().slice(0, 1))), 'i'),
+      ).toMatchObject({
+        status: 'fill',
+        fillValue: 'University of Example',
+        note: null,
+      });
+    });
+
+    it('asks the user when several records could fit', () => {
+      loadHtml('<h2>Education</h2><label>Institution <input id="i"></label>');
+
+      expect(byId(planned(), 'i')).toMatchObject({
+        status: 'ambiguous',
+        fillValue: null,
+        reason: expect.stringContaining(
+          '2 of your saved education records',
+        ) as string,
+      });
+    });
+
+    it('never gives a university field a school', () => {
+      loadHtml('<label>University <input id="u"></label>');
+
+      expect(
+        byId(planned(withEducation(educationRecords().slice(1))), 'u'),
+      ).toMatchObject({
+        status: 'no-value',
+        reason: 'None of your saved education is a university degree.',
+      });
+    });
+
+    it('reads the level from any field in the section', () => {
+      loadHtml(`<h2>Education</h2>
+        <label>Institution <input id="i"></label>
+        <label>Degree classification <input id="g"></label>`);
+
+      expect(byId(planned(), 'i').fillValue).toBe('University of Example');
+    });
+
+    it('does not guess when a section mentions both levels', () => {
+      loadHtml(`<h2>Education</h2>
+        <label>School or university <input id="i"></label>`);
+
+      expect(byId(planned(), 'i').status).toBe('ambiguous');
+    });
+
+    it('does not choose between two degrees', () => {
+      const [degree, ...rest] = educationRecords();
+      if (!degree) throw new Error('No degree fixture');
+      const records = [
+        degree,
+        ...rest,
+        {
+          ...degree,
+          id: 'masters',
+          institution: 'Example Institute of Technology',
+          qualification: 'MSc Data Science',
+        },
+      ];
+      loadHtml('<label>University <input id="u"></label>');
+
+      expect(byId(planned(withEducation(records)), 'u').status).toBe(
+        'ambiguous',
+      );
+    });
+
+    it('explains when nothing is saved', () => {
+      loadHtml('<label>University <input id="u"></label>');
+
+      expect(byId(planned(withEducation([])), 'u')).toMatchObject({
+        status: 'no-value',
+        reason: 'Your profile has no education saved.',
+      });
+    });
+  });
+
+  describe('selects', () => {
+    function select(label: string, options: string, values = withEducation()) {
+      loadHtml(`<label>${label} <select id="s">
+        <option value="">Select…</option>${options}</select></label>`);
+      return byId(planned(values), 's');
+    }
+
+    it('never takes a similar institution name for the same one', () => {
+      expect(
+        select(
+          'University',
+          `<option>University of Example Online</option>
+           <option>Example University</option>`,
+        ),
+      ).toMatchObject({ status: 'no-option', fillValue: null });
+    });
+
+    it('matches a degree by its kind only when one option fits', () => {
+      expect(
+        select(
+          'Degree',
+          `<option>Bachelor of Arts (BA)</option>
+           <option>Bachelor of Science (BSc)</option>`,
+        ),
+      ).toMatchObject({ status: 'no-option' });
+    });
+
+    it('never selects an unrelated degree', () => {
+      expect(
+        select(
+          'Degree',
+          `<option>Master's degree</option><option>Doctorate</option>`,
+        ),
+      ).toMatchObject({ status: 'no-option' });
+    });
+
+    it('matches a classification written differently', () => {
+      const values = withEducation(undefined, (record) => {
+        record.grade =
+          record.level === 'higher' ? 'Predicted 2:1' : record.grade;
+      });
+
+      expect(
+        select(
+          'Degree classification',
+          `<option value="1">First-class honours</option>
+           <option value="21">Upper second-class honours</option>`,
+          values,
+        ),
+      ).toMatchObject({ status: 'fill', fillValue: '21' });
+    });
+
+    it('chooses a graduation year option', () => {
+      expect(
+        select(
+          'Graduation year',
+          '<option>2026</option><option>2027</option><option>2028</option>',
+          withEducation(educationRecords().slice(0, 1)),
+        ),
+      ).toMatchObject({ status: 'fill', fillValue: '2027' });
+    });
+
+    it('chooses a graduation month option', () => {
+      expect(
+        select(
+          'Graduation month',
+          '<option value="5">May</option><option value="6">June</option>',
+          withEducation(educationRecords().slice(0, 1)),
+        ),
+      ).toMatchObject({ status: 'fill', fillValue: '6' });
+    });
+  });
+
+  describe('dates', () => {
+    function date(html: string) {
+      loadHtml(`<h2>University</h2>${html}`);
+      return planned().find((r) => r.field.element.id === 'd');
+    }
+
+    it('fills a native month input', () => {
+      expect(
+        date('<label>Start date <input id="d" type="month"></label>'),
+      ).toMatchObject({ fillValue: '2024-09' });
+    });
+
+    it('never invents a day', () => {
+      expect(
+        date('<label>Start date <input id="d" type="date"></label>'),
+      ).toMatchObject({
+        status: 'unusable',
+        reason: expect.stringContaining('does not invent a day') as string,
+      });
+      expect(
+        date(
+          '<label>Start date <input id="d" placeholder="DD/MM/YYYY"></label>',
+        ),
+      ).toMatchObject({ status: 'unusable' });
+    });
+
+    it('does not guess a format the field does not state', () => {
+      expect(date('<label>Start date <input id="d"></label>')).toMatchObject({
+        status: 'unusable',
+        reason: 'ApplyKit cannot tell which date format this field expects.',
+      });
+    });
+
+    it('fills a year-only field with the year alone', () => {
+      expect(
+        date('<label>Year of graduation <input id="d"></label>'),
+      ).toMatchObject({ fillValue: '2027' });
+    });
+
+    it('never presents an expected graduation as awarded', () => {
+      expect(
+        date('<label>Date awarded (MM/YYYY) <input id="d"></label>'),
+      ).toMatchObject({
+        status: 'unusable',
+        reason: expect.stringContaining('still to come') as string,
+      });
+    });
+
+    it('does not present a saved grade as final before the course ends', () => {
+      const values = withEducation(undefined, (record) => {
+        if (record.level === 'higher') record.grade = '2:1';
+      });
+      loadHtml('<label>Degree classification <input id="g"></label>');
+
+      expect(
+        byId(planFill(scanFields(document), values, NOW), 'g'),
+      ).toMatchObject({
+        status: 'manual',
+        reason: expect.stringContaining('predicted or a final grade') as string,
+      });
     });
   });
 });

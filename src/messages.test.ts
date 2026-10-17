@@ -51,6 +51,24 @@ describe('isAutofillValuesResponse', () => {
       },
     ],
     [
+      'a malformed phone',
+      {
+        status: 'ready',
+        values: { ...sampleValues(), phone: { callingCode: '+44' } },
+      },
+    ],
+    [
+      'malformed education',
+      {
+        status: 'ready',
+        values: { ...sampleValues(), education: [{ institution: 1 }] },
+      },
+    ],
+    [
+      'a missing education list',
+      { status: 'ready', values: { ...sampleValues(), education: undefined } },
+    ],
+    [
       'a malformed country',
       { status: 'ready', values: { ...sampleValues(), country: { code: 1 } } },
     ],

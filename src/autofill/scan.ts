@@ -1,5 +1,6 @@
-import type { AutofillField } from './fields';
+import { isEducationField, type AutofillField } from './fields';
 import {
+  controlContext,
   detectControl,
   labelText,
   normalise,
@@ -58,6 +59,10 @@ export interface ScannedField {
   kind: FieldKind;
   required: boolean;
   support: FieldSupport;
+  /** Normalised legends, group labels and heading around the field. */
+  context: string;
+  /** The section the field belongs to; fields sharing it form a section. */
+  group: Element | null;
 }
 
 export interface ScanOptions {
@@ -82,7 +87,23 @@ const IGNORED_INPUT_TYPES = new Set([
 const TEXT_INPUT_TYPES = new Set(['text', 'email', 'tel', 'url', 'search']);
 
 /** Fields a native select may be filled for, by exact option match. */
-const SELECT_FIELDS = new Set<AutofillField>(['country', 'phoneCountryCode']);
+const SELECT_FIELDS = new Set<AutofillField>([
+  'country',
+  'phoneCountryCode',
+  'institution',
+  'qualification',
+  'fieldOfStudy',
+  'educationStart',
+  'educationEnd',
+  'grade',
+]);
+
+/**
+ * Date inputs, writable only for education dates. A `date` input is listed
+ * so the panel can say why it is left: it needs a day.
+ */
+const DATE_INPUT_TYPES = new Set(['month', 'number', 'date']);
+const DATE_FIELDS = new Set<AutofillField>(['educationStart', 'educationEnd']);
 
 const POPUP_ROLES = new Set([
   'listbox',
@@ -205,14 +226,24 @@ const CONFIRMATION =
  * applicant's for certain; the rest may belong to a second contact or a
  * reference whose section ApplyKit could not recognise. Confirmation fields
  * ("Confirm email") are the exception.
+ *
+ * Education is asked once per record, so an education field only repeats
+ * one in the same section: "University" and "School name" in separate
+ * sections are both kept.
  */
 function firstOfEachDetail(fields: ScannedField[]): ScannedField[] {
   const seen = new Set<AutofillField>();
+  const seenInSection = new Map<Element | null, Set<AutofillField>>();
   return fields.map((field) => {
     const { support, element } = field;
     if (support.status !== 'match') return field;
-    if (!seen.has(support.field)) {
-      seen.add(support.field);
+    let scope = seen;
+    if (isEducationField(support.field)) {
+      scope = seenInSection.get(field.group) ?? new Set();
+      seenInSection.set(field.group, scope);
+    }
+    if (!scope.has(support.field)) {
+      scope.add(support.field);
       return field;
     }
     const text = normalise(
@@ -229,6 +260,7 @@ function describe(element: FormControl, root: ParentNode): ScannedField {
       ? element.closest('fieldset')
       : null;
 
+  const context = controlContext(element);
   return {
     element,
     label: fieldLabel(element, question),
@@ -236,6 +268,8 @@ function describe(element: FormControl, root: ParentNode): ScannedField {
     kind: kindOf(element),
     required: isRequired(element, root),
     support: supportOf(element),
+    context: context.text,
+    group: context.group,
   };
 }
 
@@ -263,7 +297,10 @@ function supportOf(element: FormControl): FieldSupport {
   // What the engine can write: text-like inputs, and native selects whose
   // options it can match exactly.
   const writable = isInput(element)
-    ? TEXT_INPUT_TYPES.has(element.type)
+    ? TEXT_INPUT_TYPES.has(element.type) ||
+      (DATE_INPUT_TYPES.has(element.type) &&
+        detection.kind === 'match' &&
+        DATE_FIELDS.has(detection.field))
     : element.localName === 'select' &&
       detection.kind === 'match' &&
       SELECT_FIELDS.has(detection.field);

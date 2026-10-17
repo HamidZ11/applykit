@@ -1,9 +1,14 @@
 import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { sampleValues } from '@/test/autofill-fixtures';
+import {
+  educationRecords,
+  fullProfile,
+  sampleValues,
+} from '@/test/autofill-fixtures';
 import { loadFixture, loadHtml } from '@/test/load-fixture';
 import { fillFields } from './fill';
+import { autofillValuesFrom } from './profile-values';
 import { planFill, type FieldReport } from './report';
 import { scanFields } from './scan';
 
@@ -228,6 +233,40 @@ describe('fillFields', () => {
     expect(outcomes.map((r) => r.status)).toEqual(['filled', 'filled']);
   });
 
+  it('fills education selects and dates and confirms them', async () => {
+    loadFixture('education-application.html');
+    const profile = fullProfile();
+    profile.education = educationRecords();
+    const reports = planFill(
+      scanFields(document),
+      autofillValuesFrom(profile),
+      new Date('2026-10-17T12:00:00Z'),
+    );
+
+    const outcomes = await fillFields(reports);
+
+    expect(control('university').value).toBe('u2');
+    expect(control('degree').value).toBe('ba');
+    expect(control('edu-start').value).toBe('09/2024');
+    expect(control('graduation').value).toBe('2027-06');
+    expect(control('school').value).toBe('Example Sixth Form College');
+    expect(control('job-start').value).toBe('');
+    expect(control('classification').value).toBe('');
+    expect(
+      outcomes
+        .filter((r) => r.status === 'filled')
+        .map((r) => r.field.element.id),
+    ).toEqual(
+      expect.arrayContaining([
+        'university',
+        'degree',
+        'subject',
+        'edu-start',
+        'graduation',
+      ]),
+    );
+  });
+
   it('never submits the form or clicks anything', async () => {
     const document = loadFixture('full-application.html');
     const form = document.getElementById('application') as HTMLFormElement;
@@ -311,6 +350,44 @@ describe('React-controlled inputs', () => {
     expect(container.querySelector('output')?.textContent).toBe(
       'alex.sample@example.com',
     );
+    expect(outcomes[0]?.status).toBe('filled');
+    unmount();
+  });
+
+  it('updates a controlled education select', async () => {
+    function EducationForm() {
+      const [university, setUniversity] = useState('');
+      return (
+        <>
+          <label>
+            University
+            <select
+              id="u"
+              value={university}
+              onChange={(event) => {
+                setUniversity(event.target.value);
+              }}
+            >
+              <option value="">Select…</option>
+              <option value="ex">University of Example</option>
+            </select>
+          </label>
+          <output>{university}</output>
+        </>
+      );
+    }
+    const { container, unmount } = render(<EducationForm />);
+    const profile = fullProfile();
+    profile.education = educationRecords().slice(0, 1);
+
+    let outcomes: FieldReport[] = [];
+    await act(async () => {
+      outcomes = await fillFields(
+        planFill(scanFields(container), autofillValuesFrom(profile)),
+      );
+    });
+
+    expect(container.querySelector('output')?.textContent).toBe('ex');
     expect(outcomes[0]?.status).toBe('filled');
     unmount();
   });

@@ -1,4 +1,8 @@
-import type { AutofillField } from './fields';
+import {
+  isEducationField,
+  type AutofillField,
+  type EducationField,
+} from './fields';
 
 /**
  * Field detection: decides what a form control asks for, with the evidence,
@@ -69,7 +73,7 @@ const AUTOCOMPLETE_NOT_PERSONAL = new Set(['work', 'fax', 'pager']);
  * Patterns on normalised text (lower case, words separated by single
  * spaces). Anchored patterns only match a whole label or attribute.
  */
-const TEXT_RULES: Record<AutofillField, RegExp[]> = {
+const TEXT_RULES: Record<Exclude<AutofillField, EducationField>, RegExp[]> = {
   fullName: [
     /^(?:your |applicant |candidate )?(?:full |legal |full legal )?name$/,
     /^fullname$/,
@@ -130,6 +134,116 @@ const TEXT_RULES: Record<AutofillField, RegExp[]> = {
   ],
 };
 
+/**
+ * Education fields. `strong` patterns say what they ask on their own
+ * ("University", "Graduation date"); `contextual` ones ("Start date",
+ * "Grade", "Subject") count only inside an education section.
+ */
+const EDUCATION_RULES: Record<
+  EducationField,
+  { strong: RegExp[]; contextual: RegExp[] }
+> = {
+  institution: {
+    strong: [
+      /\buniversit(?:y|ies)\b/,
+      /\b(?:educational |academic |awarding )?institution\b/,
+      /\beducation provider\b/,
+      /\bplace of study\b/,
+      /^(?:name of (?:your )?)?(?:school|college)(?: name| attended)?$/,
+      /\bschool (?:or|and) (?:college|university)\b/,
+    ],
+    contextual: [/^(?:establishment|provider)(?: name)?$/],
+  },
+  qualification: {
+    strong: [
+      /\bqualifications?(?: type| level| title| name| obtained| achieved)?\b/,
+      /\bdegrees?(?: type| level| title| name)?\b/,
+      /\btype of (?:degree|qualification)\b/,
+      /\b(?:level of|highest) (?:education|study|qualification)\b/,
+      /\beducation level\b/,
+    ],
+    contextual: [/^(?:level|award|type)$/],
+  },
+  fieldOfStudy: {
+    strong: [
+      /\b(?:field|area|subject) of (?:study|degree)\b/,
+      /^(?:your |intended |declared )?major$/,
+      /\bdegree subject\b/,
+      /\b(?:course|programme|program) of study\b/,
+    ],
+    contextual: [
+      /^(?:main )?subjects?$/,
+      /^(?:course|programme|program|discipline|specialisation|specialization)(?: title| name)?$/,
+    ],
+  },
+  educationStart: {
+    strong: [
+      /\b(?:course|study|studies|education|university|degree|enrol(?:l)?ment) start(?: date| year| month)?\b/,
+      /\bdate (?:started|of enrol(?:l)?ment)\b/,
+      /\byear of (?:entry|enrol(?:l)?ment)\b/,
+    ],
+    contextual: [
+      /^(?:start(?:ed|ing)?|from|began|commenced)(?: date| year| month)?$/,
+      /^(?:date|year|month) (?:started|from)$/,
+    ],
+  },
+  educationEnd: {
+    strong: [
+      /\bgraduat(?:ion|ed|ing)\b/,
+      /\bdate (?:of )?(?:award|completion)\b/,
+      /\b(?:date|year) (?:awarded|obtained|achieved|completed|conferred)\b/,
+      /\byear of (?:completion|graduation)\b/,
+      /\b(?:course|study|studies|degree) (?:end|finish|completion)(?: date| year)?\b/,
+    ],
+    contextual: [
+      /^(?:end(?:ed|ing)?|to|finish(?:ed)?|until|complet(?:ed|ion))(?: date| year| month)?$/,
+      /^(?:date|year|month) (?:ended|finished|completed|to)$/,
+    ],
+  },
+  grade: {
+    strong: [
+      /\b(?:degree )?classification\b/,
+      /\bgpa\b/,
+      /\bgrade point average\b/,
+      /\b(?:predicted|expected|final|overall|degree|achieved|obtained) grades?\b/,
+      /\bgrades? (?:achieved|obtained|awarded|predicted|expected)\b/,
+      /\bdegree result\b/,
+    ],
+    contextual: [
+      /^(?:grades?|results?|score|marks?)$/,
+      /^(?:overall|final) (?:result|score|mark)$/,
+    ],
+  },
+};
+
+/** Sections about education, or about jobs, from legends and headings. */
+const EDUCATION_CONTEXT =
+  /\b(?:education|educational|academic|qualifications?|universit(?:y|ies)|degrees?|studies|schooling|school|college)\b/;
+const EMPLOYMENT_CONTEXT =
+  /\b(?:employment|experience|work history|employers?|career|jobs?|positions?|internships?)\b/;
+
+/**
+ * When text matches several education fields, the more specific wins:
+ * "Degree classification" is a grade, "University start date" a date.
+ */
+const LESS_SPECIFIC: [EducationField, EducationField[]][] = [
+  [
+    'institution',
+    [
+      'qualification',
+      'fieldOfStudy',
+      'educationStart',
+      'educationEnd',
+      'grade',
+    ],
+  ],
+  [
+    'qualification',
+    ['fieldOfStudy', 'educationStart', 'educationEnd', 'grade'],
+  ],
+  ['fieldOfStudy', ['educationStart', 'educationEnd', 'grade']],
+];
+
 /** Address parts are short labels; longer text is likely a question. */
 const SHORT_ONLY = new Set<AutofillField>(['city', 'region', 'country']);
 const MAX_WORDS = 8;
@@ -152,6 +266,10 @@ const EXCLUDE: Partial<Record<AutofillField, RegExp>> = {
   firstName: OTHER_NAMES,
   lastName: OTHER_NAMES,
   preferredName: OTHER_NAMES,
+  // "University ID", "University email": about the institution, not it.
+  institution:
+    /\b(?:id|number|no|email|e mail|phone|telephone|address|city|town|country|postcode|website|url|code|ranking|financial|bank)\b/,
+  qualification: /\b(?:number|id|code|reference|certificate number)\b/,
 };
 const INSTRUCTION = /\b(?:include|including|incl|with)\b/;
 
@@ -171,6 +289,13 @@ const OTHER_PERSON =
   /\b(?:references?|referees?|referr\w*|referrals?|employers?|employees?|colleagues?|friends?|relatives?|interviewers?|company|organi[sz]ation|hiring|recruiter|manager|supervisor|emergency|next of kin|guardian|parent|spouse|partner|agency|business|work|office|school|university|college|previous|former|landlord|contact person)\b/;
 
 /**
+ * For education fields: schools, universities and previous study are the
+ * applicant's own education, but people and employers are still not.
+ */
+const OTHER_PERSON_EDUCATION =
+  /\b(?:references?|referees?|referr\w*|referrals?|employers?|employees?|colleagues?|friends?|relatives?|interviewers?|company|organi[sz]ation|hiring|recruiter|manager|supervisor|emergency|next of kin|guardian|parent|spouse|partner|agency|business|work|office|landlord|contact person)\b/;
+
+/**
  * The same idea for the nearest heading before a control. Narrower, because
  * headings also carry job titles ("Engineering Manager") and company names.
  */
@@ -180,8 +305,13 @@ const OTHER_PERSON_HEADING =
 export function detectControl(control: DetectableControl): Detection {
   const texts = textSignals(control);
   const context = sectionText(control);
-  const heading = normalise(headingBefore(control));
+  const heading = normalise(headingElementBefore(control)?.textContent ?? '');
   const all = [...texts.map((t) => t.normalised), context].join(' | ');
+  const surroundings = `${context} ${heading}`;
+  const inEducation =
+    EDUCATION_CONTEXT.test(surroundings) &&
+    !EMPLOYMENT_CONTEXT.test(surroundings);
+  const inEmployment = EMPLOYMENT_CONTEXT.test(surroundings);
 
   const identifiers = [
     control.name,
@@ -225,6 +355,10 @@ export function detectControl(control: DetectableControl): Detection {
   for (const { signal, raw, normalised } of texts) {
     for (const field of matchText(normalised))
       add(field, { signal, text: raw });
+    if (inEmployment && !inEducation) continue;
+    for (const field of matchEducation(normalised, inEducation)) {
+      add(field, { signal, text: raw });
+    }
   }
 
   // "Country code" alone could be an ISO code or a calling code; a select
@@ -250,10 +384,31 @@ export function detectControl(control: DetectableControl): Detection {
     }
   }
 
+  // In an education section, "Name" or "Email" is about the institution;
+  // only explicit autocomplete semantics still count.
+  if (inEducation) {
+    for (const [field, found] of [...candidates]) {
+      if (
+        !isEducationField(field) &&
+        !found.some((e) => e.signal === 'autocomplete')
+      ) {
+        candidates.delete(field);
+      }
+    }
+  }
+  for (const [general, specific] of LESS_SPECIFIC) {
+    if (specific.some((field) => candidates.has(field))) {
+      candidates.delete(general);
+    }
+  }
+
   const evidence = [...candidates.values()].flat();
+  const onlyEducation =
+    candidates.size > 0 && [...candidates.keys()].every(isEducationField);
+  const otherPerson = onlyEducation ? OTHER_PERSON_EDUCATION : OTHER_PERSON;
   if (
     notPersonal ||
-    OTHER_PERSON.test(all) ||
+    otherPerson.test(all) ||
     OTHER_PERSON_HEADING.test(heading)
   ) {
     return evidence.length > 0 || notPersonal
@@ -306,13 +461,31 @@ function matchText(text: string): AutofillField[] {
   );
   const matches: AutofillField[] = [];
   for (const [field, patterns] of Object.entries(TEXT_RULES) as [
-    AutofillField,
+    Exclude<AutofillField, EducationField>,
     RegExp[],
   ][]) {
     if (fullNameOnly && (field === 'firstName' || field === 'lastName')) {
       continue;
     }
     if (SHORT_ONLY.has(field) && words > MAX_SHORT_WORDS) continue;
+    if (!patterns.some((pattern) => pattern.test(text))) continue;
+    if (excluded(field, text)) continue;
+    matches.push(field);
+  }
+  return matches;
+}
+
+/** The education fields a piece of normalised text refers to. */
+function matchEducation(text: string, inEducation: boolean): EducationField[] {
+  if (text.split(' ').length > MAX_WORDS) return [];
+  const matches: EducationField[] = [];
+  for (const [field, rules] of Object.entries(EDUCATION_RULES) as [
+    EducationField,
+    { strong: RegExp[]; contextual: RegExp[] },
+  ][]) {
+    const patterns = inEducation
+      ? [...rules.strong, ...rules.contextual]
+      : rules.strong;
     if (!patterns.some((pattern) => pattern.test(text))) continue;
     if (excluded(field, text)) continue;
     matches.push(field);
@@ -387,16 +560,16 @@ function accessibleName(element: Element): string {
 
 const HEADINGS = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
 
+const SECTIONS = 'fieldset, section, [role="group"], [role="region"]';
+
 /**
  * The nearest heading before the control within its section (its fieldset
  * or labelled group, else its form, else the page): many forms mark
  * sections such as "Reference 1" with headings rather than fieldsets.
  */
-function headingBefore(control: DetectableControl): string {
+function headingElementBefore(control: DetectableControl): Element | null {
   const scope =
-    control.closest('fieldset, section, [role="group"], [role="region"]') ??
-    control.form ??
-    control.ownerDocument.body;
+    control.closest(SECTIONS) ?? control.form ?? control.ownerDocument.body;
   let nearest: Element | null = null;
   for (const heading of scope.querySelectorAll(HEADINGS)) {
     if (
@@ -408,7 +581,26 @@ function headingBefore(control: DetectableControl): string {
       break;
     }
   }
-  return nearest?.textContent ?? '';
+  return nearest;
+}
+
+/** Where a control sits: its section's text and the element grouping it. */
+export interface ControlContext {
+  /** Normalised legends, group labels and the nearest heading. */
+  text: string;
+  /**
+   * The fieldset or labelled section around the control, else the heading
+   * it follows, else its form. Controls sharing it form one section.
+   */
+  group: Element | null;
+}
+
+export function controlContext(control: DetectableControl): ControlContext {
+  const heading = headingElementBefore(control);
+  return {
+    text: normalise(`${sectionText(control)} ${heading?.textContent ?? ''}`),
+    group: control.closest(SECTIONS) ?? heading ?? control.form,
+  };
 }
 
 export function labelText(control: DetectableControl): string {

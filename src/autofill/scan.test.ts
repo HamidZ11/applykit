@@ -308,3 +308,57 @@ describe('forms that do not mark sections with fieldsets', () => {
     ]);
   });
 });
+
+describe('a heading-based internship form', () => {
+  it('recognises personal, phone and education fields by section', () => {
+    loadFixture('education-application.html');
+
+    const byId = Object.fromEntries(
+      scanFields(document).map((field) => [
+        field.element.id || field.element.name,
+        outcome(field),
+      ]),
+    );
+
+    expect(byId).toEqual({
+      first: 'firstName',
+      last: 'lastName',
+      preferred: 'preferredName',
+      email: 'email',
+      'calling-code': 'phoneCountryCode',
+      phone: 'phone',
+      country: 'unsupported',
+      university: 'institution',
+      degree: 'qualification',
+      subject: 'fieldOfStudy',
+      'edu-start': 'educationStart',
+      graduation: 'educationEnd',
+      classification: 'grade',
+      school: 'institution',
+      'school-results': 'grade',
+      'school-end': 'educationEnd',
+      employer: 'unrecognised',
+      'job-start': 'unrecognised',
+      'ref-name': 'other-person',
+      'ref-email': 'other-person',
+      gender: 'manual:sensitive',
+      'school-type': 'manual:sensitive',
+      motivation: 'unsupported',
+      privacy: 'manual:consent',
+    });
+  });
+
+  it('keeps one education field per section, not one per form', () => {
+    loadHtml(`<form>
+      <h2>University</h2><label>Institution <input id="a"></label>
+      <label>Institution <input id="b"></label>
+      <h2>School</h2><label>Institution <input id="c"></label>
+    </form>`);
+
+    expect(scanFields(document).map(outcome)).toEqual([
+      'institution',
+      'duplicate',
+      'institution',
+    ]);
+  });
+});

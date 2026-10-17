@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fullProfile } from '@/test/autofill-fixtures';
+import { educationRecords, fullProfile } from '@/test/autofill-fixtures';
 import { validProfile } from '@/test/profile-fixtures';
 import { autofillValuesFrom, phoneParts } from './profile-values';
 
@@ -34,7 +34,26 @@ describe('autofillValuesFrom', () => {
         nationalNumber: '2079460000',
         regionNames: ['GB', 'GBR', 'United Kingdom', 'UK', 'Great Britain'],
       },
+      education: [],
     });
+  });
+
+  it('passes on education records with their level', () => {
+    const profile = fullProfile();
+    profile.education = educationRecords();
+
+    expect(autofillValuesFrom(profile).education).toEqual([
+      expect.objectContaining({
+        institution: 'University of Example',
+        qualification: 'BSc Computer Science',
+        level: 'higher',
+      }),
+      expect.objectContaining({
+        institution: 'Example Sixth Form College',
+        qualification: 'A levels',
+        level: 'school',
+      }),
+    ]);
   });
 
   it('leaves values the profile does not have empty, never invented', () => {
@@ -100,6 +119,7 @@ describe('autofillValuesFrom', () => {
       'preferredNameIsFirstName',
       'country',
       'phone',
+      'education',
     ]);
   });
 });

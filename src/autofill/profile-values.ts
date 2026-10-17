@@ -5,6 +5,7 @@ import {
 } from 'libphonenumber-js';
 import { countryDetails } from '@/domain/countries';
 import type { UserProfile } from '@/domain/user-profile';
+import { recordLevel } from './education';
 import type { AutofillValues, PhoneParts } from './fields';
 
 /**
@@ -49,6 +50,15 @@ export function autofillValuesFrom(profile: UserProfile): AutofillValues {
         }
       : null,
     phone: phoneParts(personal.phone, personal.address.country),
+    education: profile.education.map((record) => ({
+      institution: record.institution,
+      qualification: record.qualification,
+      fieldOfStudy: record.fieldOfStudy,
+      startDate: record.startDate,
+      endDate: record.endDate,
+      grade: record.grade,
+      level: recordLevel(record.institution, record.qualification),
+    })),
   };
 }
 

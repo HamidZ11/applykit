@@ -1,4 +1,5 @@
 import type { AutofillValues } from '@/autofill/fields';
+import type { EducationRecord } from '@/domain/user-profile';
 import { autofillValuesFrom } from '@/autofill/profile-values';
 import { profileFromDraft, type UserProfile } from '@/domain/user-profile';
 import { validDraft } from './profile-fixtures';
@@ -21,6 +22,30 @@ export function fullProfile(
     other: [],
   };
   return profileFromDraft(draft, null, new Date(updatedAt));
+}
+
+/** Fictional education: a degree and the A levels before it. */
+export function educationRecords(): EducationRecord[] {
+  return [
+    {
+      id: 'degree',
+      institution: 'University of Example',
+      qualification: 'BSc Computer Science',
+      fieldOfStudy: 'Computer Science',
+      startDate: '2024-09',
+      endDate: '2027-06',
+      grade: '',
+    },
+    {
+      id: 'a-levels',
+      institution: 'Example Sixth Form College',
+      qualification: 'A levels',
+      fieldOfStudy: 'Mathematics, Physics, Computing',
+      startDate: '2022-09',
+      endDate: '2024-06',
+      grade: 'A*AA',
+    },
+  ];
 }
 
 /** The values autofill receives for `fullProfile()`. */

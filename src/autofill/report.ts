@@ -2,10 +2,18 @@ import type { Evidence } from './detect';
 import {
   AUTOFILL_FIELD_LABEL,
   type AutofillField,
+  isEducationField,
   type AutofillValues,
   type CountryValue,
   type PhoneParts,
 } from './fields';
+import { comparable, isPlaceholderOption, usableOptions } from './options';
+import {
+  chooseRecords,
+  planEducation,
+  type Planned,
+  type RecordChoice,
+} from './plan-education';
 import type { ScannedField } from './scan';
 
 /**
@@ -29,6 +37,8 @@ export type FieldStatus =
   | 'no-option'
   /** The saved value cannot be given in the form this field needs. */
   | 'unusable'
+  /** Several saved records could fit, and the form does not say which. */
+  | 'ambiguous'
   | 'unrecognised'
   | 'unsupported'
   | 'manual'
@@ -96,6 +106,9 @@ interface FormContext {
    * get the number without it (never the code twice).
    */
   splitPhone: boolean;
+  /** The saved record each education field would be filled from. */
+  education: Map<ScannedField, RecordChoice>;
+  now: Date;
 }
 
 /**
@@ -106,9 +119,12 @@ interface FormContext {
 export function planFill(
   fields: readonly ScannedField[],
   values: AutofillValues | null,
+  now: Date = new Date(),
 ): FieldReport[] {
   const context: FormContext | null = values && {
     values,
+    education: chooseRecords(fields, values.education),
+    now,
     splitPhone: fields.some(
       ({ support }) =>
         support.status === 'match' && support.field === 'phoneCountryCode',
@@ -230,15 +246,28 @@ function planField(
   };
 }
 
-type Planned =
-  | { display: string; fillValue: string; note?: string }
-  | { status: 'no-value' | 'no-option' | 'unusable'; reason: string };
-
 function planValue(
   field: ScannedField,
   target: AutofillField,
-  { values, splitPhone }: FormContext,
+  { values, splitPhone, education, now }: FormContext,
 ): Planned {
+  if (isEducationField(target)) {
+    const choice = education.get(field);
+    if (!choice) {
+      return {
+        status: 'no-value',
+        reason: 'Your profile has no education saved.',
+      };
+    }
+    if ('status' in choice) return choice;
+    const planned = planEducation(field, target, choice.record, now);
+    return 'reason' in planned || !choice.note
+      ? planned
+      : {
+          ...planned,
+          note: [planned.note, choice.note].filter(Boolean).join(' '),
+        };
+  }
   switch (target) {
     case 'country':
       return planCountry(field, values.country);
@@ -327,11 +356,6 @@ function planCallingCode(field: ScannedField, values: AutofillValues): Planned {
   };
 }
 
-/** Options a user could choose: enabled and not a placeholder. */
-function usableOptions(select: HTMLSelectElement): HTMLOptionElement[] {
-  return [...select.options].filter((option) => !isPlaceholderOption(option));
-}
-
 function planText(value: string): Planned {
   const trimmed = value.trim();
   return trimmed === ''
@@ -415,18 +439,6 @@ function planCountry(
   return { display: country.name, fillValue: country.name };
 }
 
-/** Option text such as "Select…", "Choose a country" or "--". */
-const PLACEHOLDER_OPTION = /^\W*(?:select|choose|please|pick)\b|^[\W_]*$/i;
-
-/** An option that stands for "nothing chosen yet". */
-function isPlaceholderOption(option: HTMLOptionElement): boolean {
-  return (
-    option.value === '' ||
-    option.disabled ||
-    PLACEHOLDER_OPTION.test(option.text.trim())
-  );
-}
-
 /**
  * A select showing its first option only because nothing else was
  * selected: the browser's default, or possibly the user's choice.
@@ -451,16 +463,6 @@ export function currentValue(field: ScannedField): string | null {
   }
   const value = element.value.trim();
   return value === '' ? null : value;
-}
-
-/** Lower case, accents and punctuation removed, for exact comparisons. */
-export function comparable(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
 }
 
 const HANDLED = new Set<FieldStatus>([

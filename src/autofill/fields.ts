@@ -1,3 +1,5 @@
+import type { EducationLevel } from './education';
+
 /**
  * The profile values the autofill engine can place into application forms.
  * Plain data with no browser or React dependencies.
@@ -23,11 +25,24 @@ export const TEXT_FIELDS = [
 
 export type TextField = (typeof TEXT_FIELDS)[number];
 
+/** Fields filled from one of the saved education records. */
+export const EDUCATION_FIELDS = [
+  'institution',
+  'qualification',
+  'fieldOfStudy',
+  'educationStart',
+  'educationEnd',
+  'grade',
+] as const;
+
+export type EducationField = (typeof EDUCATION_FIELDS)[number];
+
 export const AUTOFILL_FIELDS = [
   ...TEXT_FIELDS,
   'country',
   'phoneCountryCode',
   'phoneNational',
+  ...EDUCATION_FIELDS,
 ] as const;
 
 export type AutofillField = (typeof AUTOFILL_FIELDS)[number];
@@ -50,7 +65,34 @@ export const AUTOFILL_FIELD_LABEL: Record<AutofillField, string> = {
   portfolio: 'Portfolio or website',
   phoneCountryCode: 'Phone country code',
   phoneNational: 'Phone number without country code',
+  institution: 'Institution',
+  qualification: 'Qualification',
+  fieldOfStudy: 'Field of study',
+  educationStart: 'Education start date',
+  educationEnd: 'Graduation or end date',
+  grade: 'Grade',
 };
+
+export function isEducationField(
+  field: AutofillField,
+): field is EducationField {
+  return (EDUCATION_FIELDS as readonly string[]).includes(field);
+}
+
+/** One saved education record, as autofill uses it. */
+export interface EducationValue {
+  institution: string;
+  qualification: string;
+  fieldOfStudy: string;
+  /** "YYYY-MM". */
+  startDate: string;
+  /** "YYYY-MM": when it ended or is expected to. */
+  endDate: string;
+  /** Optional: empty when not saved. */
+  grade: string;
+  /** University-level or school, from the qualification; null if unclear. */
+  level: EducationLevel | null;
+}
 
 /** The saved country, with every representation a form might expect. */
 export interface CountryValue {
@@ -98,4 +140,6 @@ export interface AutofillValues {
    * number or it cannot be read unambiguously.
    */
   phone: PhoneParts | null;
+  /** Saved education records, in the order the user saved them. */
+  education: EducationValue[];
 }

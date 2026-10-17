@@ -330,3 +330,65 @@ describe('review regressions', () => {
     expect(matched(html)).toBeNull();
   });
 });
+
+describe('education fields', () => {
+  it.each([
+    ['<label>University <input></label>', 'institution'],
+    ['<label>Name of your university <input></label>', 'institution'],
+    ['<label>School name <input></label>', 'institution'],
+    ['<label>Degree type <select></select></label>', 'qualification'],
+    [
+      '<label>Highest level of education <select></select></label>',
+      'qualification',
+    ],
+    ['<label>Field of study <input></label>', 'fieldOfStudy'],
+    ['<label>Degree subject <input></label>', 'fieldOfStudy'],
+    ['<label>Expected graduation date <input></label>', 'educationEnd'],
+    ['<label>Year of graduation <input></label>', 'educationEnd'],
+    ['<label>Degree classification <select></select></label>', 'grade'],
+    ['<label>GPA <input></label>', 'grade'],
+    ['<label>University start date <input></label>', 'educationStart'],
+  ])('recognises %s anywhere', (html, field) => {
+    expect(matched(html)).toBe(field);
+  });
+
+  it.each([
+    ['Start date', 'educationStart'],
+    ['End date', 'educationEnd'],
+    ['Subject', 'fieldOfStudy'],
+    ['Grade', 'grade'],
+    ['Course', 'fieldOfStudy'],
+  ])('recognises %s only in an education section', (label, field) => {
+    expect(matched(`<label>${label} <input></label>`)).toBeNull();
+    expect(matched(`<h2>Education</h2><label>${label} <input></label>`)).toBe(
+      field,
+    );
+    expect(
+      matched(`<h2>Work experience</h2><label>${label} <input></label>`),
+    ).toBeNull();
+  });
+
+  it.each([
+    '<label>University email address <input type="email"></label>',
+    '<label>University ID number <input></label>',
+    '<label>University city <input></label>',
+  ])('does not take %s for the institution', (html) => {
+    expect(matched(html)).not.toBe('institution');
+  });
+
+  it('never fills personal details into an education section', () => {
+    expect(matched('<h2>Education</h2><label>Name <input></label>')).toBeNull();
+  });
+
+  it('does not read a job programme as a field of study', () => {
+    expect(matched('<label>Programme name <input></label>')).toBeNull();
+  });
+
+  it('still treats a supervisor as someone else', () => {
+    expect(
+      detect(
+        '<h2>Education</h2><label>Supervisor email <input type="email"></label>',
+      ).kind,
+    ).not.toBe('match');
+  });
+});

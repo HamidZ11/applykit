@@ -1,4 +1,5 @@
-import { comparable, currentValue, type FieldReport } from './report';
+import { comparable } from './options';
+import { currentValue, type FieldReport } from './report';
 
 /** Lets the page's own scripts react before results are checked. */
 export const afterPageScripts = () =>

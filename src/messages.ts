@@ -78,7 +78,34 @@ export function isAutofillValuesResponse(
   ) {
     return false;
   }
-  return isCountry(country) && isPhone((values as { phone?: unknown }).phone);
+  const { phone, education } = values as {
+    phone?: unknown;
+    education?: unknown;
+  };
+  return (
+    isCountry(country) &&
+    isPhone(phone) &&
+    Array.isArray(education) &&
+    education.every(isEducation)
+  );
+}
+
+const EDUCATION_TEXT = [
+  'institution',
+  'qualification',
+  'fieldOfStudy',
+  'startDate',
+  'endDate',
+  'grade',
+] as const;
+
+function isEducation(record: unknown): boolean {
+  if (typeof record !== 'object' || record === null) return false;
+  const r = record as Record<string, unknown>;
+  return (
+    EDUCATION_TEXT.every((key) => typeof r[key] === 'string') &&
+    (r.level === null || r.level === 'higher' || r.level === 'school')
+  );
 }
 
 function isStringArray(value: unknown): boolean {
