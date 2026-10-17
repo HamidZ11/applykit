@@ -69,7 +69,7 @@ export interface PanelModel extends PanelState {
    */
   applyChoice: (
     choice: SectionChoice,
-    previewed: readonly FieldElement[],
+    previewed: readonly FieldReport[],
   ) => Promise<ChoiceResult>;
   /** Scrolls to a field of the current scan and focuses it if safe. */
   goToField: (element: FieldElement) => GoToResult;
@@ -160,7 +160,7 @@ export function usePanel(
   const applyChoice = useCallback(
     async (
       choice: SectionChoice,
-      previewed: readonly FieldElement[],
+      previewed: readonly FieldReport[],
     ): Promise<ChoiceResult> => {
       if (filling.current) {
         return { ok: false, message: 'ApplyKit is still filling. Try again.' };

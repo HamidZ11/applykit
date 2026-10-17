@@ -85,6 +85,9 @@ export function chooseRecords(
   }
 
   const choices = new Map<ScannedField, RecordChoice>();
+  // The section each record first fills. One saved degree is not also the
+  // answer to "Education 2" just because it is the only one that fits.
+  const usedIn = new Map<string, Element | null>();
   for (const field of education) {
     const section = [...(sectionLevels.get(field.group) ?? [])];
     const level =
@@ -98,16 +101,26 @@ export function chooseRecords(
             (r) => r.id === chosenId && choice.candidates.includes(r.id),
           )
         : undefined;
-    choices.set(
-      field,
-      chosen
-        ? {
-            record: chosen,
-            note: `From ${chosen.qualification} at ${chosen.institution}, which you chose for this section.`,
-            chosen: true,
-          }
-        : choice,
-    );
+    const resolved: RecordChoice = chosen
+      ? {
+          record: chosen,
+          note: `From ${chosen.qualification} at ${chosen.institution}, which you chose for this section.`,
+          chosen: true,
+        }
+      : choice;
+    if ('record' in resolved) {
+      const firstSection = usedIn.get(resolved.record.id);
+      if (firstSection === undefined) {
+        usedIn.set(resolved.record.id, field.group);
+      } else if (firstSection !== field.group && !resolved.chosen) {
+        choices.set(field, {
+          status: 'no-value',
+          reason: `Your saved ${resolved.record.qualification} at ${resolved.record.institution} already fills an earlier education section of this form, so ApplyKit does not repeat it here.`,
+        });
+        continue;
+      }
+    }
+    choices.set(field, resolved);
   }
   return choices;
 }

@@ -60,14 +60,16 @@ describe('guidance for custom dropdowns', () => {
     });
   });
 
-  it('suggests the record when only one is saved', () => {
+  it('does not suggest a record already used by an earlier section', () => {
     const one = values((v) => {
       v.education = v.education.slice(0, 1);
     });
 
+    // The university section above already takes the only degree.
+    expect(report('nativeSelect', one).status).toBe('fill');
     expect(report('edu-2-inst', one).suggestion).toMatchObject({
-      kind: 'value',
-      value: 'University of Example',
+      kind: 'missing',
+      reason: expect.stringContaining('already fills an earlier') as string,
     });
   });
 

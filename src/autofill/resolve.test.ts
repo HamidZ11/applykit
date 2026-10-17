@@ -204,9 +204,7 @@ describe('previewChoice', () => {
 
 describe('confirmChoice and filling', () => {
   function previewed(fields: ScannedField[], choice: SectionChoice) {
-    return (previewChoice(fields, values(), choice, NOW)?.reports ?? []).map(
-      (r) => r.field.element,
-    );
+    return previewChoice(fields, values(), choice, NOW)?.reports ?? [];
   }
 
   it('fills only the chosen section and verifies what the page kept', async () => {
@@ -349,7 +347,7 @@ describe('confirmChoice and filling', () => {
     });
   });
 
-  it('keeps what the user typed after the preview', async () => {
+  it('fills nothing when the user typed into a field after the preview', () => {
     loadFixture('interactive-education.html');
     const fields = scanFields(document);
     const choice = choiceFor(fields, 'sec-school', 'a-levels');
@@ -363,11 +361,28 @@ describe('confirmChoice and filling', () => {
       seen,
       NOW,
     );
-    if (!check.ok) throw new Error(check.message);
-    await fillFields(check.plan);
 
+    expect(check.ok).toBe(false);
     expect(input('sec-grades').value).toBe('ABB');
-    expect(input('sec-school').value).toBe('Example Sixth Form College');
+  });
+
+  it('fills nothing when the record changed after the preview', () => {
+    loadFixture('interactive-education.html');
+    const fields = scanFields(document);
+    const choice = choiceFor(fields, 'sec-school', 'a-levels');
+    const seen = previewed(fields, choice);
+    const edited = values();
+    const record = edited.education.find((r) => r.id === 'a-levels');
+    if (!record) throw new Error('No record');
+    record.institution = 'Another Sixth Form';
+
+    expect(
+      confirmChoice(scanFields(document), edited, choice, seen, NOW),
+    ).toEqual({
+      ok: false,
+      message:
+        'This section has changed since you chose. Nothing was filled; review it again.',
+    });
   });
 
   it('reports a value the page rejects instead of counting it as filled', async () => {

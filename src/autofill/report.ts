@@ -148,9 +148,12 @@ export function planFill(
     values,
     education: chooseRecords(fields, values.education, sectionChoices),
     now,
+    // Also when the code is a custom dropdown the user sets themselves.
     splitPhone: fields.some(
       ({ support }) =>
-        support.status === 'match' && support.field === 'phoneCountryCode',
+        (support.status === 'match' && support.field === 'phoneCountryCode') ||
+        (support.status === 'unsupported' &&
+          support.custom?.field === 'phoneCountryCode'),
     ),
   };
   return fields.map((field) => planField(field, context));

@@ -1,7 +1,7 @@
 import type { AutofillValues, EducationValue } from './fields';
 import { isEducationField } from './fields';
 import { planFill, type FieldReport } from './report';
-import type { FieldElement, ScannedField } from './scan';
+import type { ScannedField } from './scan';
 
 /**
  * User-approved education choices. When several saved records fit a
@@ -82,7 +82,7 @@ export function confirmChoice(
   fields: readonly ScannedField[],
   values: AutofillValues,
   choice: SectionChoice,
-  previewed: readonly FieldElement[],
+  previewed: readonly FieldReport[],
   now: Date = new Date(),
 ): ChoiceCheck {
   if (!values.education.some((r) => r.id === choice.recordId)) {
@@ -99,8 +99,7 @@ export function confirmChoice(
     };
   }
   const preview = previewChoice(fields, values, choice, now);
-  const current = preview?.reports.map((r) => r.field.element) ?? [];
-  if (!preview || !sameElements(current, previewed)) {
+  if (!preview || !samePlan(preview.reports, previewed)) {
     return {
       ok: false,
       message:
@@ -110,10 +109,24 @@ export function confirmChoice(
   return { ok: true, plan: preview.reports };
 }
 
-function sameElements(
-  a: readonly FieldElement[],
-  b: readonly FieldElement[],
+/**
+ * The same fields, each to receive exactly what the user saw: a profile
+ * edited in another tab between preview and confirm must not fill values
+ * the user never previewed.
+ */
+function samePlan(
+  current: readonly FieldReport[],
+  previewed: readonly FieldReport[],
 ): boolean {
-  const set = new Set(a);
-  return a.length === b.length && b.every((element) => set.has(element));
+  const seen = new Map(previewed.map((r) => [r.field.element, r]));
+  return (
+    current.length === previewed.length &&
+    current.every((report) => {
+      const before = seen.get(report.field.element);
+      return (
+        before?.status === report.status &&
+        before.fillValue === report.fillValue
+      );
+    })
+  );
 }

@@ -679,6 +679,61 @@ describe('choosing a saved education record', () => {
     expect(fillFields).not.toHaveBeenCalled();
   });
 
+  it('keeps focus in a row detail when the arrow keys are pressed', () => {
+    click(/^School name/);
+    const action = button('Choose a saved record');
+    act(() => {
+      action.focus();
+    });
+
+    act(() => {
+      action.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+      );
+    });
+
+    expect(action.isConnected).toBe(true);
+    expect(document.activeElement).toBe(action);
+    expect(button(/^School name/).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('does not offer autofill for fields already filled from a choice', async () => {
+    // Only the ambiguous school section is left to fill on this page.
+    field('first').value = 'Typed';
+    field('last').value = 'Typed';
+    click('Rescan the page');
+    await settle();
+    expect(button(/^Nothing to fill/).disabled).toBe(true);
+    await openChooser(/^School name/);
+    await choose('Example Sixth Form College');
+
+    click('Fill 4 fields');
+    await settle();
+
+    expect(button(/^Nothing to fill/).disabled).toBe(true);
+    press('Enter');
+    await settle();
+    expect(fillFields).toHaveBeenCalledTimes(1);
+  });
+
+  it('cannot be cancelled while it is filling', async () => {
+    await openChooser(/^School name/);
+    await choose('Example Sixth Form College');
+    let release: (value: AutofillValuesResponse) => void = () => undefined;
+    loadValues.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+
+    click('Fill 4 fields');
+
+    expect(button('Cancel').disabled).toBe(true);
+    release(threeRecords());
+    await settle();
+  });
+
   it('keeps the arrow keys, Enter and Escape for the chooser', async () => {
     await openChooser(/^School name/);
     const [first] = radios();

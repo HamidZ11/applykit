@@ -157,3 +157,49 @@ describe('long forms', () => {
     expect(performance.now() - started).toBeLessThan(4000);
   });
 });
+
+describe('one record, several education sections', () => {
+  it('fills the first section and leaves the repeat to the user', () => {
+    const [degree] = educationRecords();
+    if (!degree) throw new Error('No degree');
+    const reports = plan(
+      `<form>
+        <section aria-label="Education 1"><label>Institution <input id="a"></label></section>
+        <section aria-label="Education 2"><label>Institution <input id="b"></label></section>
+      </form>`,
+      [degree],
+    );
+
+    expect(byId(reports, 'a')?.fillValue).toBe('University of Example');
+    expect(byId(reports, 'b')).toMatchObject({
+      status: 'no-value',
+      fillValue: null,
+      reason: expect.stringContaining('already fills an earlier') as string,
+    });
+  });
+
+  it('does not repeat a degree in a second university section', () => {
+    const reports = plan(`<form>
+      <section aria-label="University"><label>University <input id="a"></label></section>
+      <section aria-label="Second university"><label>University <input id="b"></label></section>
+    </form>`);
+
+    expect(byId(reports, 'a')?.fillValue).toBe('University of Example');
+    expect(byId(reports, 'b')?.fillValue).toBeNull();
+  });
+});
+
+describe('a custom calling-code dropdown', () => {
+  it('makes phone fields take the number without its code', () => {
+    const reports = plan(`<form>
+      <span id="cc">Country calling code</span>
+      <div role="combobox" tabindex="0" aria-labelledby="cc"></div>
+      <label>Phone number <input id="p" type="tel"></label>
+    </form>`);
+
+    expect(byId(reports, 'p')).toMatchObject({
+      status: 'fill',
+      fillValue: '2079460000',
+    });
+  });
+});

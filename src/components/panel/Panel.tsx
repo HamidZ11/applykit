@@ -73,8 +73,12 @@ export function Panel({
     } else if (
       mode === 'expanded' &&
       (event.key === 'ArrowDown' || event.key === 'ArrowUp') &&
-      // Radio buttons move between choices with the arrow keys.
-      !(event.target instanceof HTMLInputElement)
+      // Only from the panel itself or a row: moving the selection removes
+      // the selected row's detail, which may hold the focused control, and
+      // radio buttons use the arrow keys themselves.
+      (event.target === event.currentTarget ||
+        (event.target instanceof HTMLButtonElement &&
+          event.target.hasAttribute('aria-pressed')))
     ) {
       event.preventDefault();
       moveSelection(model, event.key === 'ArrowDown' ? 1 : -1);
@@ -249,7 +253,7 @@ const PROFILE_STATUS: Record<PanelModel['values']['status'], string> = {
  * that would make it available. Never falls back to other data.
  */
 function ReadyAction({ model }: { model: PanelModel }) {
-  const { values, summary, phase } = model;
+  const { values, phase } = model;
   switch (values.status) {
     case 'missing':
       return (
@@ -269,14 +273,17 @@ function ReadyAction({ model }: { model: PanelModel }) {
   if (phase === 'filling') {
     return <PrimaryButton disabled>Filling…</PrimaryButton>;
   }
+  // What autofill would fill now: not fields already filled from a record
+  // the user chose.
+  const fillable = model.reports.some((report) => report.status === 'fill');
   return (
     <PrimaryButton
       onClick={model.autofill}
-      disabled={summary.filled === 0}
+      disabled={!fillable}
       className="pr-1.5"
     >
-      {summary.filled === 0 ? 'Nothing to fill' : 'Autofill'}
-      {summary.filled > 0 && (
+      {fillable ? 'Autofill' : 'Nothing to fill'}
+      {fillable && (
         <Kbd>
           <Icon icon={CornerDownLeft} size={12} />
         </Kbd>
@@ -304,7 +311,7 @@ function runPrimary(model: PanelModel) {
   } else if (
     model.phase === 'ready' &&
     model.values.status === 'ready' &&
-    model.summary.filled > 0
+    model.reports.some((report) => report.status === 'fill')
   ) {
     model.autofill();
   }

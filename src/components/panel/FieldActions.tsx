@@ -175,7 +175,7 @@ function RecordChooser({
     setError(null);
     const result = await model.applyChoice(
       { group, recordId },
-      preview.reports.map((r) => r.field.element),
+      preview.reports,
     );
     setBusy(false);
     if (result.ok) {
@@ -287,7 +287,9 @@ function RecordChooser({
               ? `Fill ${plural(willFill.length, 'field')}`
               : 'Fill fields'}
         </PrimaryButton>
-        <GhostButton onClick={close}>Cancel</GhostButton>
+        <GhostButton onClick={close} disabled={busy}>
+          Cancel
+        </GhostButton>
       </div>
     </div>
   );
