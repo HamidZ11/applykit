@@ -693,7 +693,7 @@ describe('drafts', () => {
     expect(store.save).not.toHaveBeenCalled();
   });
 
-  it('discards a draft made obsolete by a later save', async () => {
+  it('restores edits started before a later save, and asks on saving', async () => {
     const profile = validProfile('2026-10-18T09:00:00.000Z');
     const stale = validDraft();
     stale.personal.phone = '020 7946 0001';
@@ -705,15 +705,55 @@ describe('drafts', () => {
           draft: storedDraft({
             basedOn: '2026-10-01T09:00:00.000Z',
             draft: stale,
+            step: 'review',
+            furthest: 4,
           }),
         },
+        saveResult: { status: 'conflict', current: profile },
       },
     );
     await render(store);
 
-    expect(store.clearDraft).toHaveBeenCalled();
-    expect(host.textContent).toContain('+44 20 7946 0000');
-    expect(host.textContent).not.toContain('020 7946 0001');
+    // Never dropped silently: the edits are back, with a warning.
+    expect(store.clearDraft).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('020 7946 0001');
+    expect(host.textContent).toContain(
+      'started before your profile was last saved',
+    );
+
+    await click('Save changes');
+
+    // Saved against the version the edits started from, so the store
+    // reports the conflict instead of overwriting.
+    expect(store.save).toHaveBeenCalledWith(
+      expect.anything(),
+      '2026-10-01T09:00:00.000Z',
+    );
+    expect(host.textContent).toContain('saved in another tab');
+  });
+
+  it('saves over the newer version only when the user chooses to', async () => {
+    const profile = validProfile('2026-10-18T09:00:00.000Z');
+    const { store } = memoryStore(
+      { status: 'loaded', profile, unmatchedCountry: null },
+      { saveResult: { status: 'conflict', current: profile } },
+    );
+    await render(store);
+    await click('Edit personal details');
+    type('Phone number', '020 7946 0001');
+    for (let i = 0; i < 4; i++) await click('Continue');
+    await click('Save changes');
+
+    await click('Save my version instead');
+
+    expect(store.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        personal: expect.objectContaining({
+          phone: '020 7946 0001',
+        }) as unknown,
+      }),
+      '2026-10-18T09:00:00.000Z',
+    );
   });
 
   it('stops autosaving once the profile is saved', async () => {

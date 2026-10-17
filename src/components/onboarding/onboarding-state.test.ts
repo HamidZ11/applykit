@@ -229,7 +229,9 @@ describe('welcome and drafts', () => {
 
   it('restores first-run progress where the user left off', () => {
     const stored = storedDraft();
-    const state = apply([{ type: 'restored', stored, saved: null }]);
+    const state = apply([
+      { type: 'restored', stored, saved: null, basedOn: null },
+    ]);
 
     expect(state).toMatchObject({
       started: true,
@@ -245,18 +247,45 @@ describe('welcome and drafts', () => {
 
   it('falls back to the first step for an unknown or unreachable step', () => {
     const unknown = apply([
-      { type: 'restored', stored: storedDraft({ step: 'cv' }), saved: null },
+      {
+        type: 'restored',
+        stored: storedDraft({ step: 'cv' }),
+        saved: null,
+        basedOn: null,
+      },
     ]);
     const ahead = apply([
       {
         type: 'restored',
         stored: storedDraft({ step: 'review', furthest: 1 }),
         saved: null,
+        basedOn: null,
       },
     ]);
 
     expect(unknown.step).toBe('personal');
     expect(ahead.step).toBe('personal');
+  });
+
+  it('keeps the version older edits started from, to ask on save', () => {
+    const saved = validProfile('2026-11-01T09:00:00.000Z');
+
+    const state = apply([
+      { type: 'loaded', profile: saved },
+      {
+        type: 'restored',
+        stored: storedDraft({ basedOn: '2026-10-17T12:00:00.000Z' }),
+        saved,
+        basedOn: '2026-10-17T12:00:00.000Z',
+      },
+    ]);
+
+    expect(state.saved).toBe(saved);
+    expect(state.basedOn).toBe('2026-10-17T12:00:00.000Z');
+    expect(state.dirty).toBe(true);
+    expect(toStoredDraft(state, new Date()).basedOn).toBe(
+      '2026-10-17T12:00:00.000Z',
+    );
   });
 
   it('restores unsaved edits on top of the saved profile', () => {
@@ -274,6 +303,7 @@ describe('welcome and drafts', () => {
           draft: edited,
         }),
         saved,
+        basedOn: saved.metadata.updatedAt,
       },
     ]);
 
@@ -307,7 +337,7 @@ describe('welcome and drafts', () => {
 
   it('clears the restored notice once the user moves on', () => {
     const state = apply([
-      { type: 'restored', stored: storedDraft(), saved: null },
+      { type: 'restored', stored: storedDraft(), saved: null, basedOn: null },
       { type: 'go', step: 'personal' },
     ]);
 
@@ -329,36 +359,13 @@ describe('welcome and drafts', () => {
 });
 
 describe('planDraftRestore', () => {
-  const at = '2026-10-17T12:00:00.000Z';
-
   it.each([
-    ['first-run draft, no profile', null, { status: 'empty' }, 'restore'],
-    [
-      'first-run draft, unreadable profile',
-      null,
-      { status: 'invalid' },
-      'restore',
-    ],
-    [
-      'edits to the saved profile',
-      at,
-      { status: 'loaded', updatedAt: at },
-      'restore',
-    ],
-    [
-      'edits to an older profile',
-      at,
-      { status: 'loaded', updatedAt: '2026-10-18T00:00:00.000Z' },
-      'discard',
-    ],
-    [
-      'first-run draft, profile saved since',
-      null,
-      { status: 'loaded', updatedAt: at },
-      'discard',
-    ],
-    ['profile could not be read', null, { status: 'error' }, 'keep'],
-  ] as const)('%s → %s', (_case, basedOn, profile, decision) => {
-    expect(planDraftRestore(storedDraft({ basedOn }), profile)).toBe(decision);
+    ['no profile', 'empty', 'restore'],
+    ['an unreadable profile', 'invalid', 'restore'],
+    // Including edits started before a later save: never dropped silently.
+    ['a saved profile', 'loaded', 'restore'],
+    ['a profile that could not be read', 'error', 'keep'],
+  ] as const)('with %s → %s', (_case, status, decision) => {
+    expect(planDraftRestore({ status })).toBe(decision);
   });
 });

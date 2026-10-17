@@ -32,7 +32,7 @@ export function useDraftAutosave({
   // An effect event, so a new clock function does not reschedule writes.
   const readClock = useEffectEvent(() => now());
 
-  const { dirty, draft, step, furthest, saved } = state;
+  const { dirty, draft, step, furthest, basedOn } = state;
 
   useEffect(() => {
     if (!enabled || !dirty) {
@@ -40,7 +40,7 @@ export function useDraftAutosave({
       return;
     }
     const payload = () =>
-      toStoredDraft({ draft, step, furthest, saved }, readClock());
+      toStoredDraft({ draft, step, furthest, basedOn }, readClock());
     pending.current = payload();
     const timer = setTimeout(() => {
       const next = payload();
@@ -53,7 +53,7 @@ export function useDraftAutosave({
     return () => {
       clearTimeout(timer);
     };
-  }, [enabled, dirty, draft, step, furthest, saved, store]);
+  }, [enabled, dirty, draft, step, furthest, basedOn, store]);
 
   // Best effort: start the pending write before the page goes away.
   useEffect(() => {

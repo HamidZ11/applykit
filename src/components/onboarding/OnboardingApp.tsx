@@ -135,19 +135,14 @@ export function OnboardingApp({
         const saved = profile.status === 'loaded' ? profile.profile : null;
         if (saved) dispatch({ type: 'loaded', profile: saved });
         if (draft.status === 'loaded') {
-          const decision = planDraftRestore(
-            draft.draft,
-            saved
-              ? { status: 'loaded', updatedAt: saved.metadata.updatedAt }
-              : {
-                  status:
-                    profile.status === 'loaded' ? 'empty' : profile.status,
-                },
-          );
+          const decision = planDraftRestore(profile);
           if (decision === 'restore') {
-            dispatch({ type: 'restored', stored: draft.draft, saved });
-          } else if (decision === 'discard') {
-            void store.clearDraft();
+            dispatch({
+              type: 'restored',
+              stored: draft.draft,
+              saved,
+              basedOn: draft.draft.basedOn,
+            });
           }
         }
         setLoad(
@@ -227,23 +222,28 @@ export function OnboardingApp({
     pendingFocus.current = 'error';
   };
 
-  const save = async () => {
+  /**
+   * Saves the draft over the version the edits started from, or, when the
+   * user chose to keep their version after a conflict, over `replacing`.
+   */
+  const save = async (replacing?: UserProfile) => {
     const result = validateDraft(state.draft);
     if (!result.ok) {
       showErrors(result.errors);
       return;
     }
     dispatch({ type: 'save-started' });
+    const previous = replacing ?? state.saved;
     const profile = profileFromDraft(
       result.draft,
-      state.saved?.metadata ?? null,
+      previous?.metadata ?? null,
       now(),
     );
     // The version this edit started from, so a newer save made in another
     // tab is never overwritten silently.
     const outcome = await store.save(
       profile,
-      state.saved?.metadata.updatedAt ?? null,
+      replacing ? replacing.metadata.updatedAt : state.basedOn,
     );
     if (outcome.status === 'saved') {
       dispatch({ type: 'save-succeeded', profile: outcome.profile });
@@ -370,6 +370,16 @@ export function OnboardingApp({
                     {editing ? 'save your changes' : 'save your profile'}.
                   </Banner>
                 )}
+                {state.saved &&
+                  state.dirty &&
+                  state.basedOn !== state.saved.metadata.updatedAt && (
+                    <Banner tone="warning">
+                      These unsaved changes were started before your profile was
+                      last saved (
+                      {formatSavedAt(state.saved.metadata.updatedAt)}
+                      ). When you save, ApplyKit asks which version to keep.
+                    </Banner>
+                  )}
                 {state.restoredFrom && (
                   <RestoredNotice
                     at={state.restoredFrom}
@@ -403,6 +413,9 @@ export function OnboardingApp({
                     onLoadSaved={(current) => {
                       void store.clearDraft();
                       dispatch({ type: 'loaded', profile: current });
+                    }}
+                    onSaveMine={(current) => {
+                      void save(current);
                     }}
                   />
                 )}
@@ -823,9 +836,11 @@ function SaveStatus({
 function SaveConflict({
   current,
   onLoadSaved,
+  onSaveMine,
 }: {
   current: UserProfile;
   onLoadSaved: (current: UserProfile) => void;
+  onSaveMine: (current: UserProfile) => void;
 }) {
   return (
     <Banner tone="warning">
@@ -843,6 +858,16 @@ function SaveConflict({
           className="font-medium underline underline-offset-2 hover:no-underline"
         >
           Discard my edits and load the saved version
+        </button>
+        <span aria-hidden> · </span>
+        <button
+          type="button"
+          onClick={() => {
+            onSaveMine(current);
+          }}
+          className="font-medium underline underline-offset-2 hover:no-underline"
+        >
+          Save my version instead
         </button>
       </span>
     </Banner>
