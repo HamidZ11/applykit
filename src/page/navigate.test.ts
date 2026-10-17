@@ -25,36 +25,48 @@ function setup() {
 }
 
 describe('goToField', () => {
-  it('scrolls to a custom dropdown and focuses it without opening it', () => {
+  it.each(['residence', 'qual-button', 'start-month', 'grad-year'])(
+    'only scrolls to the custom control #%s: no focus, click or keys',
+    (id) => {
+      const { known, element } = setup();
+      const target = element(id);
+      const scroll = vi.fn();
+      target.scrollIntoView = scroll;
+      const events: string[] = [];
+      for (const type of [
+        'focus',
+        'focusin',
+        'click',
+        'mousedown',
+        'pointerdown',
+        'keydown',
+        'input',
+        'change',
+      ]) {
+        document.addEventListener(type, () => events.push(type), true);
+      }
+      const before = target.outerHTML;
+
+      const result = goToField(target, known);
+
+      expect(result).toEqual({ ok: true, focused: false });
+      expect(scroll).toHaveBeenCalledWith({
+        block: 'center',
+        behavior: 'smooth',
+      });
+      expect(document.activeElement).not.toBe(target);
+      expect(events).toEqual([]);
+      expect(target.outerHTML).toBe(before);
+    },
+  );
+
+  it('scrolls to and focuses a plain native field', () => {
     const { known, element } = setup();
-    const target = element('residence');
-    const scroll = vi.fn();
-    target.scrollIntoView = scroll;
-    const events: string[] = [];
-    for (const type of ['click', 'keydown', 'mousedown', 'input', 'change']) {
-      document.addEventListener(type, () => events.push(type), true);
-    }
-
-    const result = goToField(target, known);
-
-    expect(result).toEqual({ ok: true, focused: true });
-    expect(scroll).toHaveBeenCalledWith({
-      block: 'center',
-      behavior: 'smooth',
-    });
-    expect(document.activeElement).toBe(target);
-    expect(target.getAttribute('aria-expanded')).toBe('false');
-    expect(events).toEqual([]);
-  });
-
-  it('only scrolls to a control that is not keyboard-focusable', () => {
-    const { known, element } = setup();
-    const target = element('start-month');
-    target.removeAttribute('tabindex');
+    const target = element('first');
     target.scrollIntoView = vi.fn();
 
-    expect(goToField(target, known)).toEqual({ ok: true, focused: false });
-    expect(document.activeElement).not.toBe(target);
+    expect(goToField(target, known)).toEqual({ ok: true, focused: true });
+    expect(document.activeElement).toBe(target);
   });
 
   it('refuses a field that has left the page', () => {
@@ -89,6 +101,6 @@ describe('goToField', () => {
     goToField(target, known);
 
     expect(submit).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(target);
+    expect(document.activeElement).not.toBe(target);
   });
 });

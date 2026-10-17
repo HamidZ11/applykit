@@ -808,10 +808,15 @@ describe('custom dropdowns', () => {
 
     click('Go to field');
 
-    expect(document.activeElement?.id).toBe('residence');
+    // Custom controls are only scrolled to: focusing can open some widgets.
+    expect(document.activeElement?.id).not.toBe('residence');
+    expect(dialog().contains(document.activeElement)).toBe(true);
     expect(
       document.getElementById('residence')?.getAttribute('aria-expanded'),
     ).toBe('false');
+    expect(dialog().textContent).toContain(
+      'Scrolled to it. Click it on the page to choose.',
+    );
   });
 
   it('says when several saved records could fit instead of guessing', () => {

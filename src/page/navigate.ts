@@ -1,7 +1,8 @@
 /**
- * Taking the user to a field on the page: scroll it into view and, where
- * that is safe, focus it. Never clicks, presses keys, opens a dropdown or
- * changes a value; the user does the rest.
+ * Taking the user to a field on the page: scroll it into view and, for
+ * plain native controls, focus it. Never clicks, presses keys, focuses a
+ * custom control, opens a dropdown or changes a value; the user does the
+ * rest.
  */
 
 export type GoToResult =
@@ -34,15 +35,20 @@ export function goToField(
 }
 
 /**
- * Focusable by keyboard already (a native control, or `tabindex` 0 or
- * more) and not disabled. Focus alone selects nothing.
+ * Only plain native controls are focused. Custom controls, including text
+ * inputs acting as comboboxes, are never focused: some open their popup or
+ * load options when they receive focus. The user clicks them on the page.
  */
 function isSafelyFocusable(element: HTMLElement): boolean {
-  if (element.tabIndex < 0) return false;
-  if (element.getAttribute('aria-disabled') === 'true') return false;
+  const native =
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLSelectElement ||
+    element instanceof HTMLTextAreaElement;
+  if (!native || element.disabled) return false;
   return !(
-    'disabled' in element &&
-    typeof element.disabled === 'boolean' &&
-    element.disabled
+    element.getAttribute('role') === 'combobox' ||
+    element.hasAttribute('aria-haspopup') ||
+    element.hasAttribute('aria-autocomplete') ||
+    element.parentElement?.closest('[role="combobox"]')
   );
 }

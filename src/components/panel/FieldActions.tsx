@@ -96,12 +96,14 @@ function GoToButton({
   model: PanelModel;
 }) {
   const [problem, setProblem] = useState<string | null>(null);
+  const [scrolledOnly, setScrolledOnly] = useState(false);
   return (
     <>
       <GhostButton
         onClick={() => {
           const result = model.goToField(element);
           setProblem(result.ok ? null : result.message);
+          setScrolledOnly(result.ok && !result.focused);
         }}
       >
         <Icon icon={LocateFixed} size={14} />
@@ -110,6 +112,11 @@ function GoToButton({
       {problem && (
         <p role="alert" className="basis-full pl-2 text-danger">
           {problem}
+        </p>
+      )}
+      {scrolledOnly && (
+        <p role="status" className="basis-full pl-2 text-ink-3">
+          Scrolled to it. Click it on the page to choose.
         </p>
       )}
     </>
