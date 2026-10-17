@@ -8,6 +8,7 @@ import {
   type PhoneParts,
 } from './fields';
 import { comparable, isPlaceholderOption, usableOptions } from './options';
+import { suggestionFor, type Suggestion } from './suggestion';
 import {
   chooseRecords,
   planEducation,
@@ -76,6 +77,12 @@ export interface FieldReport {
   candidates: string[];
   /** Planned or filled from a record the user explicitly chose. */
   chosen: boolean;
+  /**
+   * For fields ApplyKit cannot fill, such as custom dropdowns: what the
+   * saved profile says, as guidance for choosing on the page. Never
+   * written, and never computed for sensitive or other people's fields.
+   */
+  suggestion: Suggestion | null;
 }
 
 export interface ReportSummary {
@@ -163,6 +170,7 @@ function planField(
     evidence: [],
     candidates: [],
     chosen: false,
+    suggestion: null,
   };
   const { support } = field;
   switch (support.status) {
@@ -204,6 +212,16 @@ function planField(
           status: 'unsupported',
           target,
           evidence: support.custom.evidence,
+          suggestion:
+            target && context
+              ? suggestionFor(
+                  field,
+                  target,
+                  context.values,
+                  context.education.get(field),
+                  context.now,
+                )
+              : null,
           reason: `${
             target
               ? `This looks like your ${AUTOFILL_FIELD_LABEL[target].toLowerCase()}, but it`

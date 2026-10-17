@@ -14,13 +14,10 @@ import {
   requestedLevel,
   type EducationLevel,
 } from './education';
-import {
-  isEducationField,
-  type EducationField,
-  type EducationValue,
-} from './fields';
+import { type EducationField, type EducationValue } from './fields';
 import { comparable, exactOptions, usableOptions } from './options';
 import type { ControlField, ScannedField } from './scan';
+import { educationTargetOf } from './suggestion';
 
 /**
  * Education planning: which saved record a form's education fields are
@@ -71,10 +68,9 @@ export function chooseRecords(
   records: readonly EducationValue[],
   sectionChoices: SectionChoices = new Map(),
 ): Map<ScannedField, RecordChoice> {
-  const education = fields.filter(
-    ({ support }) =>
-      support.status === 'match' && isEducationField(support.field),
-  );
+  // Custom dropdowns count too: they shape what a section asks about, and
+  // their guidance comes from the same record.
+  const education = fields.filter((field) => educationTargetOf(field) !== null);
 
   // What each section asks about, from all its fields' labels and its
   // heading. A section that says both ("School or university") says nothing.

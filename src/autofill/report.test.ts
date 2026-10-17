@@ -453,6 +453,7 @@ describe('summarise and attentionQueue', () => {
       evidence: [],
       candidates: [],
       chosen: false,
+      suggestion: null,
     };
   }
 
