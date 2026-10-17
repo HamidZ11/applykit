@@ -6,12 +6,13 @@ import {
   CircleHelp,
   CornerDownLeft,
   Eye,
+  FileUp,
   ShieldCheck,
   TextCursorInput,
   UserRound,
 } from 'lucide-react';
 import { BrandMark, Icon } from '@/components/ui/icons';
-import { PrimaryButton } from '@/components/ui/primitives';
+import { PrimaryButton, SecondaryButton } from '@/components/ui/primitives';
 
 /**
  * The first screen of first-run setup: what ApplyKit does, why it asks for a
@@ -20,10 +21,13 @@ import { PrimaryButton } from '@/components/ui/primitives';
 export function WelcomeScreen({
   notice,
   onStart,
+  onImport,
 }: {
   /** A message about previously stored data, shown above the headline. */
   notice?: ReactNode;
   onStart: () => void;
+  /** Starts setup by importing details from a CV instead. */
+  onImport: () => void;
 }) {
   return (
     <div className="grid min-h-screen bg-canvas text-ink lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
@@ -64,6 +68,10 @@ export function WelcomeScreen({
               Get started
               <Icon icon={ArrowRight} size={14} />
             </PrimaryButton>
+            <SecondaryButton onClick={onImport} className="h-9 px-3.5">
+              <Icon icon={FileUp} size={14} />
+              Import from CV
+            </SecondaryButton>
             <span className="text-xs text-ink-3">
               A few minutes. Optional sections can stay empty.
             </span>

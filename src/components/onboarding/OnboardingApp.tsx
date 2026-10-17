@@ -1,5 +1,12 @@
 import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
-import { Check, CircleAlert, History, ShieldCheck } from 'lucide-react';
+import {
+  Check,
+  CircleAlert,
+  FileUp,
+  History,
+  Info,
+  ShieldCheck,
+} from 'lucide-react';
 import { validateDraft, validateSection } from '@/domain/profile-schema';
 import { profileFromDraft } from '@/domain/user-profile';
 import {
@@ -13,6 +20,8 @@ import {
   PrimaryButton,
   SecondaryButton,
 } from '@/components/ui/primitives';
+import { readCv, type CvFile, type CvReadResult } from '@/cv/read';
+import { CvImport } from './CvImport';
 import { formatSavedAt } from './format';
 import { LinksStep } from './LinksStep';
 import {
@@ -71,6 +80,8 @@ const systemClock = () => new Date();
 
 interface OnboardingAppProps {
   store?: ProfileStore;
+  /** Reads a CV file; injectable for tests. */
+  readCvFile?: (file: CvFile) => Promise<CvReadResult>;
   /** Clock for save timestamps; injectable for tests. */
   now?: () => Date;
 }
@@ -85,6 +96,7 @@ interface OnboardingAppProps {
  */
 export function OnboardingApp({
   store = browserProfileStore,
+  readCvFile = readCv,
   now = systemClock,
 }: OnboardingAppProps) {
   const [state, dispatch] = useReducer(
@@ -93,6 +105,10 @@ export function OnboardingApp({
     initialOnboardingState,
   );
   const [load, setLoad] = useState<LoadResult | null>(null);
+  /** Showing the CV import screen instead of a step. */
+  const [importing, setImporting] = useState(false);
+  /** How many CV details were just added, until the user moves on. */
+  const [imported, setImported] = useState<number | null>(null);
   const main = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const pendingFocus = useRef<'error' | 'heading' | null>(null);
@@ -170,7 +186,16 @@ export function OnboardingApp({
 
   const go = (step: Step) => {
     pendingFocus.current = 'heading';
+    setImporting(false);
+    setImported(null);
     dispatch({ type: 'go', step });
+  };
+
+  const applyImport = (draft: typeof state.draft, changes: number) => {
+    pendingFocus.current = 'heading';
+    dispatch({ type: 'import-cv', draft });
+    setImporting(false);
+    setImported(changes);
   };
 
   const discard = () => {
@@ -221,6 +246,7 @@ export function OnboardingApp({
       return;
     }
     pendingFocus.current = 'heading';
+    setImported(null);
     dispatch({ type: 'advance' });
   };
 
@@ -239,6 +265,10 @@ export function OnboardingApp({
           pendingFocus.current = 'heading';
           dispatch({ type: 'start' });
         }}
+        onImport={() => {
+          dispatch({ type: 'start' });
+          setImporting(true);
+        }}
       />
     );
   }
@@ -252,65 +282,101 @@ export function OnboardingApp({
 
   return (
     <div className="min-h-screen bg-canvas text-ink md:grid md:grid-cols-[248px_minmax(0,1fr)]">
-      <StepRail state={state} editing={editing} onGo={go} />
+      <StepRail
+        state={state}
+        editing={editing}
+        importing={importing}
+        onGo={go}
+        onImport={() => {
+          setImported(null);
+          setImporting(true);
+        }}
+      />
 
       <main ref={main} className="flex min-h-screen flex-col">
-        <div className="mx-auto w-full max-w-[640px] flex-1 px-5 pt-8 pb-16 md:px-10 md:pt-[clamp(32px,6vh,56px)]">
-          <p className="mb-2 text-xs text-ink-3 md:hidden">
-            Step {index + 1} of {STEPS.length}
-          </p>
-          <h1
-            ref={heading}
-            tabIndex={-1}
-            className="text-xl font-medium tracking-[-0.01em] outline-none"
-          >
-            {editing && state.step === 'review' ? 'Your profile' : copy.title}
-          </h1>
-          <p className="mt-1 max-w-[56ch] text-ink-2">
-            {editing && state.step === 'review' && state.saved
-              ? `Last saved ${formatSavedAt(state.saved.metadata.updatedAt)}. Edit any section, then save your changes.`
-              : copy.intro}
-          </p>
+        {importing ? (
+          <CvImport
+            draft={state.draft}
+            editing={editing}
+            read={readCvFile}
+            onApply={applyImport}
+            onCancel={() => {
+              pendingFocus.current = 'heading';
+              setImporting(false);
+            }}
+          />
+        ) : (
+          <>
+            <div className="mx-auto w-full max-w-[640px] flex-1 px-5 pt-8 pb-16 md:px-10 md:pt-[clamp(32px,6vh,56px)]">
+              <p className="mb-2 text-xs text-ink-3 md:hidden">
+                Step {index + 1} of {STEPS.length}
+              </p>
+              <h1
+                ref={heading}
+                tabIndex={-1}
+                className="text-xl font-medium tracking-[-0.01em] outline-none"
+              >
+                {editing && state.step === 'review'
+                  ? 'Your profile'
+                  : copy.title}
+              </h1>
+              <p className="mt-1 max-w-[56ch] text-ink-2">
+                {editing && state.step === 'review' && state.saved
+                  ? `Last saved ${formatSavedAt(state.saved.metadata.updatedAt)}. Edit any section, then save your changes.`
+                  : copy.intro}
+              </p>
 
-          <div className="mt-6 space-y-3 empty:hidden">
-            {state.restoredFrom && (
-              <RestoredNotice
-                at={state.restoredFrom}
-                editing={editing}
-                onStartOver={discard}
-              />
-            )}
-            {unmatchedCountry !== null && (
-              <Banner tone="warning">
-                ApplyKit now uses a standard country list and could not match “
-                {unmatchedCountry}”. Choose your country in Personal details,
-                then save.
-              </Banner>
-            )}
-            {load.status === 'error' && (
-              <Banner tone="danger">{load.message}</Banner>
-            )}
-            {state.save.state === 'error' && (
-              <Banner tone="danger">{state.save.message}</Banner>
-            )}
-          </div>
+              <div className="mt-6 space-y-3 empty:hidden">
+                {imported !== null && (
+                  <Banner tone="info">
+                    Added{' '}
+                    {imported === 1
+                      ? '1 detail'
+                      : `${String(imported)} details`}{' '}
+                    from your CV. Check each step, then{' '}
+                    {editing ? 'save your changes' : 'save your profile'}.
+                  </Banner>
+                )}
+                {state.restoredFrom && (
+                  <RestoredNotice
+                    at={state.restoredFrom}
+                    editing={editing}
+                    onStartOver={discard}
+                  />
+                )}
+                {unmatchedCountry !== null && (
+                  <Banner tone="warning">
+                    ApplyKit now uses a standard country list and could not
+                    match “{unmatchedCountry}”. Choose your country in Personal
+                    details, then save.
+                  </Banner>
+                )}
+                {load.status === 'error' && (
+                  <Banner tone="danger">{load.message}</Banner>
+                )}
+                {state.save.state === 'error' && (
+                  <Banner tone="danger">{state.save.message}</Banner>
+                )}
+              </div>
 
-          <div className="mt-8">
-            <StepBody state={state} dispatch={dispatch} />
-          </div>
-        </div>
+              <div className="mt-8">
+                <StepBody state={state} dispatch={dispatch} />
+              </div>
+            </div>
 
-        <ActionBar
-          state={state}
-          editing={editing}
-          draftStatus={autosave.status}
-          onBack={() => {
-            const previous = STEPS[index - 1];
-            if (previous) go(previous);
-          }}
-          onProceed={proceed}
-          onDiscard={discard}
-        />
+            <ActionBar
+              state={state}
+              editing={editing}
+              draftStatus={autosave.status}
+              onBack={() => {
+                const previous = STEPS[index - 1];
+                if (previous) go(previous);
+              }}
+              onProceed={proceed}
+              onDiscard={discard}
+            />
+          </>
+        )}
       </main>
     </div>
   );
@@ -409,11 +475,15 @@ function StepBody({
 function StepRail({
   state,
   editing,
+  importing,
   onGo,
+  onImport,
 }: {
   state: OnboardingState;
   editing: boolean;
+  importing: boolean;
   onGo: (step: Step) => void;
+  onImport: () => void;
 }) {
   const sectionsWithErrors = new Set(
     Object.keys(state.errors).map((key) => key.split('.')[0]),
@@ -440,7 +510,7 @@ function StepRail({
       <nav aria-label="Profile sections" className="hidden md:mt-4 md:block">
         <ol className="space-y-0.5">
           {STEPS.map((step, i) => {
-            const current = step === state.step;
+            const current = !importing && step === state.step;
             const reachable = canVisit(state, step);
             const section = step === 'review' ? null : STEP_SECTION[step];
             const invalid = section !== null && sectionsWithErrors.has(section);
@@ -480,9 +550,34 @@ function StepRail({
         </ol>
       </nav>
 
+      <div className="hidden md:mt-3 md:block md:border-t md:border-line md:pt-3">
+        <button
+          type="button"
+          onClick={onImport}
+          aria-current={importing ? 'page' : undefined}
+          className={`flex h-8 w-full items-center gap-2.5 rounded-sm px-2 text-left transition-colors duration-100 ${
+            importing
+              ? 'bg-hover font-medium text-ink'
+              : 'text-ink-2 hover:bg-hover/70 hover:text-ink'
+          }`}
+        >
+          <Icon icon={FileUp} size={14} className="shrink-0" />
+          Import from CV
+        </button>
+      </div>
+
       <p className="ml-auto text-xs text-ink-3 md:hidden">
-        {STEP_COPY[state.step].label}
+        {importing ? 'Import from CV' : STEP_COPY[state.step].label}
       </p>
+      {!importing && (
+        <button
+          type="button"
+          onClick={onImport}
+          className="text-xs font-medium text-accent md:hidden"
+        >
+          Import CV
+        </button>
+      )}
 
       <p className="hidden md:mt-auto md:flex md:items-start md:gap-2 md:px-2 md:text-xs md:text-ink-3">
         <Icon icon={ShieldCheck} size={14} className="mt-px shrink-0" />
@@ -651,19 +746,24 @@ function Banner({
   tone,
   children,
 }: {
-  tone: 'warning' | 'danger';
+  tone: 'warning' | 'danger' | 'info';
   children: ReactNode;
 }) {
+  const style = {
+    danger: 'bg-danger-soft text-danger',
+    warning: 'bg-warning-soft text-warning',
+    info: 'bg-sunken text-ink-2',
+  }[tone];
   return (
     <div
-      role="alert"
-      className={`flex items-start gap-2.5 rounded-md px-3.5 py-3 text-sm ${
-        tone === 'danger'
-          ? 'bg-danger-soft text-danger'
-          : 'bg-warning-soft text-warning'
-      }`}
+      role={tone === 'info' ? 'status' : 'alert'}
+      className={`flex items-start gap-2.5 rounded-md px-3.5 py-3 text-sm ${style}`}
     >
-      <Icon icon={CircleAlert} size={16} className="mt-px shrink-0" />
+      <Icon
+        icon={tone === 'info' ? Info : CircleAlert}
+        size={16}
+        className="mt-px shrink-0"
+      />
       <p>{children}</p>
     </div>
   );

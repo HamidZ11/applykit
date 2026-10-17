@@ -77,6 +77,11 @@ export type OnboardingAction =
   | { type: 'restored'; stored: StoredDraft; saved: UserProfile | null }
   /** Drops unsaved work: back to the saved profile, or a fresh start. */
   | { type: 'discard' }
+  /**
+   * Replaces the editable draft with one the user approved from a CV. The
+   * saved profile is untouched until the user saves.
+   */
+  | { type: 'import-cv'; draft: ProfileDraft }
   | { type: 'go'; step: Step }
   | { type: 'advance' }
   | { type: 'set-errors'; errors: FieldErrors }
@@ -147,6 +152,20 @@ export function onboardingReducer(
         restoredFrom: stored.savedAt,
       };
     }
+
+    case 'import-cv':
+      return {
+        ...state,
+        started: true,
+        draft: action.draft,
+        dirty: true,
+        errors: {},
+        restoredFrom: null,
+        open: { education: null, employment: null },
+        // First run continues through the steps; editing shows the overview.
+        step: state.saved ? 'review' : 'personal',
+        save: { state: 'idle' },
+      };
 
     case 'discard':
       return state.saved

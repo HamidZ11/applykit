@@ -18,6 +18,8 @@ import type {
   SaveResult,
 } from '@/storage/profile-store';
 import { validDraft, validProfile } from '@/test/profile-fixtures';
+import type { CvFile, CvReadResult } from '@/cv/read';
+import { CLASSIC_CV } from '@/test/cv-fixtures';
 import { OnboardingApp } from './OnboardingApp';
 import { AUTOSAVE_DELAY } from './useDraftAutosave';
 
@@ -61,12 +63,18 @@ async function flush() {
   for (let i = 0; i < 5; i++) await Promise.resolve();
 }
 
-async function render(store: ProfileStore) {
+async function render(
+  store: ProfileStore,
+  readCvFile: (file: CvFile) => Promise<CvReadResult> = () =>
+    Promise.resolve({ ok: true, kind: 'pdf', text: CLASSIC_CV, notes: [] }),
+) {
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
-    root.render(<OnboardingApp store={store} now={() => NOW} />);
+    root.render(
+      <OnboardingApp store={store} now={() => NOW} readCvFile={readCvFile} />,
+    );
     await flush();
   });
 }
@@ -634,5 +642,114 @@ describe('country', () => {
     expect(host.querySelector('[role="alert"]')?.textContent).toContain(
       'could not match “England”',
     );
+  });
+});
+
+describe('CV import', () => {
+  async function importCv() {
+    const input = host.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error('No file input');
+    Object.defineProperty(input, 'files', {
+      value: [new File(['fictional'], 'Alex_Sample_CV.pdf')],
+      configurable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    await click('Add to profile');
+  }
+
+  it('fills the draft from the welcome screen without saving anything', async () => {
+    const { store } = memoryStore();
+    await render(store);
+
+    await click('Import from CV');
+    expect(heading()).toBe('Import from your CV');
+    await importCv();
+
+    expect(heading()).toBe('Personal details');
+    expect((field('First name') as HTMLInputElement).value).toBe('Alex');
+    expect((field('Email address') as HTMLInputElement).value).toBe(
+      'alex.sample@example.com',
+    );
+    expect(host.textContent).toContain('Added 9 details from your CV');
+    expect(store.save).not.toHaveBeenCalled();
+  });
+
+  it('still requires everything the profile needs before continuing', async () => {
+    await render(memoryStore().store);
+    await click('Import from CV');
+    await importCv();
+
+    await click('Continue');
+
+    expect(heading()).toBe('Personal details');
+    expect(errorFor('Address line 1')).toBe(
+      'Enter the first line of your address',
+    );
+    expect(errorFor('First name')).toBeNull();
+  });
+
+  it('keeps imported details in the draft, not the saved profile', async () => {
+    vi.useFakeTimers();
+    const { store, drafts } = memoryStore();
+    await render(store);
+    await click('Import from CV');
+    await importCv();
+
+    await act(async () => {
+      vi.advanceTimersByTime(AUTOSAVE_DELAY);
+      await flush();
+    });
+
+    expect(drafts.at(-1)?.draft.personal.firstName).toBe('Alex');
+    expect(drafts.at(-1)?.draft.employment).toHaveLength(2);
+    expect(store.save).not.toHaveBeenCalled();
+  });
+
+  it('changes only the draft of a saved profile until it is saved', async () => {
+    const profile = validProfile();
+    const { store, saved } = memoryStore({
+      status: 'loaded',
+      profile,
+      unmatchedCountry: null,
+    });
+    await render(store);
+
+    await click('Import from CV');
+    await importCv();
+
+    expect(heading()).toBe('Your profile');
+    expect(host.textContent).toContain('https://linkedin.com/in/alex-sample');
+    expect(host.textContent).toContain('Unsaved changes');
+    expect(store.save).not.toHaveBeenCalled();
+
+    await click('Save changes');
+
+    expect(saved[0]?.links.linkedin).toBe(
+      'https://linkedin.com/in/alex-sample',
+    );
+    expect(saved[0]?.personal.address).toEqual(profile.personal.address);
+    expect(saved[0]?.employment).toHaveLength(2);
+  });
+
+  it('can discard imported changes to a saved profile', async () => {
+    const { store } = memoryStore({
+      status: 'loaded',
+      profile: validProfile(),
+      unmatchedCountry: null,
+    });
+    await render(store);
+    await click('Import from CV');
+    await importCv();
+
+    await click('Discard changes');
+    await click('Discard');
+
+    expect(host.textContent).not.toContain(
+      'https://linkedin.com/in/alex-sample',
+    );
+    expect(store.save).not.toHaveBeenCalled();
   });
 });
