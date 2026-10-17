@@ -19,6 +19,18 @@ import { CLASSIC_CV } from '@/test/cv-fixtures';
 import { validDraft } from '@/test/profile-fixtures';
 import { CvImport } from './CvImport';
 
+const extraction = vi.hoisted(() => ({ fails: false }));
+vi.mock('@/cv/extract', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/cv/extract')>();
+  return {
+    ...actual,
+    extractCv: (text: string) => {
+      if (extraction.fails) throw new Error('unexpected text');
+      return actual.extractCv(text);
+    },
+  };
+});
+
 let root: Root;
 let host: HTMLElement;
 let onApply: ReturnType<
@@ -211,6 +223,22 @@ describe('choosing a file', () => {
     expect(host.querySelector('[role="alert"]')?.textContent).toContain(
       'could not find any details',
     );
+  });
+
+  it('recovers when the details cannot be extracted', async () => {
+    extraction.fails = true;
+    try {
+      render(reads({ ok: true, kind: 'docx', text: CLASSIC_CV, notes: [] }));
+
+      await chooseFile();
+
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+        'could not read the details',
+      );
+      expect(button('Choose a file')).toBeTruthy();
+    } finally {
+      extraction.fails = false;
+    }
   });
 
   it('shows notes about the document', async () => {

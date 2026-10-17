@@ -34,6 +34,9 @@ const HEADINGS: Record<Exclude<SectionName, 'other'>, string[]> = {
     'contact details',
     'contact information',
     'personal details',
+    'links',
+    'online profiles',
+    'online presence',
   ],
 };
 

@@ -101,7 +101,19 @@ export function CvImport({
       setStage({ name: 'choose', error: CV_READ_ERROR[result.error] });
       return;
     }
-    const review = buildReview(extractCv(result.text), draft);
+    let review: ImportReview;
+    try {
+      review = buildReview(extractCv(result.text), draft);
+    } catch {
+      // Unexpected text the rules could not handle: never leave the screen
+      // stuck on "Reading".
+      setStage({
+        name: 'choose',
+        error:
+          'ApplyKit could not read the details in this CV. You can enter them yourself.',
+      });
+      return;
+    }
     const found =
       review.fields.length + review.education.length + review.employment.length;
     if (found === 0) {

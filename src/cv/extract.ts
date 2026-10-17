@@ -46,8 +46,10 @@ export function extractCv(text: string): CvExtraction {
   }
 
   return {
-    personal: extractPersonal(contact, lines),
-    links: extractLinks(lines),
+    personal: extractPersonal(contact),
+    // Links in the body (a referee's profile, an employer's GitHub) are not
+    // the applicant's.
+    links: extractLinks(contact),
     education,
     employment,
     warnings,
@@ -56,7 +58,10 @@ export function extractCv(text: string): CvExtraction {
 
 // ── Personal details ────────────────────────────────────────────────────────
 
-const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9-]+(?:\.[A-Z0-9-]+)*\.[A-Z]{2,}/gi;
+// Matches start only at a token boundary, so long runs of letters (a hash,
+// encoded data) are scanned once rather than from every position.
+const EMAIL =
+  /(?<![A-Z0-9._%+-])[A-Z0-9._%+-]+@[A-Z0-9-]+(?:\.[A-Z0-9-]+)*\.[A-Z]{2,}/gi;
 const PHONE = /\+?\(?\d[\d\s().-]{5,}\d/g;
 const PHONE_LABEL =
   /\b(?:tel(?:ephone)?|phone|mobile|mob|cell)\b\s*[:.]?|(?:^|\s)[tm]\s*[:.]\s*/i;
@@ -66,12 +71,12 @@ const NOT_A_NAME =
   /\b(?:curriculum|vitae|resume|résumé|cv|profile|contact|email|phone|mobile|address|linkedin|github|portfolio)\b/i;
 const NAME_TOKEN = /^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]*$/;
 
-function extractPersonal(contact: Line[], all: Line[]): PersonalCandidates {
+function extractPersonal(contact: Line[]): PersonalCandidates {
   const name = findName(contact);
   return {
     firstName: name?.first ?? null,
     lastName: name?.last ?? null,
-    email: findEmail(all),
+    email: findEmail(contact),
     phone: findPhone(contact),
     city: findCity(contact),
   };
@@ -170,7 +175,7 @@ function findCity(lines: Line[]): Candidate | null {
 // ── Links ───────────────────────────────────────────────────────────────────
 
 const URL_LIKE =
-  /(?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+(?:\/[^\s|,;)<>"]*)?/gi;
+  /(?<![a-z0-9.-])(?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+(?:\/[^\s|,;)<>"]*)?/gi;
 const WEB_TLD =
   /\.(?:com|co\.uk|org\.uk|uk|io|dev|me|net|org|design|app|co|page|site|xyz|studio|art|tech|online|website|eu|de|fr|nl|ie|ca|au)$/i;
 

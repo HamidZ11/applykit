@@ -300,3 +300,45 @@ describe('whole documents', () => {
     expect(result.personal.email).toBeNull();
   });
 });
+
+describe('details in the body of the CV', () => {
+  it('never offers a referee’s or employer’s contact details as yours', () => {
+    const cv = [
+      'Alex Sample',
+      'London',
+      'Experience',
+      'Engineer, Example Ltd, 2020 - 2023',
+      'Maintained github.com/example-org tooling',
+      'References',
+      'Jane Doe | jane.doe@example.org | linkedin.com/in/jane-doe | github.com/janedoe',
+    ].join('\n');
+
+    const { personal, links } = extractCv(cv);
+
+    expect(personal.email).toBeNull();
+    expect(links).toEqual({ linkedin: null, github: null, portfolio: null });
+  });
+
+  it('reads links from a Links section', () => {
+    const cv = [
+      'Alex Sample',
+      'alex.sample@example.com',
+      'Links',
+      'linkedin.com/in/alex-sample',
+      'Experience',
+      'Engineer, Example Ltd, 2020 - 2023',
+    ].join('\n');
+
+    expect(extractCv(cv).links.linkedin?.value).toBe(
+      'https://linkedin.com/in/alex-sample',
+    );
+  });
+
+  it('stays fast on very long tokens', () => {
+    const started = performance.now();
+
+    extractCv(`Alex Sample\n${'a'.repeat(50_000)}\n${'aa.'.repeat(20_000)}`);
+
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
