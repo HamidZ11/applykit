@@ -18,6 +18,7 @@ import {
   PrimaryButton,
   SecondaryButton,
 } from './primitives';
+import { useHeightTransition } from './useHeightTransition';
 import { usePanel, type PanelModel } from './usePanel';
 import { locateTarget } from './vocabulary';
 
@@ -37,6 +38,7 @@ export function Panel({ onClose }: { onClose: () => void }) {
   const { mode, phase, summary, selected, fields } = model;
   const hasForm = summary.total > 0;
   const selectedField = fields.find((field) => field.element === selected);
+  useHeightTransition(frame, mode);
 
   // Keep keyboard focus in the panel when it opens and when a mode switch
   // removes the focused control; never steal it from inside the panel.
@@ -81,7 +83,7 @@ export function Panel({ onClose }: { onClose: () => void }) {
         data-mode={mode}
         onKeyDown={onKeyDown}
         style={{ height: mode === 'expanded' ? EXPANDED_HEIGHT : 'auto' }}
-        className="ak-panel fixed right-4 bottom-4 flex max-h-[calc(100vh-32px)] w-[380px] flex-col overflow-hidden rounded-lg bg-canvas shadow-panel transition-[height] duration-200 ease-(--ease-out) outline-none [interpolate-size:allow-keywords] motion-reduce:transition-none"
+        className="ak-panel fixed right-4 bottom-4 flex max-h-[calc(100vh-32px)] w-[380px] flex-col overflow-hidden rounded-lg bg-canvas shadow-panel outline-none"
       >
         <header className="flex h-10 shrink-0 items-center gap-2 border-b border-line pr-2 pl-3.5">
           <BrandMark />

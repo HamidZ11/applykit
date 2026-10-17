@@ -49,7 +49,9 @@ One floating panel with two presentation modes:
   a per-field explanation of status and detection.
 
 Both modes are 380 px wide and anchored bottom-right; expanding only grows
-the panel upward, to at most 600 px or the viewport height. The header
+the panel upward, to at most 600 px or the viewport height. The height
+change is animated between measured pixel heights (`useHeightTransition`),
+not a CSS transition from `auto`, so it cannot overshoot. The header
 toggle, any compact plan line and "View all" expand; the toggle and Escape
 collapse.
 
