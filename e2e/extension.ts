@@ -11,7 +11,12 @@ import {
   type Worker,
 } from '@playwright/test';
 
-const EXTENSION_PATH = resolve(import.meta.dirname, '../.output/chrome-mv3');
+// The browser-test build: identical except for an open shadow root, so
+// tests can see inside the panel (see wxt.config.ts).
+const EXTENSION_PATH = resolve(
+  import.meta.dirname,
+  '../.output/chrome-mv3-e2e',
+);
 
 interface ExtensionFixtures {
   /** Throwaway browser profile; never reuse a real one. */

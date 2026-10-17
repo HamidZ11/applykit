@@ -68,6 +68,9 @@ async function mountPanel(ctx: ContentScriptContext) {
     position: 'overlay',
     zIndex: 2147483647,
     css,
+    // Closed, so page scripts cannot read the values the panel previews or
+    // press its buttons. Only the browser-test build leaves it open.
+    mode: import.meta.env.WXT_E2E === 'true' ? 'open' : 'closed',
     // Keep keystrokes typed in the panel from reaching page shortcuts.
     isolateEvents: true,
     onMount(container) {

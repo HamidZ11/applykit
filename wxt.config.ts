@@ -1,12 +1,18 @@
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'wxt';
 
+// Browser tests need to see inside the panel, so they use a build with an
+// open shadow root (see src/entrypoints/panel.content). It goes to its own
+// folder so it can never be mistaken for the build users load.
+const e2e = process.env.WXT_E2E === 'true';
+
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   srcDir: 'src',
   modules: ['@wxt-dev/module-react'],
   // Explicit imports keep domain modules visibly free of WXT globals.
   imports: false,
+  ...(e2e ? { outDirTemplate: '{{browser}}-mv{{manifestVersion}}-e2e' } : {}),
   manifest: {
     name: 'ApplyKit',
     description:

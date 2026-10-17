@@ -20,7 +20,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "wxt build && playwright test",
+    "test:e2e": "WXT_E2E=true wxt build && playwright test",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
     "postinstall": "wxt prepare"
   },
