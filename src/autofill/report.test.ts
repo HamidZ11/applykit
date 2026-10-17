@@ -523,7 +523,7 @@ describe('custom dropdowns', () => {
       target: 'country',
       fillValue: null,
       reason:
-        'This looks like your country, but it is a custom dropdown. ApplyKit fills only standard form fields so far.',
+        'This looks like your country, but it is a custom dropdown, which ApplyKit cannot fill. Choose it yourself on this page.',
     });
   });
 
@@ -534,7 +534,7 @@ describe('custom dropdowns', () => {
       status: 'unsupported',
       target: null,
       reason:
-        'This is a custom dropdown. ApplyKit fills only standard form fields so far.',
+        'This is a custom dropdown, which ApplyKit cannot fill. Choose it yourself on this page.',
     });
   });
 });

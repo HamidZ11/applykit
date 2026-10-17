@@ -23,6 +23,7 @@ import {
 } from '@/autofill/resolve';
 import { scanFields, type FieldElement } from '@/autofill/scan';
 import type { AutofillValuesResponse } from '@/messages';
+import { goToField, type GoToResult } from '@/page/navigate';
 import { readPageContext, type PageContext } from '@/page/page-context';
 import {
   initialPanelState,
@@ -70,6 +71,8 @@ export interface PanelModel extends PanelState {
     choice: SectionChoice,
     previewed: readonly FieldElement[],
   ) => Promise<ChoiceResult>;
+  /** Scrolls to a field of the current scan and focuses it if safe. */
+  goToField: (element: FieldElement) => GoToResult;
 }
 
 /**
@@ -204,6 +207,12 @@ export function usePanel(
     [loadValues, root],
   );
 
+  const goTo = useCallback(
+    (element: FieldElement) =>
+      goToField(element, new Set(state.fields.map((field) => field.element))),
+    [state.fields],
+  );
+
   const autofill = useCallback(() => {
     void runAutofill();
   }, [runAutofill]);
@@ -263,6 +272,7 @@ export function usePanel(
     next,
     previewChoice: preview,
     applyChoice,
+    goToField: goTo,
   };
 }
 

@@ -754,3 +754,133 @@ describe('missing profile details', () => {
     expect(sendMessage).toHaveBeenCalledWith(OPEN_PROFILE);
   });
 });
+
+describe('custom dropdowns', () => {
+  function withEducation(): AutofillValuesResponse {
+    const profile = fullProfile();
+    profile.education = educationRecords();
+    return ready(autofillValuesFrom(profile));
+  }
+
+  beforeEach(async () => {
+    loadFixture('custom-controls.html');
+    document.body.append(host);
+    Element.prototype.scrollIntoView = () => undefined;
+    await open(withEducation());
+  });
+
+  function groups(): [string | null, number][] {
+    return [
+      ...host.querySelectorAll('[aria-label="Fields on this form"] section'),
+    ].map((section) => [
+      section.getAttribute('aria-label'),
+      section.querySelectorAll('li').length,
+    ]);
+  }
+
+  it('counts every question once, and only native fields as fillable', () => {
+    expect(dialog().textContent).toContain('12 fields on this form');
+    expect(dialog().textContent).toContain('Fill 3 fields from your profile');
+    expect(dialog().textContent).toContain('Keep 1 entry you already typed');
+    expect(dialog().textContent).toContain('Leave 8 for you');
+
+    click('Show all fields');
+
+    expect(tabCounts()).toEqual(['All 12', 'Fillable 4', 'Needs you 8']);
+    expect(groups()).toEqual([
+      ['Personal information', 2],
+      ['Contact details', 2],
+      ['Address', 1],
+      ['Education', 5],
+      ['Sensitive disclosures', 1],
+      ['Other fields', 1],
+    ]);
+  });
+
+  it('shows the saved value for a custom dropdown and goes to it', () => {
+    click('Show all fields');
+    click(/^Country of residence/);
+
+    const text = dialog().textContent;
+    expect(text).toContain('Choose it yourself on this page.');
+    expect(text).toContain('From your saved profile');
+    expect(text).toContain('United Kingdom');
+
+    click('Go to field');
+
+    expect(document.activeElement?.id).toBe('residence');
+    expect(
+      document.getElementById('residence')?.getAttribute('aria-expanded'),
+    ).toBe('false');
+  });
+
+  it('says when several saved records could fit instead of guessing', () => {
+    click('Show all fields');
+    act(() => {
+      [...host.querySelectorAll<HTMLButtonElement>('li > button')]
+        .find((b) => b.textContent.startsWith('Institution'))
+        ?.click();
+    });
+
+    expect(dialog().textContent).toContain(
+      'Several of your saved education records could fit.',
+    );
+    expect(dialog().textContent).not.toContain('From your saved profile');
+    expect(findButton('Choose a saved record')).toBeUndefined();
+  });
+
+  it('offers no saved information for a sensitive question', () => {
+    click('Show all fields');
+    click(/^Gender/);
+
+    expect(dialog().textContent).not.toContain('From your saved profile');
+    expect(dialog().textContent).toContain('Go to field');
+  });
+
+  it('reports a field that has left the page', () => {
+    click('Show all fields');
+    click(/^Country of residence/);
+    document.getElementById('residence')?.remove();
+
+    click('Go to field');
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'This field is no longer on the page. Rescan to update the list.',
+    );
+  });
+
+  it('lists a question that appeared, after a rescan', async () => {
+    document
+      .getElementById('conditional')
+      ?.insertAdjacentHTML(
+        'beforeend',
+        '<span id="source-label">How did you hear about us?</span><div id="source" role="combobox" tabindex="0" aria-labelledby="source-label"></div>',
+      );
+    expect(dialog().textContent).toContain('12 fields on this form');
+
+    click('Rescan the page');
+    await settle();
+
+    expect(dialog().textContent).toContain('13 fields on this form');
+  });
+
+  it('steps to custom dropdowns with Next field and never fills them', async () => {
+    await autofill();
+    click(/^Go to first/);
+
+    expect(button(/^Country of residence/).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(document.getElementById('residence')?.textContent.trim()).toBe(
+      'Select…',
+    );
+    expect(announcement()).toContain('Filled 3 fields');
+  });
+
+  it('keeps compact rows free of saved values', async () => {
+    await autofill();
+
+    expect(dialog().textContent).not.toContain('United Kingdom');
+    expect(dialog().textContent).not.toContain('From your saved profile');
+  });
+});

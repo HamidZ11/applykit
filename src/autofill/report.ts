@@ -226,7 +226,7 @@ function planField(
             target
               ? `This looks like your ${AUTOFILL_FIELD_LABEL[target].toLowerCase()}, but it`
               : 'This'
-          } is a custom dropdown. ApplyKit fills only standard form fields so far.`,
+          } is a custom dropdown, which ApplyKit cannot fill. Choose it yourself on this page.`,
         };
       }
       return { ...base, status: 'unsupported', reason: REASON.unsupported };

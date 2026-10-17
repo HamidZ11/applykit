@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { UserRound } from 'lucide-react';
+import { LocateFixed, UserRound } from 'lucide-react';
 import type { EducationValue } from '@/autofill/fields';
-import type { FieldReport } from '@/autofill/report';
+import { needsYou, type FieldReport } from '@/autofill/report';
+import type { FieldElement } from '@/autofill/scan';
+import type { Suggestion } from '@/autofill/suggestion';
 import { Icon } from '@/components/ui/icons';
 import { GhostButton, PrimaryButton } from '@/components/ui/primitives';
 import { fieldKey } from './FieldRow';
@@ -22,41 +24,96 @@ export function FieldActions({
   report: FieldReport;
   model: PanelModel;
 }) {
+  const { status, suggestion } = report;
   const { values } = model;
-  switch (report.status) {
-    case 'ambiguous': {
-      const records =
-        values.status === 'ready'
-          ? values.values.education.filter((r) =>
-              report.candidates.includes(r.id),
-            )
-          : [];
-      return records.length > 1 ? (
-        <RecordChooser report={report} records={records} model={model} />
-      ) : null;
-    }
-    case 'no-value':
-    case 'no-profile':
-      return (
-        <div className="mt-1.5 -ml-2">
-          <GhostButton onClick={openProfile}>
-            <Icon icon={UserRound} size={14} />
-            {report.status === 'no-profile'
-              ? 'Set up your profile'
-              : 'Edit your profile'}
-          </GhostButton>
-        </div>
-      );
-    case 'no-option':
-      return (
+  const records =
+    status === 'ambiguous' && values.status === 'ready'
+      ? values.values.education.filter((r) => report.candidates.includes(r.id))
+      : [];
+  const profileLacksIt =
+    status === 'no-value' ||
+    status === 'no-profile' ||
+    suggestion?.kind === 'missing';
+
+  return (
+    <>
+      {suggestion && <Guidance suggestion={suggestion} />}
+      {status === 'no-option' && (
         <p className="mt-1 text-ink-2">
           Choose the right option on the page yourself. ApplyKit never picks an
           option that only looks similar.
         </p>
-      );
-    default:
-      return null;
+      )}
+      {records.length > 1 && (
+        <RecordChooser report={report} records={records} model={model} />
+      )}
+      {(profileLacksIt || needsYou(report)) && (
+        <div className="mt-1.5 -ml-2 flex flex-wrap items-center gap-1">
+          {profileLacksIt && (
+            <GhostButton onClick={openProfile}>
+              <Icon icon={UserRound} size={14} />
+              {status === 'no-profile'
+                ? 'Set up your profile'
+                : 'Edit your profile'}
+            </GhostButton>
+          )}
+          {needsYou(report) && (
+            <GoToButton element={report.field.element} model={model} />
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * What the saved profile says for a field ApplyKit cannot fill: guidance
+ * for choosing on the page, inside the panel only.
+ */
+function Guidance({ suggestion }: { suggestion: Suggestion }) {
+  if (suggestion.kind !== 'value') {
+    return <p className="mt-1 text-ink-2">{suggestion.reason}</p>;
   }
+  return (
+    <div className="mt-2 rounded-md border border-line bg-white px-2.5 py-2">
+      <p className="text-2xs text-ink-3">From your saved profile</p>
+      <p className="mt-0.5 font-medium break-words text-ink">
+        {suggestion.value}
+      </p>
+      {suggestion.note && (
+        <p className="mt-0.5 text-2xs text-ink-3">{suggestion.note}</p>
+      )}
+    </div>
+  );
+}
+
+/** Scrolls to the field and focuses it if safe; says so if it has gone. */
+function GoToButton({
+  element,
+  model,
+}: {
+  element: FieldElement;
+  model: PanelModel;
+}) {
+  const [problem, setProblem] = useState<string | null>(null);
+  return (
+    <>
+      <GhostButton
+        onClick={() => {
+          const result = model.goToField(element);
+          setProblem(result.ok ? null : result.message);
+        }}
+      >
+        <Icon icon={LocateFixed} size={14} />
+        Go to field
+      </GhostButton>
+      {problem && (
+        <p role="alert" className="basis-full pl-2 text-danger">
+          {problem}
+        </p>
+      )}
+    </>
+  );
 }
 
 /**
