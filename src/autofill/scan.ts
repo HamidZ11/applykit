@@ -2,6 +2,9 @@ import { isEducationField, type AutofillField } from './fields';
 import {
   controlContext,
   detectControl,
+  formOf,
+  nameOf,
+  placeholderOf,
   labelText,
   normalise,
   type Evidence,
@@ -10,6 +13,21 @@ import {
 
 export type FormControl =
   HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+/**
+ * What a field is on the page: a native control ApplyKit can read and
+ * fill, or a custom control (an ARIA combobox, listbox or popup button)
+ * that it only reports and points at.
+ */
+export type FieldElement = FormControl | HTMLElement;
+
+export function isFormControl(element: Element): element is FormControl {
+  return (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLSelectElement ||
+    element instanceof HTMLTextAreaElement
+  );
+}
 
 export type FieldKind =
   | 'text'
@@ -50,8 +68,15 @@ export type FieldSupport =
       custom?: { field: AutofillField | null; evidence: Evidence[] };
     };
 
+/** A field whose element is a native control, the only kind ever written. */
+export type ControlField = ScannedField & { element: FormControl };
+
+export function isControlField(field: ScannedField): field is ControlField {
+  return isFormControl(field.element);
+}
+
 export interface ScannedField {
-  element: FormControl;
+  element: FieldElement;
   /** Human-readable question, taken from the page's own labels. */
   label: string;
   /** The enclosing section's legend, when the form has sections. */
@@ -201,7 +226,7 @@ function withinApplicationForm(fields: ScannedField[]): ScannedField[] {
   const recognised = new Map<HTMLFormElement | null, number>();
   for (const field of fields) {
     if (field.support.status === 'match') {
-      const form = field.element.form;
+      const form = formOf(field.element);
       recognised.set(form, (recognised.get(form) ?? 0) + 1);
     }
   }
@@ -214,7 +239,7 @@ function withinApplicationForm(fields: ScannedField[]): ScannedField[] {
       best = count;
     }
   }
-  return fields.filter((field) => field.element.form === application);
+  return fields.filter((field) => formOf(field.element) === application);
 }
 
 /** "Confirm email", "Re-enter your email address" and the like. */
@@ -247,7 +272,7 @@ function firstOfEachDetail(fields: ScannedField[]): ScannedField[] {
       return field;
     }
     const text = normalise(
-      [labelText(element), element.name, element.id].join(' '),
+      [labelText(element), nameOf(element), element.id].join(' '),
     );
     if (CONFIRMATION.test(text)) return field;
     return { ...field, support: { ...support, status: 'duplicate' } };
@@ -353,7 +378,7 @@ function fieldLabel(
   const candidates = [
     question ? legendText(question) : '',
     labelText(element),
-    'placeholder' in element ? element.placeholder : '',
+    placeholderOf(element),
     element.name,
   ];
   for (const candidate of candidates) {

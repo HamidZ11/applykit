@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadFixture, loadHtml } from '@/test/load-fixture';
+import { formOf, nameOf } from './detect';
 import { scanFields, type ScannedField } from './scan';
 
 /** What the engine decided, in one readable value per field. */
@@ -88,7 +89,7 @@ describe('scanFields', () => {
 
     const byId = Object.fromEntries(
       scanFields(document).map((field) => [
-        field.element.id || field.element.name,
+        field.element.id || nameOf(field.element),
         outcome(field),
       ]),
     );
@@ -143,9 +144,9 @@ describe('scanFields', () => {
       </form>
     `);
 
-    expect(scanFields(document).map((field) => field.element.form?.id)).toEqual(
-      ['apply', 'apply'],
-    );
+    expect(
+      scanFields(document).map((field) => formOf(field.element)?.id),
+    ).toEqual(['apply', 'apply']);
   });
 
   it('skips controls an applicant never completes', () => {
@@ -315,7 +316,7 @@ describe('a heading-based internship form', () => {
 
     const byId = Object.fromEntries(
       scanFields(document).map((field) => [
-        field.element.id || field.element.name,
+        field.element.id || nameOf(field.element),
         outcome(field),
       ]),
     );

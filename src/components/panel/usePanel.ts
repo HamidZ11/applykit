@@ -21,7 +21,7 @@ import {
   type ChoicePreview,
   type SectionChoice,
 } from '@/autofill/resolve';
-import { scanFields, type FormControl } from '@/autofill/scan';
+import { scanFields, type FieldElement } from '@/autofill/scan';
 import type { AutofillValuesResponse } from '@/messages';
 import { readPageContext, type PageContext } from '@/page/page-context';
 import {
@@ -56,7 +56,7 @@ export interface PanelModel extends PanelState {
   collapse: () => void;
   setFilter: (filter: FieldFilter) => void;
   /** Selects a field, or clears the selection when it is already selected. */
-  toggleSelect: (element: FormControl) => void;
+  toggleSelect: (element: FieldElement) => void;
   clearSelection: () => void;
   /** Moves to the next field that needs the user, in priority order. */
   next: () => void;
@@ -68,7 +68,7 @@ export interface PanelModel extends PanelState {
    */
   applyChoice: (
     choice: SectionChoice,
-    previewed: readonly FormControl[],
+    previewed: readonly FieldElement[],
   ) => Promise<ChoiceResult>;
 }
 
@@ -157,7 +157,7 @@ export function usePanel(
   const applyChoice = useCallback(
     async (
       choice: SectionChoice,
-      previewed: readonly FormControl[],
+      previewed: readonly FieldElement[],
     ): Promise<ChoiceResult> => {
       if (filling.current) {
         return { ok: false, message: 'ApplyKit is still filling. Try again.' };
@@ -227,7 +227,7 @@ export function usePanel(
     dispatch({ type: 'select', element: null });
   }, []);
   const toggleSelect = useCallback(
-    (element: FormControl) => {
+    (element: FieldElement) => {
       dispatch({
         type: 'select',
         element: state.selected === element ? null : element,

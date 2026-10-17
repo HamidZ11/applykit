@@ -15,7 +15,12 @@ import {
   type RecordChoice,
   type SectionChoices,
 } from './plan-education';
-import type { ScannedField } from './scan';
+import {
+  isControlField,
+  isFormControl,
+  type ControlField,
+  type ScannedField,
+} from './scan';
 
 /**
  * What happens, or happened, to one field.
@@ -216,6 +221,10 @@ function planField(
     target: support.field,
     evidence: support.evidence,
   };
+  // Only native controls are matched for filling (see scan.ts).
+  if (!isControlField(field)) {
+    return { ...matched, status: 'unsupported', reason: REASON.unsupported };
+  }
   if (!context) {
     return { ...matched, status: 'no-profile', reason: REASON.noProfile };
   }
@@ -266,7 +275,7 @@ function planField(
 }
 
 function planValue(
-  field: ScannedField,
+  field: ControlField,
   target: AutofillField,
   { values, splitPhone, education, now }: FormContext,
 ): Planned {
@@ -334,7 +343,7 @@ function planNationalNumber(values: AutofillValues): Planned {
  * code; when several countries share it (+44, +1), the number's own
  * country picks between them, or nothing is chosen.
  */
-function planCallingCode(field: ScannedField, values: AutofillValues): Planned {
+function planCallingCode(field: ControlField, values: AutofillValues): Planned {
   const phone = phoneOf(values);
   if ('reason' in phone) return phone;
   const code = phone.callingCode;
@@ -408,7 +417,7 @@ function planPreferredName(values: AutofillValues): Planned {
  * selects get the one option that exactly matches the country, or nothing.
  */
 function planCountry(
-  field: ScannedField,
+  field: ControlField,
   country: CountryValue | null,
 ): Planned {
   if (!country) {
@@ -477,6 +486,8 @@ function implicitFirstOption(select: HTMLSelectElement): boolean {
 /** The user's own entry, or null when the control is empty. */
 export function currentValue(field: ScannedField): string | null {
   const { element } = field;
+  // A custom control's visible text is not proof of an answer.
+  if (!isFormControl(element)) return null;
   if (element instanceof HTMLSelectElement) {
     const option = element.selectedOptions[0];
     if (!option || isPlaceholderOption(option)) return null;

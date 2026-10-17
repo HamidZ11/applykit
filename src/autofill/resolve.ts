@@ -1,7 +1,7 @@
 import type { AutofillValues, EducationValue } from './fields';
 import { isEducationField } from './fields';
 import { planFill, type FieldReport } from './report';
-import type { FormControl, ScannedField } from './scan';
+import type { FieldElement, ScannedField } from './scan';
 
 /**
  * User-approved education choices. When several saved records fit a
@@ -82,7 +82,7 @@ export function confirmChoice(
   fields: readonly ScannedField[],
   values: AutofillValues,
   choice: SectionChoice,
-  previewed: readonly FormControl[],
+  previewed: readonly FieldElement[],
   now: Date = new Date(),
 ): ChoiceCheck {
   if (!values.education.some((r) => r.id === choice.recordId)) {
@@ -111,8 +111,8 @@ export function confirmChoice(
 }
 
 function sameElements(
-  a: readonly FormControl[],
-  b: readonly FormControl[],
+  a: readonly FieldElement[],
+  b: readonly FieldElement[],
 ): boolean {
   const set = new Set(a);
   return a.length === b.length && b.every((element) => set.has(element));

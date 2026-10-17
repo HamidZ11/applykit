@@ -1,5 +1,5 @@
 import { needsYou, type FieldReport } from '@/autofill/report';
-import type { FormControl, ScannedField } from '@/autofill/scan';
+import type { FieldElement, ScannedField } from '@/autofill/scan';
 import type { AutofillValuesResponse } from '@/messages';
 
 /**
@@ -32,7 +32,7 @@ export interface PanelState {
    * outcomes. They take precedence over planned or autofill reports for the
    * same element, until a rescan.
    */
-  confirmed: ReadonlyMap<FormControl, FieldReport>;
+  confirmed: ReadonlyMap<FieldElement, FieldReport>;
   /** Screen-reader text for the latest choice the user confirmed. */
   notice: string;
   /**
@@ -40,14 +40,14 @@ export interface PanelState {
    * Shared by both modes: the compact queue's current step and the expanded
    * list's selected row are the same thing.
    */
-  selected: FormControl | null;
+  selected: FieldElement | null;
 }
 
 export type PanelAction =
   | { type: 'expand'; filter?: FieldFilter }
   | { type: 'collapse' }
   | { type: 'set-filter'; filter: FieldFilter }
-  | { type: 'select'; element: FormControl | null }
+  | { type: 'select'; element: FieldElement | null }
   | { type: 'values'; values: AutofillValuesResponse }
   | { type: 'fill-started' }
   /** Autofill could not start, e.g. the profile was removed meanwhile. */
@@ -124,9 +124,9 @@ export function panelReducer(
 }
 
 function keepIfPresent(
-  element: FormControl | null,
+  element: FieldElement | null,
   fields: readonly ScannedField[],
-): FormControl | null {
+): FieldElement | null {
   return element && fields.some((field) => field.element === element)
     ? element
     : null;
@@ -139,8 +139,8 @@ function keepIfPresent(
  */
 export function nextInQueue(
   queue: readonly FieldReport[],
-  selected: FormControl | null,
-): FormControl | null {
+  selected: FieldElement | null,
+): FieldElement | null {
   if (queue.length === 0) return null;
   const index = queue.findIndex((report) => report.field.element === selected);
   return queue[(index + 1) % queue.length]?.field.element ?? null;

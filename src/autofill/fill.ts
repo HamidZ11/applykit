@@ -1,4 +1,5 @@
 import { comparable } from './options';
+import { isFormControl } from './scan';
 import { currentValue, type FieldReport } from './report';
 
 /** Lets the page's own scripts react before results are checked. */
@@ -23,6 +24,8 @@ export async function fillFields(
   const reports = plan.map((report): FieldReport => {
     if (report.status !== 'fill' || report.fillValue === null) return report;
     const { element } = report.field;
+    // Only native controls are ever written; custom controls are reported.
+    if (!isFormControl(element)) return report;
 
     // The page may have changed since the plan was made.
     if (!element.isConnected) return detached(report);
@@ -62,6 +65,7 @@ export async function fillFields(
 /** Whether the page kept the value ApplyKit wrote. */
 function verify(report: FieldReport): FieldReport {
   const { element } = report.field;
+  if (!isFormControl(element)) return report;
   if (!element.isConnected) return detached(report);
   const expected = report.fillValue ?? '';
   const actual = element.value;

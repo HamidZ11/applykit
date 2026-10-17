@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { loadFixture, loadHtml } from '@/test/load-fixture';
 import { categoryOf } from './categories';
+import { nameOf } from './detect';
 import { scanFields } from './scan';
 
 function categories(): Record<string, string> {
   return Object.fromEntries(
     scanFields(document).map((field) => [
-      field.element.id || field.element.name,
+      field.element.id || nameOf(field.element),
       categoryOf(field),
     ]),
   );

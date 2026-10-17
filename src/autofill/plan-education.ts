@@ -20,7 +20,7 @@ import {
   type EducationValue,
 } from './fields';
 import { comparable, exactOptions, usableOptions } from './options';
-import type { ScannedField } from './scan';
+import type { ControlField, ScannedField } from './scan';
 
 /**
  * Education planning: which saved record a form's education fields are
@@ -157,7 +157,7 @@ function choose(
 
 /** The value one education field gets from its record. */
 export function planEducation(
-  field: ScannedField,
+  field: ControlField,
   target: EducationField,
   record: EducationValue,
   now: Date,
@@ -187,7 +187,7 @@ export function planEducation(
  * degree" for "BSc"). Never the nearest-looking option.
  */
 function planChoice(
-  field: ScannedField,
+  field: ControlField,
   value: string,
   equivalent: ((optionText: string) => boolean) | null,
 ): Planned {
@@ -220,7 +220,7 @@ function planChoice(
 }
 
 function planGrade(
-  field: ScannedField,
+  field: ControlField,
   record: EducationValue,
   now: Date,
 ): Planned {
@@ -261,7 +261,7 @@ export function endKind(label: string): DateKind {
 }
 
 function planDate(
-  field: ScannedField,
+  field: ControlField,
   saved: string,
   kind: DateKind,
   now: Date,

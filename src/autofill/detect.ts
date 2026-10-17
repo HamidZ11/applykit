@@ -16,8 +16,44 @@ import {
  * skip is better than a wrong fill.
  */
 
-export type DetectableControl =
-  HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+/**
+ * Anything detection reads: native controls, and custom controls such as
+ * ARIA comboboxes, which have no `name`, `labels` or `form` of their own.
+ */
+export type DetectableControl = HTMLElement;
+
+/** The control's `name`, or its name attribute for custom controls. */
+export function nameOf(control: DetectableControl): string {
+  return 'name' in control && typeof control.name === 'string'
+    ? control.name
+    : (control.getAttribute('name') ?? '');
+}
+
+/** The form a control belongs to: its own `form`, else the one around it. */
+export function formOf(control: DetectableControl): HTMLFormElement | null {
+  return 'form' in control && control.form instanceof HTMLFormElement
+    ? control.form
+    : control.closest('form');
+}
+
+/** The placeholder, or `aria-placeholder` on custom controls. */
+export function placeholderOf(control: DetectableControl): string {
+  return control instanceof HTMLInputElement ||
+    control instanceof HTMLTextAreaElement
+    ? control.placeholder
+    : (control.getAttribute('aria-placeholder') ?? '');
+}
+
+/** `<label>` elements for the control, including `for` on custom controls. */
+function labelsOf(control: DetectableControl): Iterable<HTMLLabelElement> {
+  if ('labels' in control && control.labels instanceof NodeList) {
+    return control.labels as NodeListOf<HTMLLabelElement>;
+  }
+  if (!control.id) return [];
+  return control.ownerDocument.querySelectorAll<HTMLLabelElement>(
+    `label[for="${CSS.escape(control.id)}"]`,
+  );
+}
 
 export type Signal =
   | 'autocomplete'
@@ -314,7 +350,7 @@ export function detectControl(control: DetectableControl): Detection {
   const inEmployment = EMPLOYMENT_CONTEXT.test(surroundings);
 
   const identifiers = [
-    control.name,
+    nameOf(control),
     control.id,
     control.className,
     ...texts.map((t) => t.raw),
@@ -504,9 +540,9 @@ interface TextSignal {
 function textSignals(control: DetectableControl): TextSignal[] {
   const raw: [Signal, string][] = [
     ['label', labelText(control)],
-    ['name', control.name],
+    ['name', nameOf(control)],
     ['id', control.id],
-    ['placeholder', 'placeholder' in control ? control.placeholder : ''],
+    ['placeholder', placeholderOf(control)],
   ];
   return raw
     .map(([signal, text]) => ({
@@ -576,7 +612,7 @@ const SECTIONS = 'fieldset, section, [role="group"], [role="region"]';
  */
 function headingElementBefore(control: DetectableControl): Element | null {
   const scope =
-    control.closest(SECTIONS) ?? control.form ?? control.ownerDocument.body;
+    control.closest(SECTIONS) ?? formOf(control) ?? control.ownerDocument.body;
   let nearest: Element | null = null;
   for (const heading of scope.querySelectorAll(HEADINGS)) {
     if (
@@ -606,13 +642,13 @@ export function controlContext(control: DetectableControl): ControlContext {
   const heading = headingElementBefore(control);
   return {
     text: normalise(`${sectionText(control)} ${heading?.textContent ?? ''}`),
-    group: control.closest(SECTIONS) ?? heading ?? control.form,
+    group: control.closest(SECTIONS) ?? heading ?? formOf(control),
   };
 }
 
 export function labelText(control: DetectableControl): string {
   const parts: string[] = [];
-  for (const label of control.labels ?? []) parts.push(ownText(label));
+  for (const label of labelsOf(control)) parts.push(ownText(label));
   const labelledBy = control.getAttribute('aria-labelledby');
   if (labelledBy) {
     for (const id of labelledBy.split(/\s+/)) {
