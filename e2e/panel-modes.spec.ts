@@ -140,7 +140,7 @@ test.describe('compact mode', () => {
 });
 
 test.describe('expanded mode', () => {
-  test('lists every field by section', async ({ page, clickToolbar }) => {
+  test('lists every field by topic', async ({ page, clickToolbar }) => {
     const panel = await openWithTypedEmail(page, clickToolbar);
     await panel.getByRole('button', { name: 'Show all fields' }).click();
 
@@ -148,9 +148,10 @@ test.describe('expanded mode', () => {
     await expect(fieldList(panel).getByRole('listitem')).toHaveCount(15);
     for (const section of [
       'Personal information',
-      'Experience',
+      'Contact details',
+      'Address',
+      'Employment',
       'Application questions',
-      'Privacy',
     ]) {
       await expect(
         fieldList(panel).getByRole('region', { name: section }),

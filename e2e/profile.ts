@@ -19,7 +19,26 @@ export const E2E_PROFILE = {
       country: 'GB',
     },
   },
-  education: [],
+  education: [
+    {
+      id: 'degree',
+      institution: 'University of Example',
+      qualification: 'BSc Computer Science',
+      fieldOfStudy: 'Computer Science',
+      startDate: '2024-09',
+      endDate: '2027-06',
+      grade: '',
+    },
+    {
+      id: 'a-levels',
+      institution: 'Example Sixth Form College',
+      qualification: 'A levels',
+      fieldOfStudy: 'Mathematics, Physics, Computing',
+      startDate: '2022-09',
+      endDate: '2024-06',
+      grade: 'A*AA',
+    },
+  ],
   employment: [],
   links: {
     linkedin: 'https://www.linkedin.com/in/alex-sample',
