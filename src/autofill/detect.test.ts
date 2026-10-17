@@ -404,3 +404,39 @@ describe('date format hints in labels', () => {
     );
   });
 });
+
+describe('technical names versus wording', () => {
+  it.each([
+    [
+      '<label>University <select id="nativeSelect"></select></label>',
+      'institution',
+    ],
+    [
+      '<label>Country <select name="originCountrySelect"></select></label>',
+      'country',
+    ],
+    ['<label>Phone <input type="tel" id="pageField3"></label>', 'phone'],
+    ['<label>Email <input id="payload-email"></label>', 'email'],
+  ])('does not let an identifier make %s sensitive', (html, field) => {
+    expect(matched(html)).toBe(field);
+  });
+
+  it.each([
+    // Wording decides.
+    '<label>Native language <input></label>',
+    '<label>Country of origin <select id="countrySelect"></select></label>',
+    '<label>Age range <select></select></label>',
+    '<label>Do you have a medical condition we should know about? <select></select></label>',
+    '<label>Political affiliation <input></label>',
+    // Strong identifiers still decide when the label disagrees.
+    '<label>Country <select name="nationality"></select></label>',
+    '<label>Please select <select name="gender"></select></label>',
+    // With no label at all, identifiers are all there is.
+    '<select name="ageRange"></select>',
+    '<select id="ethnicity"></select>',
+    // Section context decides too.
+    '<fieldset><legend>Equal opportunities</legend><label>Country <select></select></label></fieldset>',
+  ])('keeps %s protected', (html) => {
+    expect(detect(html)).toEqual({ kind: 'manual', reason: 'sensitive' });
+  });
+});

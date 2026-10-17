@@ -315,7 +315,16 @@ function excluded(field: AutofillField, text: string): boolean {
 
 /** Never answered automatically. */
 const SENSITIVE =
-  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|pay|wage|disabilit\w*|disabled|gender|sex|ethnic\w*|race|religio\w*|belief|sexual\w*|orientation|age|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|origin|native|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste)\b/;
+  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|pay|wage|disabilit\w*|disabled|gender|sex|ethnic\w*|race|religio\w*|belief|sexual\w*|orientation|age|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|origin|native|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*)\b/;
+
+/**
+ * The same, for technical `name` and `id` attributes of a labelled control.
+ * Words that are also common in component and framework names ("native"
+ * select, "origin", "page", "age") are left out: they decide only when they
+ * appear in wording people read, or when the control has no label at all.
+ */
+const SENSITIVE_IDENTIFIER =
+  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|disabilit\w*|disabled|gender|ethnic\w*|religio\w*|sexual\w*|orientation|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*)\b/;
 const CONSENT =
   /\b(?:consent|agree\w*|declar\w*|terms|privacy|acknowledg\w*|certify|newsletter|marketing|subscribe|opt in)\b/;
 const VERIFICATION = /captcha|turnstile|g-recaptcha/i;
@@ -358,7 +367,24 @@ export function detectControl(control: DetectableControl): Detection {
   if (VERIFICATION.test(identifiers)) {
     return { kind: 'manual', reason: 'verification' };
   }
-  if (SENSITIVE.test(all) || SENSITIVE.test(heading)) {
+  // Wording people read decides; technical names add evidence, but never
+  // make an ordinary labelled field sensitive on their own.
+  const wording = [
+    ...texts
+      .filter((t) => t.signal === 'label' || t.signal === 'placeholder')
+      .map((t) => t.normalised),
+    context,
+    heading,
+  ].join(' | ');
+  const technical = texts
+    .filter((t) => t.signal === 'name' || t.signal === 'id')
+    .map((t) => t.normalised)
+    .join(' | ');
+  const hasLabel = texts.some((t) => t.signal === 'label');
+  if (
+    SENSITIVE.test(wording) ||
+    (hasLabel ? SENSITIVE_IDENTIFIER : SENSITIVE).test(technical)
+  ) {
     return { kind: 'manual', reason: 'sensitive' };
   }
   if (CONSENT.test(all)) return { kind: 'manual', reason: 'consent' };
