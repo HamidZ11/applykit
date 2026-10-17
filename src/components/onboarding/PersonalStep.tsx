@@ -1,4 +1,5 @@
 import type { Dispatch } from 'react';
+import { CountryField } from './CountryField';
 import { FieldGrid, FieldSection, TextField } from './fields';
 import type { OnboardingAction, OnboardingState } from './onboarding-state';
 
@@ -128,9 +129,8 @@ export function PersonalStep({
               setAddress({ postcode });
             }}
           />
-          <TextField
+          <CountryField
             label="Country"
-            autoComplete="country-name"
             value={address.country}
             error={error('address.country')}
             onValueChange={(country) => {

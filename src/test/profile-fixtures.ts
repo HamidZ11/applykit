@@ -22,7 +22,7 @@ export function validDraft(): ProfileDraft {
       city: 'London',
       region: '',
       postcode: 'N1 9GU',
-      country: 'United Kingdom',
+      country: 'GB',
     },
   };
   return draft;

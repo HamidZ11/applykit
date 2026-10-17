@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { findCountryCode, isCountryCode } from './countries';
 import {
   EMPLOYMENT_TYPES,
   PROFILE_SCHEMA_VERSION,
@@ -80,21 +81,30 @@ function link(host?: { domain: string; name: string }) {
     });
 }
 
-export const personalSchema = z.object({
-  firstName: required('Enter your first name'),
-  lastName: required('Enter your last name'),
-  preferredName: optional,
-  email,
-  phone,
-  address: z.object({
-    line1: required('Enter the first line of your address'),
-    line2: optional,
-    city: required('Enter your town or city'),
-    region: optional,
-    postcode,
-    country: required('Enter your country'),
-  }),
-}) satisfies z.ZodType<PersonalDetails>;
+const country = z
+  .string()
+  .min(1, 'Choose your country')
+  .refine(isCountryCode, 'Choose a country from the list');
+
+function personalWith(countryField: z.ZodType<string>) {
+  return z.object({
+    firstName: required('Enter your first name'),
+    lastName: required('Enter your last name'),
+    preferredName: optional,
+    email,
+    phone,
+    address: z.object({
+      line1: required('Enter the first line of your address'),
+      line2: optional,
+      city: required('Enter your town or city'),
+      region: optional,
+      postcode,
+      country: countryField,
+    }),
+  }) satisfies z.ZodType<PersonalDetails>;
+}
+
+export const personalSchema = personalWith(country);
 
 export const educationSchema = z
   .object({
@@ -179,12 +189,24 @@ const draftSchema = z.object({
   links: linksSchema,
 });
 
+const metadataSchema = z.object({
+  schemaVersion: z.literal(PROFILE_SCHEMA_VERSION),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
 export const userProfileSchema = draftSchema.extend({
-  metadata: z.object({
-    schemaVersion: z.literal(PROFILE_SCHEMA_VERSION),
-    createdAt: z.iso.datetime(),
-    updatedAt: z.iso.datetime(),
-  }),
+  metadata: metadataSchema,
+}) satisfies z.ZodType<UserProfile>;
+
+/**
+ * Stored profiles may have an empty country: a version 1 profile whose free
+ * text could not be matched to a country keeps its other data, and the user
+ * is asked to choose the country rather than losing the profile.
+ */
+const storedProfileSchema = draftSchema.extend({
+  personal: personalWith(z.union([country, z.literal('')])),
+  metadata: metadataSchema,
 }) satisfies z.ZodType<UserProfile>;
 
 /** The parts of a profile that are validated independently, one per step. */
@@ -226,9 +248,49 @@ export function validateDraft(draft: ProfileDraft): DraftValidation {
 }
 
 /** Parses untrusted stored data, returning null unless it is a valid profile. */
-export function parseStoredProfile(value: unknown): UserProfile | null {
-  const result = userProfileSchema.safeParse(value);
-  return result.success ? result.data : null;
+export interface StoredProfile {
+  profile: UserProfile;
+  /** Free-text country from a version 1 profile that matched no country. */
+  unmatchedCountry: string | null;
+}
+
+/**
+ * Parses untrusted stored data, migrating older schema versions first.
+ * Returns null unless the result is a valid profile.
+ */
+export function parseStoredProfile(value: unknown): StoredProfile | null {
+  const { migrated, unmatchedCountry } = migrateStoredProfile(value);
+  const result = storedProfileSchema.safeParse(migrated);
+  return result.success ? { profile: result.data, unmatchedCountry } : null;
+}
+
+/** Version 1 → 2: free-text country to an ISO 3166-1 alpha-2 code. */
+function migrateStoredProfile(value: unknown): {
+  migrated: unknown;
+  unmatchedCountry: string | null;
+} {
+  if (!isRecord(value) || !isRecord(value.metadata)) {
+    return { migrated: value, unmatchedCountry: null };
+  }
+  if (value.metadata.schemaVersion !== 1) {
+    return { migrated: value, unmatchedCountry: null };
+  }
+  const personal = isRecord(value.personal) ? value.personal : {};
+  const address = isRecord(personal.address) ? personal.address : {};
+  const text = typeof address.country === 'string' ? address.country : '';
+  const code = findCountryCode(text);
+  return {
+    migrated: {
+      ...value,
+      personal: { ...personal, address: { ...address, country: code ?? '' } },
+      metadata: { ...value.metadata, schemaVersion: 2 },
+    },
+    unmatchedCountry: code === null && text.trim() !== '' ? text.trim() : null,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**

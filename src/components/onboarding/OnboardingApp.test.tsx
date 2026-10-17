@@ -9,14 +9,17 @@ import {
   it,
   vi,
 } from 'vitest';
+import { DRAFT_SCHEMA_VERSION, type StoredDraft } from '@/domain/profile-draft';
 import type { UserProfile } from '@/domain/user-profile';
 import type {
+  DraftLoadResult,
   LoadResult,
   ProfileStore,
   SaveResult,
 } from '@/storage/profile-store';
-import { validProfile } from '@/test/profile-fixtures';
+import { validDraft, validProfile } from '@/test/profile-fixtures';
 import { OnboardingApp } from './OnboardingApp';
+import { AUTOSAVE_DELAY } from './useDraftAutosave';
 
 const NOW = new Date('2026-10-17T12:00:00.000Z');
 
@@ -26,18 +29,36 @@ let host: HTMLElement;
 /** An in-memory store standing in for browser storage. */
 function memoryStore(
   initial: LoadResult = { status: 'empty' },
-  saveResult?: SaveResult,
+  options: {
+    saveResult?: SaveResult;
+    draft?: DraftLoadResult;
+    draftWrites?: boolean;
+  } = {},
 ) {
   const saved: UserProfile[] = [];
+  const drafts: StoredDraft[] = [];
   const store = {
     load: vi.fn(() => Promise.resolve(initial)),
     save: vi.fn((profile: UserProfile) => {
-      if (saveResult) return Promise.resolve(saveResult);
+      if (options.saveResult) return Promise.resolve(options.saveResult);
       saved.push(profile);
       return Promise.resolve<SaveResult>({ status: 'saved', profile });
     }),
+    loadDraft: vi.fn(() =>
+      Promise.resolve<DraftLoadResult>(options.draft ?? { status: 'none' }),
+    ),
+    saveDraft: vi.fn((draft: StoredDraft) => {
+      if (options.draftWrites === false) return Promise.resolve(false);
+      drafts.push(draft);
+      return Promise.resolve(true);
+    }),
+    clearDraft: vi.fn(() => Promise.resolve(true)),
   } satisfies ProfileStore;
-  return { store, saved };
+  return { store, saved, drafts };
+}
+
+async function flush() {
+  for (let i = 0; i < 5; i++) await Promise.resolve();
 }
 
 async function render(store: ProfileStore) {
@@ -46,7 +67,7 @@ async function render(store: ProfileStore) {
   root = createRoot(host);
   await act(async () => {
     root.render(<OnboardingApp store={store} now={() => NOW} />);
-    await Promise.resolve();
+    await flush();
   });
 }
 
@@ -55,6 +76,7 @@ beforeAll(() => {
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   window.scrollTo = () => undefined;
+  Element.prototype.scrollIntoView = () => undefined;
 });
 
 beforeEach(() => {
@@ -65,6 +87,7 @@ afterEach(() => {
   act(() => {
     root.unmount();
   });
+  vi.useRealTimers();
 });
 
 function heading(): string {
@@ -101,6 +124,20 @@ function type(name: string, value: string, index = 0) {
   });
 }
 
+/** Searches the country combobox and chooses the best match with Enter. */
+function chooseCountry(search: string) {
+  const control = field('Country');
+  act(() => {
+    control.focus();
+  });
+  type('Country', search);
+  act(() => {
+    control.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+  });
+}
+
 function button(name: string | RegExp): HTMLButtonElement {
   const match = [...host.querySelectorAll('button')].find((candidate) => {
     const label =
@@ -114,8 +151,12 @@ function button(name: string | RegExp): HTMLButtonElement {
 async function click(name: string | RegExp) {
   await act(async () => {
     button(name).click();
-    await Promise.resolve();
+    await flush();
   });
+}
+
+async function start() {
+  await click('Get started');
 }
 
 function errorFor(name: string, index = 0): string | null {
@@ -137,12 +178,25 @@ function fillPersonal() {
   type('Address line 1', '1 Example Street');
   type('Town or city', 'London');
   type('Postcode', 'N1 9GU');
-  type('Country', 'United Kingdom');
+  chooseCountry('United Kingdom');
+}
+
+function storedDraft(overrides: Partial<StoredDraft> = {}): StoredDraft {
+  return {
+    schemaVersion: DRAFT_SCHEMA_VERSION,
+    savedAt: '2026-10-16T18:30:00.000Z',
+    basedOn: null,
+    step: 'education',
+    furthest: 1,
+    draft: validDraft(),
+    ...overrides,
+  };
 }
 
 describe('first-run onboarding', () => {
   it('requires personal details before continuing', async () => {
     await render(memoryStore().store);
+    await start();
 
     await click('Continue');
 
@@ -151,11 +205,13 @@ describe('first-run onboarding', () => {
     expect(errorFor('Email address')).toBe('Enter your email address');
     expect(errorFor('Preferred name')).toBeNull();
     expect(errorFor('Address line 2')).toBeNull();
+    expect(errorFor('Country')).toBe('Choose your country');
     expect(document.activeElement).toBe(field('First name'));
   });
 
   it('keeps values when going back and forth between steps', async () => {
     await render(memoryStore().store);
+    await start();
     fillPersonal();
     type('Preferred name', 'Al');
 
@@ -170,6 +226,7 @@ describe('first-run onboarding', () => {
 
   it('adds, validates, edits and removes an education record', async () => {
     await render(memoryStore().store);
+    await start();
     fillPersonal();
     await click('Continue');
 
@@ -203,6 +260,7 @@ describe('first-run onboarding', () => {
   it('saves a complete profile after review', async () => {
     const { store, saved } = memoryStore();
     await render(store);
+    await start();
     fillPersonal();
     await click('Continue'); // → Education, left empty
     await click('Continue'); // → Experience
@@ -227,7 +285,11 @@ describe('first-run onboarding', () => {
 
     expect(store.save).toHaveBeenCalledTimes(1);
     expect(saved[0]).toMatchObject({
-      personal: { firstName: 'Alex', email: 'alex.sample@example.com' },
+      personal: {
+        firstName: 'Alex',
+        email: 'alex.sample@example.com',
+        address: { country: 'GB' },
+      },
       education: [],
       employment: [
         {
@@ -240,7 +302,7 @@ describe('first-run onboarding', () => {
       ],
       links: { portfolio: 'https://example.com', linkedin: '' },
       metadata: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         createdAt: NOW.toISOString(),
         updatedAt: NOW.toISOString(),
       },
@@ -253,9 +315,15 @@ describe('first-run onboarding', () => {
   it('shows a storage failure and keeps the entered data', async () => {
     const { store } = memoryStore(
       { status: 'empty' },
-      { status: 'error', message: 'ApplyKit could not save your profile.' },
+      {
+        saveResult: {
+          status: 'error',
+          message: 'ApplyKit could not save your profile.',
+        },
+      },
     );
     await render(store);
+    await start();
     fillPersonal();
     for (let i = 0; i < 4; i++) await click('Continue');
 
@@ -276,6 +344,7 @@ describe('editing a saved profile', () => {
     const { store, saved } = memoryStore({
       status: 'loaded',
       profile: existing,
+      unmatchedCountry: null,
     });
     await render(store);
 
@@ -291,7 +360,7 @@ describe('editing a saved profile', () => {
 
     expect(saved[0]?.personal.phone).toBe('020 7946 0001');
     expect(saved[0]?.metadata).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: NOW.toISOString(),
     });
@@ -301,6 +370,7 @@ describe('editing a saved profile', () => {
     const { store } = memoryStore({
       status: 'loaded',
       profile: validProfile(),
+      unmatchedCountry: null,
     });
     await render(store);
 
@@ -318,10 +388,10 @@ describe('editing a saved profile', () => {
 });
 
 describe('stored data problems', () => {
-  it('explains unreadable stored data and starts fresh', async () => {
+  it('explains unreadable stored data on the welcome screen', async () => {
     await render(memoryStore({ status: 'invalid' }).store);
 
-    expect(heading()).toBe('Personal details');
+    expect(heading()).toBe('Your next application, a little easier.');
     expect(host.querySelector('[role="alert"]')?.textContent).toMatch(
       /could not read.*kept as a backup/,
     );
@@ -335,6 +405,234 @@ describe('stored data problems', () => {
 
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(
       'Storage is unavailable.',
+    );
+  });
+});
+
+describe('welcome', () => {
+  it('introduces ApplyKit before the first step', async () => {
+    await render(memoryStore().store);
+
+    expect(heading()).toBe('Your next application, a little easier.');
+    expect(host.textContent).toContain('never submits anything');
+    expect(host.textContent).toContain('stored only in this browser');
+
+    await start();
+
+    expect(heading()).toBe('Personal details');
+    expect(document.activeElement).toBe(host.querySelector('h1'));
+  });
+
+  it('goes straight to the overview for a saved profile', async () => {
+    await render(
+      memoryStore({
+        status: 'loaded',
+        profile: validProfile(),
+        unmatchedCountry: null,
+      }).store,
+    );
+
+    expect(heading()).toBe('Your profile');
+    expect(host.textContent).not.toContain('Get started');
+  });
+});
+
+describe('drafts', () => {
+  it('saves a draft after a pause, not on every keystroke', async () => {
+    vi.useFakeTimers();
+    const { store, drafts } = memoryStore();
+    await render(store);
+    await start();
+
+    type('First name', 'A');
+    type('First name', 'Al');
+    type('First name', 'Alex');
+    act(() => {
+      vi.advanceTimersByTime(AUTOSAVE_DELAY - 1);
+    });
+    expect(store.saveDraft).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await flush();
+    });
+
+    expect(store.saveDraft).toHaveBeenCalledTimes(1);
+    expect(drafts[0]).toMatchObject({
+      basedOn: null,
+      step: 'personal',
+      draft: { personal: { firstName: 'Alex' } },
+    });
+    expect(store.save).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Progress saved in this browser');
+  });
+
+  it('restores unfinished onboarding where the user left off', async () => {
+    await render(
+      memoryStore(
+        { status: 'empty' },
+        {
+          draft: { status: 'loaded', draft: storedDraft() },
+        },
+      ).store,
+    );
+
+    expect(heading()).toBe('Education');
+    expect(host.textContent).toContain('Welcome back');
+
+    await click('Back');
+    expect((field('First name') as HTMLInputElement).value).toBe('Alex');
+    expect((field('Country') as HTMLInputElement).value).toBe('United Kingdom');
+  });
+
+  it('can start over from restored progress', async () => {
+    const { store } = memoryStore(
+      { status: 'empty' },
+      {
+        draft: { status: 'loaded', draft: storedDraft() },
+      },
+    );
+    await render(store);
+
+    await click('Start over');
+    expect(host.textContent).toContain('Clear everything entered?');
+    await click('Start over');
+
+    expect(heading()).toBe('Your next application, a little easier.');
+    expect(store.clearDraft).toHaveBeenCalled();
+  });
+
+  it('keeps the confirmed profile untouched while edits are autosaved', async () => {
+    vi.useFakeTimers();
+    const profile = validProfile();
+    const { store, drafts } = memoryStore({
+      status: 'loaded',
+      profile,
+      unmatchedCountry: null,
+    });
+    await render(store);
+
+    await click('Edit personal details');
+    type('Phone number', '020 7946 0001');
+    await act(async () => {
+      vi.advanceTimersByTime(AUTOSAVE_DELAY);
+      await flush();
+    });
+
+    expect(drafts[0]).toMatchObject({
+      basedOn: profile.metadata.updatedAt,
+      draft: { personal: { phone: '020 7946 0001' } },
+    });
+    expect(store.save).not.toHaveBeenCalled();
+    expect(profile.personal.phone).toBe('+44 20 7946 0000');
+  });
+
+  it('restores unsaved edits and can discard them', async () => {
+    const profile = validProfile();
+    const edited = validDraft();
+    edited.personal.phone = '020 7946 0001';
+    const { store } = memoryStore(
+      { status: 'loaded', profile, unmatchedCountry: null },
+      {
+        draft: {
+          status: 'loaded',
+          draft: storedDraft({
+            basedOn: profile.metadata.updatedAt,
+            step: 'review',
+            furthest: 4,
+            draft: edited,
+          }),
+        },
+      },
+    );
+    await render(store);
+
+    expect(host.textContent).toContain('020 7946 0001');
+    expect(host.textContent).toContain('Restored changes you had not saved');
+
+    await click('Discard changes');
+    await click('Discard');
+
+    expect(host.textContent).toContain('+44 20 7946 0000');
+    expect(host.textContent).not.toContain('020 7946 0001');
+    expect(store.clearDraft).toHaveBeenCalled();
+    expect(store.save).not.toHaveBeenCalled();
+  });
+
+  it('discards a draft made obsolete by a later save', async () => {
+    const profile = validProfile('2026-10-18T09:00:00.000Z');
+    const stale = validDraft();
+    stale.personal.phone = '020 7946 0001';
+    const { store } = memoryStore(
+      { status: 'loaded', profile, unmatchedCountry: null },
+      {
+        draft: {
+          status: 'loaded',
+          draft: storedDraft({
+            basedOn: '2026-10-01T09:00:00.000Z',
+            draft: stale,
+          }),
+        },
+      },
+    );
+    await render(store);
+
+    expect(store.clearDraft).toHaveBeenCalled();
+    expect(host.textContent).toContain('+44 20 7946 0000');
+    expect(host.textContent).not.toContain('020 7946 0001');
+  });
+
+  it('stops autosaving once the profile is saved', async () => {
+    vi.useFakeTimers();
+    const { store } = memoryStore(
+      { status: 'empty' },
+      {
+        draft: {
+          status: 'loaded',
+          draft: storedDraft({ step: 'review', furthest: 4 }),
+        },
+      },
+    );
+    await render(store);
+
+    await click('Save profile');
+    await act(async () => {
+      vi.advanceTimersByTime(AUTOSAVE_DELAY * 2);
+      await flush();
+    });
+
+    expect(store.save).toHaveBeenCalledTimes(1);
+    expect(store.saveDraft).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Profile saved');
+  });
+
+  it('says when a draft cannot be kept', async () => {
+    vi.useFakeTimers();
+    const { store } = memoryStore({ status: 'empty' }, { draftWrites: false });
+    await render(store);
+    await start();
+
+    type('First name', 'Alex');
+    await act(async () => {
+      vi.advanceTimersByTime(AUTOSAVE_DELAY);
+      await flush();
+    });
+
+    expect(host.textContent).toContain('Could not keep a draft');
+  });
+});
+
+describe('country', () => {
+  it('asks the user to choose again when an old country did not match', async () => {
+    const profile = validProfile();
+    profile.personal.address.country = '';
+    await render(
+      memoryStore({ status: 'loaded', profile, unmatchedCountry: 'England' })
+        .store,
+    );
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      'could not match “England”',
     );
   });
 });

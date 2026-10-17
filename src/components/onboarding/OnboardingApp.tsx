@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
-import { Check, CircleAlert, ShieldCheck } from 'lucide-react';
+import { Check, CircleAlert, History, ShieldCheck } from 'lucide-react';
 import { validateDraft, validateSection } from '@/domain/profile-schema';
 import { profileFromDraft } from '@/domain/user-profile';
 import {
@@ -8,7 +8,11 @@ import {
   type ProfileStore,
 } from '@/storage/profile-store';
 import { BrandMark, Icon } from '@/components/ui/icons';
-import { PrimaryButton, SecondaryButton } from '@/components/ui/primitives';
+import {
+  GhostButton,
+  PrimaryButton,
+  SecondaryButton,
+} from '@/components/ui/primitives';
 import { formatSavedAt } from './format';
 import { LinksStep } from './LinksStep';
 import {
@@ -19,6 +23,7 @@ import {
   firstStepWithError,
   initialOnboardingState,
   onboardingReducer,
+  planDraftRestore,
   stepIndex,
   type OnboardingState,
   type Step,
@@ -26,6 +31,8 @@ import {
 import { PersonalStep } from './PersonalStep';
 import { EducationStep, ExperienceStep } from './RecordSteps';
 import { ReviewStep } from './ReviewStep';
+import { useDraftAutosave, type DraftStatus } from './useDraftAutosave';
+import { WelcomeScreen } from './WelcomeScreen';
 
 const STEP_COPY: Record<Step, { label: string; title: string; intro: string }> =
   {
@@ -33,24 +40,25 @@ const STEP_COPY: Record<Step, { label: string; title: string; intro: string }> =
       label: 'Personal details',
       title: 'Personal details',
       intro:
-        'Your name, contact details and address, as you give them on applications.',
+        'The details ApplyKit can reuse when applications ask for your contact information.',
     },
     education: {
       label: 'Education',
       title: 'Education',
       intro:
-        'Qualifications you want employers to see. Add as many as you need.',
+        "Add your qualifications once, so you don't need to enter them on every application.",
     },
     experience: {
       label: 'Experience',
       title: 'Experience',
-      intro: 'Jobs, internships and volunteering, in any order.',
+      intro:
+        'Keep your work history ready for applications that ask about previous roles.',
     },
     links: {
       label: 'Links',
       title: 'Professional links',
       intro:
-        'All optional. Places where employers can see more of you and your work.',
+        'Optional. Save your portfolio and professional profiles so they are ready to fill.',
     },
     review: {
       label: 'Review',
@@ -58,6 +66,8 @@ const STEP_COPY: Record<Step, { label: string; title: string; intro: string }> =
       intro: 'Check everything before saving. You can change any of it later.',
     },
   };
+
+const systemClock = () => new Date();
 
 interface OnboardingAppProps {
   store?: ProfileStore;
@@ -68,10 +78,14 @@ interface OnboardingAppProps {
 /**
  * First-run onboarding and, once a profile is saved, profile management.
  * Runs in the extension's options page, opened in a full tab.
+ *
+ * First run: welcome, then the five steps. Saved profile: straight to its
+ * overview. Unsaved work is autosaved as a separate draft and restored when
+ * the page reopens.
  */
 export function OnboardingApp({
   store = browserProfileStore,
-  now = () => new Date(),
+  now = systemClock,
 }: OnboardingAppProps) {
   const [state, dispatch] = useReducer(
     onboardingReducer,
@@ -82,16 +96,39 @@ export function OnboardingApp({
   const main = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const pendingFocus = useRef<'error' | 'heading' | null>(null);
+  const autosave = useDraftAutosave({
+    state,
+    store,
+    now,
+    enabled: load !== null,
+  });
 
   useEffect(() => {
     let active = true;
-    void store.load().then((result) => {
-      if (!active) return;
-      setLoad(result);
-      if (result.status === 'loaded') {
-        dispatch({ type: 'loaded', profile: result.profile });
-      }
-    });
+    void Promise.all([store.load(), store.loadDraft()]).then(
+      ([profile, draft]) => {
+        if (!active) return;
+        const saved = profile.status === 'loaded' ? profile.profile : null;
+        if (saved) dispatch({ type: 'loaded', profile: saved });
+        if (draft.status === 'loaded') {
+          const decision = planDraftRestore(
+            draft.draft,
+            saved
+              ? { status: 'loaded', updatedAt: saved.metadata.updatedAt }
+              : {
+                  status:
+                    profile.status === 'loaded' ? 'empty' : profile.status,
+                },
+          );
+          if (decision === 'restore') {
+            dispatch({ type: 'restored', stored: draft.draft, saved });
+          } else if (decision === 'discard') {
+            void store.clearDraft();
+          }
+        }
+        setLoad(profile);
+      },
+    );
     return () => {
       active = false;
     };
@@ -111,17 +148,18 @@ export function OnboardingApp({
     }
   });
 
-  // Warn before leaving with unsaved changes.
+  // Warn before leaving only when changes are not yet in the draft.
+  const { unpersisted } = autosave;
   useEffect(() => {
     if (!state.dirty) return;
     const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
+      if (unpersisted()) event.preventDefault();
     };
     window.addEventListener('beforeunload', warn);
     return () => {
       window.removeEventListener('beforeunload', warn);
     };
-  }, [state.dirty]);
+  }, [state.dirty, unpersisted]);
 
   const editing = state.saved !== null;
   useEffect(() => {
@@ -133,6 +171,12 @@ export function OnboardingApp({
   const go = (step: Step) => {
     pendingFocus.current = 'heading';
     dispatch({ type: 'go', step });
+  };
+
+  const discard = () => {
+    pendingFocus.current = 'heading';
+    dispatch({ type: 'discard' });
+    void store.clearDraft();
   };
 
   const showErrors = (errors: Record<string, string>) => {
@@ -180,15 +224,38 @@ export function OnboardingApp({
     dispatch({ type: 'advance' });
   };
 
+  // Local storage answers almost at once; show the page only when it has.
+  if (load === null) return <div className="min-h-screen bg-canvas" />;
+
+  if (!state.started) {
+    return (
+      <WelcomeScreen
+        notice={
+          load.status === 'invalid' || load.status === 'error' ? (
+            <LoadNotice load={load} />
+          ) : undefined
+        }
+        onStart={() => {
+          pendingFocus.current = 'heading';
+          dispatch({ type: 'start' });
+        }}
+      />
+    );
+  }
+
   const copy = STEP_COPY[state.step];
   const index = stepIndex(state.step);
+  const unmatchedCountry =
+    load.status === 'loaded' && state.saved?.personal.address.country === ''
+      ? load.unmatchedCountry
+      : null;
 
   return (
     <div className="min-h-screen bg-canvas text-ink md:grid md:grid-cols-[248px_minmax(0,1fr)]">
       <StepRail state={state} editing={editing} onGo={go} />
 
       <main ref={main} className="flex min-h-screen flex-col">
-        <div className="mx-auto w-full max-w-[640px] flex-1 px-5 pt-8 pb-10 md:px-10 md:pt-14">
+        <div className="mx-auto w-full max-w-[640px] flex-1 px-5 pt-8 pb-16 md:px-10 md:pt-[clamp(32px,6vh,56px)]">
           <p className="mb-2 text-xs text-ink-3 md:hidden">
             Step {index + 1} of {STEPS.length}
           </p>
@@ -206,14 +273,21 @@ export function OnboardingApp({
           </p>
 
           <div className="mt-6 space-y-3 empty:hidden">
-            {load?.status === 'invalid' && (
+            {state.restoredFrom && (
+              <RestoredNotice
+                at={state.restoredFrom}
+                editing={editing}
+                onStartOver={discard}
+              />
+            )}
+            {unmatchedCountry !== null && (
               <Banner tone="warning">
-                ApplyKit found a saved profile it could not read, so you are
-                starting fresh. The unreadable data is kept as a backup when you
-                save.
+                ApplyKit now uses a standard country list and could not match “
+                {unmatchedCountry}”. Choose your country in Personal details,
+                then save.
               </Banner>
             )}
-            {load?.status === 'error' && (
+            {load.status === 'error' && (
               <Banner tone="danger">{load.message}</Banner>
             )}
             {state.save.state === 'error' && (
@@ -222,26 +296,91 @@ export function OnboardingApp({
           </div>
 
           <div className="mt-8">
-            {load === null ? (
-              <p className="text-ink-3">Loading your profile…</p>
-            ) : (
-              <StepBody state={state} dispatch={dispatch} />
-            )}
+            <StepBody state={state} dispatch={dispatch} />
           </div>
         </div>
 
-        {load !== null && (
-          <ActionBar
-            state={state}
-            editing={editing}
-            onBack={() => {
-              const previous = STEPS[index - 1];
-              if (previous) go(previous);
-            }}
-            onProceed={proceed}
-          />
-        )}
+        <ActionBar
+          state={state}
+          editing={editing}
+          draftStatus={autosave.status}
+          onBack={() => {
+            const previous = STEPS[index - 1];
+            if (previous) go(previous);
+          }}
+          onProceed={proceed}
+          onDiscard={discard}
+        />
       </main>
+    </div>
+  );
+}
+
+/** Problems with previously stored data, shown on the welcome screen. */
+function LoadNotice({ load }: { load: LoadResult }) {
+  if (load.status === 'invalid') {
+    return (
+      <Banner tone="warning">
+        ApplyKit found a saved profile it could not read, so you are starting
+        fresh. The unreadable data is kept as a backup when you save.
+      </Banner>
+    );
+  }
+  if (load.status === 'error') {
+    return <Banner tone="danger">{load.message}</Banner>;
+  }
+  return null;
+}
+
+/**
+ * Explains that unsaved work came back. During first run it also offers to
+ * start over; when editing, discarding lives in the action bar instead.
+ */
+function RestoredNotice({
+  at,
+  editing,
+  onStartOver,
+}: {
+  at: string;
+  editing: boolean;
+  onStartOver: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md bg-sunken px-3.5 py-2.5 text-sm text-ink-2"
+    >
+      <Icon icon={History} size={16} className="shrink-0 text-ink-3" />
+      <p className="min-w-0 flex-1">
+        {editing
+          ? `Restored changes you had not saved, from ${formatSavedAt(at)}.`
+          : `Welcome back. Your progress from ${formatSavedAt(at)} is restored.`}
+      </p>
+      {!editing &&
+        (confirming ? (
+          <span className="flex items-center gap-1 text-xs">
+            Clear everything entered?
+            <GhostButton
+              onClick={() => {
+                setConfirming(false);
+              }}
+            >
+              Cancel
+            </GhostButton>
+            <GhostButton tone="danger" onClick={onStartOver}>
+              Start over
+            </GhostButton>
+          </span>
+        ) : (
+          <GhostButton
+            onClick={() => {
+              setConfirming(true);
+            }}
+          >
+            Start over
+          </GhostButton>
+        ))}
     </div>
   );
 }
@@ -383,14 +522,19 @@ function StepMarker({
 function ActionBar({
   state,
   editing,
+  draftStatus,
   onBack,
   onProceed,
+  onDiscard,
 }: {
   state: OnboardingState;
   editing: boolean;
+  draftStatus: DraftStatus;
   onBack: () => void;
   onProceed: () => void;
+  onDiscard: () => void;
 }) {
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const reviewing = state.step === 'review';
   const saving = state.save.state === 'saving';
   const upToDate = editing && !state.dirty;
@@ -413,7 +557,42 @@ function ActionBar({
           <SecondaryButton onClick={onBack}>Back</SecondaryButton>
         )}
         <span className="flex-1" />
-        <SaveStatus state={state} />
+        {editing && state.dirty && !saving && (
+          <span className="flex items-center gap-1 text-xs text-ink-2">
+            {confirmingDiscard ? (
+              <>
+                Discard unsaved changes?
+                <GhostButton
+                  onClick={() => {
+                    setConfirmingDiscard(false);
+                  }}
+                >
+                  Keep editing
+                </GhostButton>
+                <GhostButton
+                  tone="danger"
+                  onClick={() => {
+                    setConfirmingDiscard(false);
+                    onDiscard();
+                  }}
+                >
+                  Discard
+                </GhostButton>
+              </>
+            ) : (
+              <GhostButton
+                onClick={() => {
+                  setConfirmingDiscard(true);
+                }}
+              >
+                Discard changes
+              </GhostButton>
+            )}
+          </span>
+        )}
+        {!confirmingDiscard && (
+          <SaveStatus state={state} draftStatus={draftStatus} />
+        )}
         <PrimaryButton
           onClick={onProceed}
           disabled={saving || (reviewing && upToDate)}
@@ -426,7 +605,20 @@ function ActionBar({
   );
 }
 
-function SaveStatus({ state }: { state: OnboardingState }) {
+function SaveStatus({
+  state,
+  draftStatus,
+}: {
+  state: OnboardingState;
+  draftStatus: DraftStatus;
+}) {
+  if (state.dirty && draftStatus === 'failed') {
+    return (
+      <span role="status" className="text-xs text-danger">
+        Could not keep a draft
+      </span>
+    );
+  }
   if (state.save.state === 'saved' && !state.dirty) {
     return (
       <span
@@ -442,6 +634,13 @@ function SaveStatus({ state }: { state: OnboardingState }) {
     return (
       <span role="status" className="text-xs text-ink-3">
         Unsaved changes
+      </span>
+    );
+  }
+  if (state.dirty && draftStatus === 'saved') {
+    return (
+      <span role="status" className="text-xs text-ink-3">
+        Progress saved in this browser
       </span>
     );
   }

@@ -14,9 +14,9 @@ import { Icon } from '@/components/ui/icons';
  * the control and are linked to it for assistive technology.
  */
 
-const CONTROL =
+export const CONTROL =
   'block w-full rounded-sm border bg-white text-base text-ink shadow-control outline-none transition-[border-color,box-shadow] duration-100 placeholder:text-ink-3 disabled:bg-sunken disabled:text-ink-3';
-const CONTROL_STATE = (invalid: boolean) =>
+export const CONTROL_STATE = (invalid: boolean) =>
   invalid
     ? 'border-danger focus:shadow-[0_0_0_3px_var(--color-danger-soft)]'
     : 'border-line-strong hover:border-ink-3/60 focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)]';

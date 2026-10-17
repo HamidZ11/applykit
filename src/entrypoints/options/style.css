@@ -26,3 +26,9 @@
     outline-offset: 1px;
   }
 }
+
+/* Keyboard focus never lands under the sticky action bar. */
+html {
+  scroll-padding-top: 16px;
+  scroll-padding-bottom: 80px;
+}

@@ -8,7 +8,10 @@
  * when the model grows.
  */
 
-export const PROFILE_SCHEMA_VERSION = 1;
+/**
+ * 2: `address.country` is an ISO 3166-1 alpha-2 code (was free text in 1).
+ */
+export const PROFILE_SCHEMA_VERSION = 2;
 
 /** A calendar month as `YYYY-MM`, the value of an `<input type="month">`. */
 export type YearMonth = string;
@@ -21,6 +24,7 @@ export interface Address {
   /** Region, county or state. Optional. */
   region: string;
   postcode: string;
+  /** ISO 3166-1 alpha-2 code, e.g. "GB"; see `domain/countries`. */
   country: string;
 }
 

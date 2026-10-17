@@ -1,3 +1,4 @@
+import { DRAFT_SCHEMA_VERSION, type StoredDraft } from '@/domain/profile-draft';
 import type { FieldErrors, ProfileSection } from '@/domain/profile-schema';
 import {
   draftFromProfile,
@@ -49,6 +50,8 @@ export type SaveStatus =
   | { state: 'error'; message: string };
 
 export interface OnboardingState {
+  /** False until the user leaves the welcome screen (first run only). */
+  started: boolean;
   step: Step;
   draft: ProfileDraft;
   /** Errors from the last validation, keyed by field path. */
@@ -62,12 +65,18 @@ export interface OnboardingState {
   /** The record whose editor is open, per list. */
   open: Record<RecordList, string | null>;
   save: SaveStatus;
+  /** When a restored draft was last autosaved, until the user moves on. */
+  restoredFrom: string | null;
 }
 
 type Patch<T> = Partial<Omit<T, 'id'>>;
 
 export type OnboardingAction =
   | { type: 'loaded'; profile: UserProfile }
+  | { type: 'start' }
+  | { type: 'restored'; stored: StoredDraft; saved: UserProfile | null }
+  /** Drops unsaved work: back to the saved profile, or a fresh start. */
+  | { type: 'discard' }
   | { type: 'go'; step: Step }
   | { type: 'advance' }
   | { type: 'set-errors'; errors: FieldErrors }
@@ -88,6 +97,7 @@ export type OnboardingAction =
 
 export function initialOnboardingState(): OnboardingState {
   return {
+    started: false,
     step: 'personal',
     draft: emptyDraft(),
     errors: {},
@@ -96,6 +106,7 @@ export function initialOnboardingState(): OnboardingState {
     dirty: false,
     open: { education: null, employment: null },
     save: { state: 'idle' },
+    restoredFrom: null,
   };
 }
 
@@ -114,17 +125,37 @@ export function onboardingReducer(
 ): OnboardingState {
   switch (action.type) {
     case 'loaded':
+      return savedProfileState(action.profile);
+
+    case 'start':
+      return { ...state, started: true, step: 'personal' };
+
+    case 'restored': {
+      const { stored, saved } = action;
+      const base = saved ? savedProfileState(saved) : initialOnboardingState();
+      const furthest = saved
+        ? STEPS.length - 1
+        : Math.min(stored.furthest, STEPS.length - 1);
+      const step = STEPS.find((name) => name === stored.step) ?? 'personal';
       return {
-        ...initialOnboardingState(),
-        step: 'review',
-        draft: draftFromProfile(action.profile),
-        furthest: STEPS.length - 1,
-        saved: action.profile,
+        ...base,
+        started: true,
+        draft: stored.draft,
+        step: stepIndex(step) <= furthest ? step : 'personal',
+        furthest,
+        dirty: true,
+        restoredFrom: stored.savedAt,
       };
+    }
+
+    case 'discard':
+      return state.saved
+        ? savedProfileState(state.saved)
+        : initialOnboardingState();
 
     case 'go':
       if (!canVisit(state, action.step)) return state;
-      return { ...state, step: action.step, errors: {} };
+      return { ...state, step: action.step, errors: {}, restoredFrom: null };
 
     case 'advance': {
       const next = Math.min(stepIndex(state.step) + 1, STEPS.length - 1);
@@ -133,6 +164,7 @@ export function onboardingReducer(
         step: STEPS[next] ?? state.step,
         furthest: Math.max(state.furthest, next),
         errors: {},
+        restoredFrom: null,
       };
     }
 
@@ -298,6 +330,18 @@ export function onboardingReducer(
   }
 }
 
+/** Editing an existing profile: everything reachable, on the overview. */
+function savedProfileState(profile: UserProfile): OnboardingState {
+  return {
+    ...initialOnboardingState(),
+    started: true,
+    step: 'review',
+    draft: draftFromProfile(profile),
+    furthest: STEPS.length - 1,
+    saved: profile,
+  };
+}
+
 /**
  * Applies a draft change, marks the draft dirty and clears the errors of the
  * fields that changed, so messages disappear as the user corrects them.
@@ -343,4 +387,39 @@ export function firstRecordWithError(
 ): string | null {
   const key = Object.keys(errors).find((k) => k.startsWith(`${list}.`));
   return key?.split('.')[1] ?? null;
+}
+
+/** The draft to autosave for the current state. */
+export function toStoredDraft(
+  state: Pick<OnboardingState, 'draft' | 'step' | 'furthest' | 'saved'>,
+  now: Date,
+): StoredDraft {
+  return {
+    schemaVersion: DRAFT_SCHEMA_VERSION,
+    savedAt: now.toISOString(),
+    basedOn: state.saved?.metadata.updatedAt ?? null,
+    step: state.step,
+    furthest: state.furthest,
+    draft: state.draft,
+  };
+}
+
+export type DraftDecision = 'restore' | 'discard' | 'keep';
+
+/**
+ * What to do with a stored draft, given the saved profile (if any):
+ * - restore first-run progress when no profile exists;
+ * - restore unsaved edits made to the profile that is still saved;
+ * - discard drafts made obsolete by a later save;
+ * - keep it untouched when the profile could not be read, to decide later.
+ */
+export function planDraftRestore(
+  draft: StoredDraft,
+  profile:
+    | { status: 'loaded'; updatedAt: string }
+    | { status: 'empty' | 'invalid' | 'error' },
+): DraftDecision {
+  if (profile.status === 'error') return 'keep';
+  if (profile.status !== 'loaded') return 'restore';
+  return draft.basedOn === profile.updatedAt ? 'restore' : 'discard';
 }

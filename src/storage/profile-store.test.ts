@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { validProfile } from '@/test/profile-fixtures';
+import { DRAFT_SCHEMA_VERSION, type StoredDraft } from '@/domain/profile-draft';
+import { validDraft, validProfile } from '@/test/profile-fixtures';
 import { hasSavedProfile } from './profile-presence';
 import { browserProfileStore } from './profile-store';
 
@@ -29,6 +30,7 @@ describe('browserProfileStore', () => {
     expect(await browserProfileStore.load()).toEqual({
       status: 'loaded',
       profile,
+      unmatchedCountry: null,
     });
     expect(await hasSavedProfile()).toBe(true);
   });
@@ -41,7 +43,7 @@ describe('browserProfileStore', () => {
     await browserProfileStore.save(updated);
 
     const result = await browserProfileStore.load();
-    expect(result).toEqual({ status: 'loaded', profile: updated });
+    expect(result).toMatchObject({ status: 'loaded', profile: updated });
   });
 
   it('reports malformed stored data as invalid instead of using it', async () => {
@@ -95,5 +97,69 @@ describe('browserProfileStore', () => {
 
     expect(result).toMatchObject({ status: 'error' });
     expect(await stored('profile')).toBeUndefined();
+  });
+});
+
+describe('drafts', () => {
+  function draft(basedOn: string | null = null): StoredDraft {
+    return {
+      schemaVersion: DRAFT_SCHEMA_VERSION,
+      savedAt: '2026-10-17T12:00:00.000Z',
+      basedOn,
+      step: 'education',
+      furthest: 1,
+      draft: validDraft(),
+    };
+  }
+
+  it('reports no draft when none was saved', async () => {
+    expect(await browserProfileStore.loadDraft()).toEqual({ status: 'none' });
+  });
+
+  it('saves a draft separately from the profile and loads it back', async () => {
+    const saved = validProfile();
+    await browserProfileStore.save(saved);
+
+    expect(await browserProfileStore.saveDraft(draft())).toBe(true);
+
+    expect(await browserProfileStore.loadDraft()).toEqual({
+      status: 'loaded',
+      draft: draft(),
+    });
+    expect(await stored('profile')).toEqual(saved);
+  });
+
+  it('clears the draft when a profile is saved', async () => {
+    await browserProfileStore.saveDraft(draft());
+
+    await browserProfileStore.save(validProfile());
+
+    expect(await stored('profileDraft')).toBeUndefined();
+  });
+
+  it('clears a draft on request', async () => {
+    await browserProfileStore.saveDraft(draft());
+
+    expect(await browserProfileStore.clearDraft()).toBe(true);
+    expect(await browserProfileStore.loadDraft()).toEqual({ status: 'none' });
+  });
+
+  it('removes an unreadable draft instead of restoring it', async () => {
+    await fakeBrowser.storage.local.set({ profileDraft: { step: 'personal' } });
+
+    expect(await browserProfileStore.loadDraft()).toEqual({ status: 'none' });
+    expect(await stored('profileDraft')).toBeUndefined();
+  });
+
+  it('reports draft storage failures without throwing', async () => {
+    vi.spyOn(fakeBrowser.storage.local, 'set').mockRejectedValue(
+      new Error('QUOTA_BYTES quota exceeded'),
+    );
+    vi.spyOn(fakeBrowser.storage.local, 'get').mockRejectedValue(
+      new Error('storage unavailable'),
+    );
+
+    expect(await browserProfileStore.saveDraft(draft())).toBe(false);
+    expect(await browserProfileStore.loadDraft()).toEqual({ status: 'error' });
   });
 });

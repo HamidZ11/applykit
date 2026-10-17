@@ -228,16 +228,73 @@ describe('links', () => {
   });
 });
 
+describe('country', () => {
+  it('requires a country', () => {
+    const draft = validDraft();
+    draft.personal.address.country = '';
+
+    expect(validateSection('personal', draft)['personal.address.country']).toBe(
+      'Choose your country',
+    );
+  });
+
+  it('only accepts ISO country codes', () => {
+    const draft = validDraft();
+    draft.personal.address.country = 'United Kingdom';
+
+    expect(validateSection('personal', draft)['personal.address.country']).toBe(
+      'Choose a country from the list',
+    );
+  });
+});
+
 describe('parseStoredProfile', () => {
   const stored = () =>
     profileFromDraft(validDraft(), null, new Date('2026-10-17T12:00:00Z'));
 
+  /** A version 1 profile, as saved before countries became codes. */
+  const version1 = (country: string) => {
+    const profile = stored();
+    return {
+      ...profile,
+      personal: {
+        ...profile.personal,
+        address: { ...profile.personal.address, country },
+      },
+      metadata: { ...profile.metadata, schemaVersion: 1 },
+    };
+  };
+
   it('accepts a valid stored profile', () => {
     const profile = stored();
 
-    expect(parseStoredProfile(JSON.parse(JSON.stringify(profile)))).toEqual(
+    expect(parseStoredProfile(JSON.parse(JSON.stringify(profile)))).toEqual({
       profile,
-    );
+      unmatchedCountry: null,
+    });
+  });
+
+  it.each([
+    ['United Kingdom', 'GB'],
+    ['uk', 'GB'],
+    ['GBR', 'GB'],
+    ['Germany', 'DE'],
+  ])('migrates a version 1 country %j to %s', (text, code) => {
+    const result = parseStoredProfile(version1(text));
+
+    expect(result?.profile.personal.address.country).toBe(code);
+    expect(result?.profile.metadata.schemaVersion).toBe(2);
+    expect(result?.unmatchedCountry).toBeNull();
+    // Everything else is kept as it was.
+    expect(result?.profile.personal.email).toBe('alex.sample@example.com');
+  });
+
+  it('keeps a version 1 profile whose country cannot be matched', () => {
+    const result = parseStoredProfile(version1('England'));
+
+    expect(result?.profile.personal.address.country).toBe('');
+    expect(result?.unmatchedCountry).toBe('England');
+    expect(result?.profile.personal.firstName).toBe('Alex');
   });
 
   it.each([
@@ -246,12 +303,22 @@ describe('parseStoredProfile', () => {
     ['an empty object', {}],
     [
       'a future schema version',
-      { ...stored(), metadata: { ...stored().metadata, schemaVersion: 2 } },
+      { ...stored(), metadata: { ...stored().metadata, schemaVersion: 3 } },
     ],
     ['a missing section', { ...stored(), education: undefined }],
     [
       'an invalid email',
       { ...stored(), personal: { ...stored().personal, email: 'x' } },
+    ],
+    [
+      'a version 2 profile with a country name instead of a code',
+      {
+        ...stored(),
+        personal: {
+          ...stored().personal,
+          address: { ...stored().personal.address, country: 'United Kingdom' },
+        },
+      },
     ],
   ])('rejects %s', (_case, value) => {
     expect(parseStoredProfile(value)).toBeNull();
@@ -272,7 +339,7 @@ describe('profileFromDraft', () => {
     );
 
     expect(updated.metadata).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-02-01T00:00:00.000Z',
     });

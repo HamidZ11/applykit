@@ -1,4 +1,5 @@
 import type { Dispatch, ReactNode } from 'react';
+import { countryName } from '@/domain/countries';
 import { normaliseDraft } from '@/domain/profile-schema';
 import { GhostButton } from '@/components/ui/primitives';
 import { EMPLOYMENT_TYPE_LABEL, formatRange } from './format';
@@ -30,7 +31,7 @@ export function ReviewStep({
     personal.address.city,
     personal.address.region,
     personal.address.postcode,
-    personal.address.country,
+    countryName(personal.address.country),
   ].filter(Boolean);
 
   return (
