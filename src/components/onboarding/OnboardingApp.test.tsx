@@ -405,15 +405,52 @@ describe('stored data problems', () => {
     );
   });
 
-  it('reports a storage read failure', async () => {
-    await render(
-      memoryStore({ status: 'error', message: 'Storage is unavailable.' })
-        .store,
-    );
+  it('reports a storage read failure without offering to start over', async () => {
+    const { store, drafts } = memoryStore({
+      status: 'error',
+      message: 'Storage is unavailable.',
+    });
+    await render(store);
 
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(
       'Storage is unavailable.',
     );
+    expect(host.textContent).not.toContain('Get started');
+    await flush();
+    expect(drafts).toEqual([]);
+    expect(store.save).not.toHaveBeenCalled();
+  });
+
+  it('reads stored data again on request', async () => {
+    const { store } = memoryStore({
+      status: 'error',
+      message: 'Storage is unavailable.',
+    });
+    await render(store);
+    store.load.mockResolvedValue({ status: 'empty' });
+
+    await act(async () => {
+      [...host.querySelectorAll('button')]
+        .find((b) => b.textContent === 'Try again')
+        ?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(store.load).toHaveBeenCalledTimes(2);
+    expect(heading()).toBe('Your next application, a little easier.');
+  });
+
+  it('does not start over when unsaved changes cannot be read', async () => {
+    const { store, drafts } = memoryStore(
+      { status: 'empty' },
+      { draft: { status: 'error' } },
+    );
+    await render(store);
+
+    expect(host.textContent).toContain('could not read your unsaved changes');
+    expect(host.textContent).not.toContain('Get started');
+    expect(drafts).toEqual([]);
   });
 });
 

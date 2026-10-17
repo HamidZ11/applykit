@@ -7,3 +7,6 @@ export const BACKUP_KEY = 'local:profileBackup';
 
 /** Unfinished onboarding or unsaved edits; never the confirmed profile. */
 export const DRAFT_KEY = 'local:profileDraft';
+
+/** Where an unreadable draft is kept before it is removed. */
+export const DRAFT_BACKUP_KEY = 'local:profileDraftBackup';

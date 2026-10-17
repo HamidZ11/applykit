@@ -2,7 +2,7 @@ import { storage } from 'wxt/utils/storage';
 import { parseStoredDraft, type StoredDraft } from '@/domain/profile-draft';
 import { parseStoredProfile } from '@/domain/profile-schema';
 import type { UserProfile } from '@/domain/user-profile';
-import { BACKUP_KEY, DRAFT_KEY, PROFILE_KEY } from './keys';
+import { BACKUP_KEY, DRAFT_BACKUP_KEY, DRAFT_KEY, PROFILE_KEY } from './keys';
 
 /**
  * Local persistence for the user's profile and onboarding draft, in
@@ -94,8 +94,12 @@ export const browserProfileStore: ProfileStore = {
     if (value === null) return { status: 'none' };
     const draft = parseStoredDraft(value);
     if (draft) return { status: 'loaded', draft };
-    // Unconfirmed and unreadable: nothing to recover, so remove it.
-    await storage.removeItem(DRAFT_KEY).catch(() => undefined);
+    // Unreadable, perhaps written by another version: keep a copy rather than
+    // silently losing the user's unfinished work, then start afresh.
+    await storage
+      .setItem(DRAFT_BACKUP_KEY, value)
+      .then(() => storage.removeItem(DRAFT_KEY))
+      .catch(() => undefined);
     return { status: 'none' };
   },
 

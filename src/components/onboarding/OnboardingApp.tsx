@@ -105,6 +105,8 @@ export function OnboardingApp({
     initialOnboardingState,
   );
   const [load, setLoad] = useState<LoadResult | null>(null);
+  /** Bumped by "Try again" to read stored data again. */
+  const [attempt, setAttempt] = useState(0);
   /** Showing the CV import screen instead of a step. */
   const [importing, setImporting] = useState(false);
   /** How many CV details were just added, until the user moves on. */
@@ -116,7 +118,9 @@ export function OnboardingApp({
     state,
     store,
     now,
-    enabled: load !== null,
+    // Never write a draft before stored data has been read successfully:
+    // it could replace unsaved work that is still there.
+    enabled: load !== null && load.status !== 'error',
   });
 
   useEffect(() => {
@@ -142,13 +146,17 @@ export function OnboardingApp({
             void store.clearDraft();
           }
         }
-        setLoad(profile);
+        setLoad(
+          draft.status === 'error' && profile.status !== 'error'
+            ? { status: 'error', message: DRAFT_READ_ERROR }
+            : profile,
+        );
       },
     );
     return () => {
       active = false;
     };
-  }, [store]);
+  }, [store, attempt]);
 
   // Move focus after the render that follows navigation or validation.
   useEffect(() => {
@@ -253,14 +261,22 @@ export function OnboardingApp({
   // Local storage answers almost at once; show the page only when it has.
   if (load === null) return <div className="min-h-screen bg-canvas" />;
 
+  if (load.status === 'error') {
+    return (
+      <LoadFailed
+        message={load.message}
+        onRetry={() => {
+          setLoad(null);
+          setAttempt((count) => count + 1);
+        }}
+      />
+    );
+  }
+
   if (!state.started) {
     return (
       <WelcomeScreen
-        notice={
-          load.status === 'invalid' || load.status === 'error' ? (
-            <LoadNotice load={load} />
-          ) : undefined
-        }
+        notice={load.status === 'invalid' ? <InvalidNotice /> : undefined}
         onStart={() => {
           pendingFocus.current = 'heading';
           dispatch({ type: 'start' });
@@ -351,9 +367,6 @@ export function OnboardingApp({
                     details, then save.
                   </Banner>
                 )}
-                {load.status === 'error' && (
-                  <Banner tone="danger">{load.message}</Banner>
-                )}
                 {state.save.state === 'error' && (
                   <Banner tone="danger">{state.save.message}</Banner>
                 )}
@@ -382,20 +395,44 @@ export function OnboardingApp({
   );
 }
 
-/** Problems with previously stored data, shown on the welcome screen. */
-function LoadNotice({ load }: { load: LoadResult }) {
-  if (load.status === 'invalid') {
-    return (
-      <Banner tone="warning">
-        ApplyKit found a saved profile it could not read, so you are starting
-        fresh. The unreadable data is kept as a backup when you save.
-      </Banner>
-    );
-  }
-  if (load.status === 'error') {
-    return <Banner tone="danger">{load.message}</Banner>;
-  }
-  return null;
+const DRAFT_READ_ERROR =
+  'ApplyKit could not read your unsaved changes from this browser.';
+
+/**
+ * Stored data could not be read. Nothing is offered that could overwrite
+ * it: no onboarding, no autosave, until a retry succeeds.
+ */
+function LoadFailed({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-canvas px-6 text-ink">
+      <div className="w-full max-w-[480px]">
+        <Banner tone="danger">{message}</Banner>
+        <p className="mt-4 text-ink-2">
+          Nothing has been changed. Try again, or close this tab and reopen it
+          later.
+        </p>
+        <PrimaryButton className="mt-6" onClick={onRetry}>
+          Try again
+        </PrimaryButton>
+      </div>
+    </main>
+  );
+}
+
+/** A stored profile that could not be read, shown on the welcome screen. */
+function InvalidNotice() {
+  return (
+    <Banner tone="warning">
+      ApplyKit found a saved profile it could not read, so you are starting
+      fresh. The unreadable data is kept as a backup when you save.
+    </Banner>
+  );
 }
 
 /**

@@ -140,11 +140,35 @@ describe('drafts', () => {
     expect(await browserProfileStore.loadDraft()).toEqual({ status: 'none' });
   });
 
-  it('removes an unreadable draft instead of restoring it', async () => {
-    await fakeBrowser.storage.local.set({ profileDraft: { step: 'personal' } });
+  it('backs up an unreadable draft instead of restoring it', async () => {
+    const unreadable = { step: 'personal' };
+    await fakeBrowser.storage.local.set({ profileDraft: unreadable });
 
     expect(await browserProfileStore.loadDraft()).toEqual({ status: 'none' });
     expect(await stored('profileDraft')).toBeUndefined();
+    expect(await stored('profileDraftBackup')).toEqual(unreadable);
+  });
+
+  it('keeps a draft with very long unfinished values', async () => {
+    const long = draft();
+    long.draft.employment = [
+      {
+        id: 'role-1',
+        employer: 'Example Ltd',
+        title: 'Engineer',
+        employmentType: '',
+        startDate: '',
+        endDate: '',
+        current: false,
+        description: 'x'.repeat(20_000),
+      },
+    ];
+    await browserProfileStore.saveDraft(long);
+
+    expect(await browserProfileStore.loadDraft()).toEqual({
+      status: 'loaded',
+      draft: long,
+    });
   });
 
   it('reports draft storage failures without throwing', async () => {

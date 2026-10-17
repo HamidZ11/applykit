@@ -28,7 +28,10 @@ export interface StoredDraft {
   draft: ProfileDraft;
 }
 
-const text = z.string().max(5000);
+// No length limit: a long value is unfinished input, which the form reports
+// when the user continues or saves. Rejecting it here would drop the whole
+// draft. Storage quota bounds the total size.
+const text = z.string();
 
 const draftShape = z.object({
   personal: z.object({
