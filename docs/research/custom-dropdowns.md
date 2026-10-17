@@ -13,7 +13,7 @@ Checked against the engine with unit probes, not in a browser.
 | Editable combobox (ARIA 1.2)                                                  | `<input role="combobox" aria-autocomplete="list" aria-controls="…">` + `role="listbox"` | Listed as "not supported", saying what it seems to ask ("This looks like your country, but it is a custom dropdown"). Never typed into. |
 | Input with a popup                                                            | `<input aria-haspopup="listbox">`                                                       | Same as above.                                                                                                                          |
 | Library over a hidden native select (Select2, Chosen, Choices.js, Tom Select) | `<select hidden>` + visible custom UI                                                   | The hidden select is skipped, like any hidden control (honeypot rule). The visible input, if any, is listed as a custom dropdown.       |
-| Select-only combobox (ARIA 1.2)                                               | `<div role="combobox" tabindex="0">` + `role="listbox"`                                 | **Not listed at all**: only `input`, `select` and `textarea` are scanned, so the panel's field count misses it.                         |
+| Select-only combobox (ARIA 1.2)                                               | `<div role="combobox" tabindex="0">` + `role="listbox"`                                 | Listed since ADR 0013 (before: not listed at all), with saved-value guidance; never operated.                                           |
 | Proprietary components (SAP UI5 web components, Workday, Oracle)              | Custom elements, often with their own shadow roots                                      | Not seen inside closed or nested shadow roots; open ones are not scanned either.                                                        |
 
 ## Why committing a choice is hard to do safely
@@ -70,3 +70,11 @@ dropdowns, with what they seem to ask for.
    being described as supported.
 
 Platform-specific selectors (SuccessFactors, Workday) are out of scope.
+
+## Status after ADR 0013
+
+Steps 1 and 2 are done: comboboxes, popup buttons and standalone
+listboxes built from non-input elements are listed once each, and
+recognised ones show the saved value to choose ("From your saved
+profile") with "Go to field". Step 3, operating any widget, has not been
+started.

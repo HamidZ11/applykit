@@ -225,8 +225,14 @@ Details and reasoning are in ADR 0010 and ADR 0011.
 - Modules in `src/autofill`: `detect` (what a control asks), `scan` (every
   control, with support and section), `report` and `plan-education` (the
   plan: value or reason per field), `resolve` (preview and confirm a record
-  the user chose for a section), `fill` (write and verify), plus pure
-  rules in `education`, `dates`, `options` and `categories`. The background
+  the user chose for a section), `suggestion` (saved values shown as
+  guidance for fields ApplyKit cannot fill), `fill` (write and verify),
+  plus pure rules in `education`, `dates`, `options` and `categories`.
+  `src/page/navigate.ts` takes the user to a field ("Go to field").
+- Fields are native controls or custom controls (`FieldElement`). Custom
+  comboboxes, popup buttons and listboxes are listed once each, from ARIA
+  roles and relationships only, and are never written: the panel shows
+  what the saved profile says instead (ADR 0013). The background
   derives `AutofillValues` in `profile-values` (phone parsing, record
   levels).
 - Detection signals: `autocomplete` token, input `type`, label text

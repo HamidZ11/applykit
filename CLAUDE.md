@@ -11,7 +11,8 @@ onboarding/editing in a full tab with local storage and drafts, local CV
 import with review, and autofill of personal, contact, address, link and
 education fields from the confirmed saved profile, including split calling
 codes and preferred names (ADR 0010, ADR 0011), and user-confirmed choice
-of the saved record for ambiguous education sections (ADR 0012).
+of the saved record for ambiguous education sections (ADR 0012), and
+listing of custom dropdowns with saved-value guidance (ADR 0013).
 
 Still to come (build only when asked, one at a time): employment autofill;
 custom dropdown widgets; application details and reusable answers; review
@@ -115,6 +116,10 @@ old (pnpm enforces a minimum release age; do not add exclusions).
   `fixtures/education-application.html` covers heading-only sections,
   calling codes and education; `fixtures/interactive-education.html`
   covers choosing a record for ambiguous and numbered sections.
+- Custom controls (ARIA comboboxes, listboxes, popup buttons) are listed
+  and guided, never operated: only native controls are written.
+  `fixtures/custom-controls.html` covers listing, deduplication and page
+  furniture.
 - A user's choice must never make other fields eligible for automatic
   filling: choices go through `planFill` as `SectionChoices`, are
   previewed, re-checked by `confirmChoice` and written by `fillFields`.

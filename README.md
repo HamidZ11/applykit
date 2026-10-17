@@ -108,7 +108,8 @@ Limitations:
    is a long single-page internship form with a separate calling code,
    university and school sections, and sections marked only by headings;
    `interactive-education.html` has school and numbered education sections
-   where you choose which saved record to use.)
+   where you choose which saved record to use; `custom-controls.html` is
+   built from custom dropdowns.)
 4. Click the ApplyKit toolbar button. Without a saved profile the panel
    says so and offers **Set up your profile**; it fills nothing. Save a
    profile with fictional details (see below), then click the rescan button
@@ -177,6 +178,9 @@ Limitations:
   fields are left for you with "Several records fit"; in the full list you
   can choose the right record, see what it would fill, and confirm.
 - Fields your profile has no value for link to your profile page.
+- Custom dropdowns are counted as fields and, when ApplyKit recognises
+  them, show "From your saved profile" with the value to choose, plus
+  "Go to field" to jump to any field that needs you.
 - The full list groups fields by topic, so long forms do not end up under
   "Other fields".
 - Detects fields from `autocomplete`, input type, labels, `name`, `id`,
@@ -205,8 +209,10 @@ Limitations:
 - Autofill covers personal, contact, address, link and education fields;
   not employment history or written answers.
 - Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
-  and similar platforms) are listed as not supported, not filled; dropdowns
-  built from non-input elements are not listed at all yet. See
+  and similar platforms) are listed and never filled: the full list shows
+  the saved value to choose and a "Go to field" button. Only standard ARIA
+  comboboxes, listboxes and popup buttons are recognised; widgets built
+  without those roles are not listed. See
   `docs/research/custom-dropdowns.md`. Compatibility has been tried on one
   real application only.
 - A record you choose for a section is used for that section only, and is
