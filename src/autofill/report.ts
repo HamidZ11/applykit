@@ -30,6 +30,7 @@ export type FieldStatus =
   | 'unsupported'
   | 'manual'
   | 'conflict'
+  | 'duplicate'
   | 'other-person';
 
 export interface FieldReport {
@@ -76,6 +77,8 @@ const REASON = {
   unsupported: 'ApplyKit does not fill this kind of field yet.',
   noProfile: 'Set up your profile so ApplyKit can fill this.',
   tooLong: 'Your saved value is longer than this field allows.',
+  firstOption:
+    'This list starts on its first option, so ApplyKit cannot tell whether you chose it. Check it yourself.',
 } as const;
 
 /**
@@ -122,6 +125,16 @@ function planField(
           .map((target) => AUTOFILL_FIELD_LABEL[target].toLowerCase())
           .join(' or ')}), so ApplyKit leaves it to you.`,
       };
+    case 'duplicate':
+      return {
+        ...base,
+        status: 'duplicate',
+        target: support.field,
+        evidence: support.evidence,
+        reason: `An earlier field already takes your ${AUTOFILL_FIELD_LABEL[
+          support.field
+        ].toLowerCase()}. This one may be about someone else, so ApplyKit leaves it to you.`,
+      };
     case 'unrecognised':
       return { ...base, status: 'unrecognised', reason: REASON.unrecognised };
     case 'unsupported':
@@ -137,6 +150,13 @@ function planField(
   };
   if (!values) {
     return { ...matched, status: 'no-profile', reason: REASON.noProfile };
+  }
+
+  if (
+    field.element instanceof HTMLSelectElement &&
+    implicitFirstOption(field.element)
+  ) {
+    return { ...matched, status: 'manual', reason: REASON.firstOption };
   }
 
   const existing = currentValue(field);
@@ -242,12 +262,38 @@ function planCountry(
   return { display: country.name, fillValue: country.name };
 }
 
+/** Option text such as "Select…", "Choose a country" or "--". */
+const PLACEHOLDER_OPTION = /^\W*(?:select|choose|please|pick)\b|^[\W_]*$/i;
+
+/** An option that stands for "nothing chosen yet". */
+function isPlaceholderOption(option: HTMLOptionElement): boolean {
+  return (
+    option.value === '' ||
+    option.disabled ||
+    PLACEHOLDER_OPTION.test(option.text.trim())
+  );
+}
+
+/**
+ * A select showing its first option only because nothing else was
+ * selected: the browser's default, or possibly the user's choice.
+ */
+function implicitFirstOption(select: HTMLSelectElement): boolean {
+  const option = select.selectedOptions[0];
+  return (
+    select.selectedIndex === 0 &&
+    option !== undefined &&
+    !isPlaceholderOption(option) &&
+    ![...select.options].some((o) => o.defaultSelected)
+  );
+}
+
 /** The user's own entry, or null when the control is empty. */
 export function currentValue(field: ScannedField): string | null {
   const { element } = field;
   if (element instanceof HTMLSelectElement) {
     const option = element.selectedOptions[0];
-    if (!option || option.value === '') return null;
+    if (!option || isPlaceholderOption(option)) return null;
     return option.text.trim() || option.value;
   }
   const value = element.value.trim();

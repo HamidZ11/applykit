@@ -17,6 +17,7 @@ export const STATUS_LABEL: Record<FieldStatus, string> = {
   'no-option': 'No matching option',
   unrecognised: 'Not recognised',
   conflict: 'Unclear',
+  duplicate: 'Asked twice',
   unsupported: 'Not supported yet',
   manual: 'Answer yourself',
   'other-person': 'Not about you',

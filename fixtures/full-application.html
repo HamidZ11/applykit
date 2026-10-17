@@ -9,7 +9,8 @@
       Fictional application form for profile autofill. The company, role and
       every detail are invented. It mixes the applicant's own details (which
       ApplyKit fills from a saved profile) with fields it must skip: details
-      about an employer, a hiring manager and a reference, sensitive and
+      about an employer, a hiring manager, a reference (a fieldset) and an
+      emergency contact (marked only by a heading), sensitive and
       consent questions, a CAPTCHA, a disabled field, a hidden honeypot and a
       separate newsletter form. Used by unit tests and manual testing.
     -->
@@ -263,6 +264,14 @@
           <label for="ref-phone">Phone</label>
           <input id="ref-phone" name="reference[phone]" type="tel" />
         </fieldset>
+
+        <div class="emergency">
+          <h3>Emergency contact</h3>
+          <label for="ec-name">Name</label>
+          <input id="ec-name" name="emergency_name" />
+          <label for="ec-phone">Phone number</label>
+          <input id="ec-phone" name="emergency_phone" type="tel" />
+        </div>
 
         <fieldset>
           <legend>Application questions</legend>

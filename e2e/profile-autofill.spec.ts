@@ -46,6 +46,8 @@ test('fills only the applicant’s own details', async ({
     '#manager-email',
     '#ref-name',
     '#ref-phone',
+    '#ec-name',
+    '#ec-phone',
     '#salary',
     '#dob',
     '#captcha',

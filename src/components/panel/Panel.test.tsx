@@ -254,7 +254,7 @@ describe('Panel with a saved profile', () => {
       'true',
     );
     expect(dialog().textContent).toContain(
-      'The page’s labels disagree (town or city or country), so ApplyKit leaves it to you.',
+      'ApplyKit does not know what this field asks for.',
     );
 
     click(/^Next field/);

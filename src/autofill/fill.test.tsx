@@ -56,6 +56,8 @@ describe('fillFields', () => {
       'manager-email',
       'ref-name',
       'ref-phone',
+      'ec-name',
+      'ec-phone',
       'salary',
       'dob',
       'captcha',

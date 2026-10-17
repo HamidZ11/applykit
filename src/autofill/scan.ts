@@ -2,6 +2,7 @@ import type { AutofillField } from './fields';
 import {
   detectControl,
   labelText,
+  normalise,
   type Evidence,
   type ManualReason,
 } from './detect';
@@ -29,6 +30,11 @@ export type FieldKind =
  */
 export type FieldSupport =
   | { status: 'match'; field: AutofillField; evidence: Evidence[] }
+  /**
+   * Asks for the same detail as an earlier field, so it may be about someone
+   * else (a second contact, a reference). Only the first is filled.
+   */
+  | { status: 'duplicate'; field: AutofillField; evidence: Evidence[] }
   | { status: 'conflict'; fields: AutofillField[]; evidence: Evidence[] }
   | { status: 'other-person'; evidence: Evidence[] }
   | { status: 'manual'; reason: ManualReason }
@@ -71,11 +77,32 @@ const TEXT_INPUT_TYPES = new Set(['text', 'email', 'tel', 'url', 'search']);
 
 const DATE_TYPES = new Set(['date', 'datetime-local', 'month', 'week', 'time']);
 
+/** Smaller than this in either direction, a control is not meant to be seen. */
+const MIN_VISIBLE_PX = 2;
+
 function defaultIsVisible(element: Element): boolean {
   if (element.closest('[hidden], [aria-hidden="true"], [inert]')) return false;
-  return typeof element.checkVisibility === 'function'
-    ? element.checkVisibility({ visibilityProperty: true })
-    : true;
+  if (typeof element.checkVisibility !== 'function') {
+    // Older browsers: at least honour display and visibility.
+    const style = getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden';
+  }
+  if (
+    !element.checkVisibility({
+      visibilityProperty: true,
+      opacityProperty: true,
+    })
+  ) {
+    return false;
+  }
+  // Honeypots are often shrunk to nothing or moved off the page.
+  const box = element.getBoundingClientRect();
+  return (
+    box.width >= MIN_VISIBLE_PX &&
+    box.height >= MIN_VISIBLE_PX &&
+    box.right + window.scrollX > 0 &&
+    box.bottom + window.scrollY > 0
+  );
 }
 
 /**
@@ -113,17 +140,23 @@ export function scanFields(
     fields.push(describe(element, root));
   }
 
-  return withinApplicationForm(fields);
+  return firstOfEachDetail(withinApplicationForm(fields));
 }
 
+/**
+ * Keeps the controls of the application: the form with the most recognised
+ * fields, where controls outside any form count as one more "form", since
+ * many application pages are built without a form element.
+ */
 function withinApplicationForm(fields: ScannedField[]): ScannedField[] {
-  const recognised = new Map<HTMLFormElement, number>();
+  const recognised = new Map<HTMLFormElement | null, number>();
   for (const field of fields) {
-    const form = field.element.form;
-    if (form && field.support.status === 'match') {
+    if (field.support.status === 'match') {
+      const form = field.element.form;
       recognised.set(form, (recognised.get(form) ?? 0) + 1);
     }
   }
+  if (recognised.size === 0) return fields;
   let application: HTMLFormElement | null = null;
   let best = 0;
   for (const [form, count] of recognised) {
@@ -132,9 +165,34 @@ function withinApplicationForm(fields: ScannedField[]): ScannedField[] {
       best = count;
     }
   }
-  return application
-    ? fields.filter((field) => field.element.form === application)
-    : fields;
+  return fields.filter((field) => field.element.form === application);
+}
+
+/** "Confirm email", "Re-enter your email address" and the like. */
+const CONFIRMATION =
+  /\b(?:confirm\w*|re ?enter|re ?type|repeat|verify|again)\b/;
+
+/**
+ * When several fields ask for the same detail, only the first is the
+ * applicant's for certain; the rest may belong to a second contact or a
+ * reference whose section ApplyKit could not recognise. Confirmation fields
+ * ("Confirm email") are the exception.
+ */
+function firstOfEachDetail(fields: ScannedField[]): ScannedField[] {
+  const seen = new Set<AutofillField>();
+  return fields.map((field) => {
+    const { support, element } = field;
+    if (support.status !== 'match') return field;
+    if (!seen.has(support.field)) {
+      seen.add(support.field);
+      return field;
+    }
+    const text = normalise(
+      [labelText(element), element.name, element.id].join(' '),
+    );
+    if (CONFIRMATION.test(text)) return field;
+    return { ...field, support: { ...support, status: 'duplicate' } };
+  });
 }
 
 function describe(element: FormControl, root: ParentNode): ScannedField {

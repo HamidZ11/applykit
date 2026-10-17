@@ -191,12 +191,20 @@ describe('country', () => {
     ).toMatchObject({ status: 'no-option' });
   });
 
-  it('treats a select without an empty option as already answered', () => {
+  it('leaves a select that starts on a real option to the user', () => {
     loadHtml(
       '<label>Country <select><option value="IE">Ireland</option><option value="GB">United Kingdom</option></select></label>',
     );
 
-    expect(plan()[0]).toMatchObject({ status: 'keep', value: 'Ireland' });
+    expect(plan()[0]).toMatchObject({ status: 'manual', fillValue: null });
+  });
+
+  it('keeps an option the page or the user explicitly selected', () => {
+    loadHtml(
+      '<label>Country <select><option value="IE">Ireland</option><option value="FR" selected>France</option></select></label>',
+    );
+
+    expect(plan()[0]).toMatchObject({ status: 'keep', value: 'France' });
   });
 
   it('ignores disabled options', () => {
@@ -283,5 +291,25 @@ describe('summarise and attentionQueue', () => {
     ]);
 
     expect(queue.map((r) => r.field.element.id)).toEqual(['d', 'b', 'a']);
+  });
+});
+
+describe('select placeholders', () => {
+  it('fills a select whose placeholder is a disabled option', () => {
+    loadHtml(`<label>Country <select>
+      <option selected disabled>Select a country</option>
+      <option value="GB">United Kingdom</option>
+    </select></label>`);
+
+    expect(plan()[0]).toMatchObject({ status: 'fill', fillValue: 'GB' });
+  });
+
+  it('fills a select whose placeholder only reads like one', () => {
+    loadHtml(`<label>Country <select>
+      <option value="-1">Choose…</option>
+      <option value="GB">United Kingdom</option>
+    </select></label>`);
+
+    expect(plan()[0]).toMatchObject({ status: 'fill', fillValue: 'GB' });
   });
 });

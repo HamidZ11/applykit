@@ -45,7 +45,7 @@ describe('scanFields', () => {
         'Personal information',
         'text',
         true,
-        'conflict:city|country',
+        'unrecognised',
       ],
       ['Résumé / CV', 'Experience', 'file', true, 'unsupported'],
       ['Portfolio URL', 'Experience', 'url', true, 'portfolio'],
@@ -113,6 +113,8 @@ describe('scanFields', () => {
       'manager-email': 'other-person',
       'ref-name': 'other-person',
       'ref-phone': 'other-person',
+      'ec-name': 'other-person',
+      'ec-phone': 'other-person',
       salary: 'manual:sensitive',
       dob: 'manual:sensitive',
       sponsorship: 'manual:sensitive',
@@ -227,5 +229,82 @@ describe('scanFields', () => {
     scanFields(document);
 
     expect(document.body.innerHTML).toBe(before);
+  });
+});
+
+describe('forms that do not mark sections with fieldsets', () => {
+  it('does not fill a reference section introduced by a heading', () => {
+    loadHtml(`<form>
+      <h2>Your details</h2>
+      <label>Full name <input id="me-name"></label>
+      <label>Email <input id="me-email" type="email"></label>
+      <h2>Reference 1</h2>
+      <label>Full name <input id="ref-name"></label>
+      <label>Email <input id="ref-email" type="email"></label>
+    </form>`);
+
+    const byId = Object.fromEntries(
+      scanFields(document).map((f) => [f.element.id, outcome(f)]),
+    );
+
+    expect(byId).toMatchObject({
+      'me-name': 'fullName',
+      'me-email': 'email',
+    });
+    expect(byId['ref-name']).not.toBe('fullName');
+    expect(byId['ref-email']).not.toBe('email');
+  });
+
+  it('reads sections and groups labelled by another element', () => {
+    loadHtml(`<form>
+      <label>Phone <input id="me" type="tel"></label>
+      <section aria-labelledby="ec"><h3 id="ec">Emergency contact</h3>
+        <div><label>Mobile <input id="ec-phone" type="tel"></label></div>
+      </section>
+      <div role="group" aria-labelledby="r2"><span id="r2">Referee 2</span>
+        <label>Telephone <input id="ref-phone" type="tel"></label>
+      </div>
+    </form>`);
+
+    const byId = Object.fromEntries(
+      scanFields(document).map((f) => [f.element.id, outcome(f)]),
+    );
+
+    expect(byId).toEqual({
+      me: 'phone',
+      'ec-phone': 'other-person',
+      'ref-phone': 'other-person',
+    });
+  });
+
+  it('fills only the first of several fields asking for the same detail', () => {
+    loadHtml(`<form>
+      <label>Email <input id="e1" type="email"></label>
+      <label>Email <input id="e2" type="email"></label>
+      <label>Confirm email <input id="e3" type="email"></label>
+    </form>`);
+
+    expect(scanFields(document).map(outcome)).toEqual([
+      'email',
+      'duplicate',
+      'email',
+    ]);
+  });
+
+  it('considers an application built without a form element', () => {
+    loadHtml(`
+      <div id="app">
+        <label>First name <input id="first"></label>
+        <label>Last name <input id="last"></label>
+        <label>Email <input id="email" type="email"></label>
+      </div>
+      <form id="newsletter"><label>Email <input id="news" type="email"></label></form>
+    `);
+
+    expect(scanFields(document).map((f) => f.element.id)).toEqual([
+      'first',
+      'last',
+      'email',
+    ]);
   });
 });

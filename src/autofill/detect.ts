@@ -117,6 +117,9 @@ const SHORT_ONLY = new Set<AutofillField>(['city', 'region', 'country']);
 const MAX_WORDS = 8;
 const MAX_SHORT_WORDS = 4;
 
+const OTHER_NAMES =
+  /\b(?:other|another|second|alternative|alias(?:es)?|maiden|middle)\b/;
+
 /**
  * Words that turn a matching label into something else, such as a phone
  * extension or a dialling code. They veto the field whatever other signals
@@ -126,6 +129,11 @@ const EXCLUDE: Partial<Record<AutofillField, RegExp>> = {
   phone:
     /\b(?:ext|extension|prefix)\b|\b(?:phone|tel|telephone|mobile) (?:type|code)\b|\b(?:country|area|dial(?:l?ing)?|calling) code\b/,
   country: /\b(?:code|dial(?:l?ing)?|calling|prefix)\b/,
+  // Previous or additional names are not the current name.
+  fullName: OTHER_NAMES,
+  firstName: OTHER_NAMES,
+  lastName: OTHER_NAMES,
+  preferredName: OTHER_NAMES,
 };
 const INSTRUCTION = /\b(?:include|including|incl|with)\b/;
 
@@ -135,18 +143,26 @@ function excluded(field: AutofillField, text: string): boolean {
 
 /** Never answered automatically. */
 const SENSITIVE =
-  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|pay|wage|disabilit\w*|disabled|gender|sex|ethnic\w*|race|religio\w*|belief|sexual\w*|orientation|age|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizenship|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste)\b/;
+  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|pay|wage|disabilit\w*|disabled|gender|sex|ethnic\w*|race|religio\w*|belief|sexual\w*|orientation|age|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|origin|native|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste)\b/;
 const CONSENT =
   /\b(?:consent|agree\w*|declar\w*|terms|privacy|acknowledg\w*|certify|newsletter|marketing|subscribe|opt in)\b/;
 const VERIFICATION = /captcha|turnstile|g-recaptcha/i;
 
 /** Someone or something other than the applicant. */
 const OTHER_PERSON =
-  /\b(?:references?|referees?|employers?|company|organi[sz]ation|hiring|recruiter|manager|supervisor|emergency|next of kin|guardian|parent|spouse|partner|agency|business|work|office|school|university|college|previous|former|landlord|contact person)\b/;
+  /\b(?:references?|referees?|referr\w*|referrals?|employers?|employees?|colleagues?|friends?|relatives?|interviewers?|company|organi[sz]ation|hiring|recruiter|manager|supervisor|emergency|next of kin|guardian|parent|spouse|partner|agency|business|work|office|school|university|college|previous|former|landlord|contact person)\b/;
+
+/**
+ * The same idea for the nearest heading before a control. Narrower, because
+ * headings also carry job titles ("Engineering Manager") and company names.
+ */
+const OTHER_PERSON_HEADING =
+  /\b(?:references?|referees?|referr\w*|referrals?|employers?|supervisors?|emergency|next of kin|guardian|spouse|partner|landlord|contact person)\b/;
 
 export function detectControl(control: DetectableControl): Detection {
   const texts = textSignals(control);
   const context = sectionText(control);
+  const heading = normalise(headingBefore(control));
   const all = [...texts.map((t) => t.normalised), context].join(' | ');
 
   const identifiers = [
@@ -158,7 +174,9 @@ export function detectControl(control: DetectableControl): Detection {
   if (VERIFICATION.test(identifiers)) {
     return { kind: 'manual', reason: 'verification' };
   }
-  if (SENSITIVE.test(all)) return { kind: 'manual', reason: 'sensitive' };
+  if (SENSITIVE.test(all) || SENSITIVE.test(heading)) {
+    return { kind: 'manual', reason: 'sensitive' };
+  }
   if (CONSENT.test(all)) return { kind: 'manual', reason: 'consent' };
 
   const candidates = new Map<AutofillField, Evidence[]>();
@@ -191,14 +209,25 @@ export function detectControl(control: DetectableControl): Detection {
       add(field, { signal, text: raw });
   }
 
-  for (const field of [...candidates.keys()]) {
-    if (texts.some((t) => excluded(field, t.normalised))) {
+  // A label that asks something else outweighs an example in the
+  // placeholder: "How did you hear about us?" with "e.g. LinkedIn".
+  const labelled = texts.some((t) => t.signal === 'label');
+  for (const [field, found] of [...candidates]) {
+    const placeholderOnly = found.every((e) => e.signal === 'placeholder');
+    if (
+      (labelled && placeholderOnly) ||
+      texts.some((t) => excluded(field, t.normalised))
+    ) {
       candidates.delete(field);
     }
   }
 
   const evidence = [...candidates.values()].flat();
-  if (notPersonal || OTHER_PERSON.test(all)) {
+  if (
+    notPersonal ||
+    OTHER_PERSON.test(all) ||
+    OTHER_PERSON_HEADING.test(heading)
+  ) {
     return evidence.length > 0 || notPersonal
       ? { kind: 'other-person', evidence }
       : { kind: 'none' };
@@ -264,24 +293,78 @@ function textSignals(control: DetectableControl): TextSignal[] {
     .map(([signal, text]) => ({
       signal,
       raw: text.replace(/\s+/g, ' ').trim(),
-      normalised: normalise(text),
+      // Example addresses in placeholders ("name@company.com") are not
+      // statements about the field.
+      normalised: normalise(
+        signal === 'placeholder'
+          ? text.replace(/\S+@\S+|\S*(?:https?:\/\/|www\.)\S*/gi, ' ')
+          : text,
+      ),
     }))
     .filter((signal) => signal.normalised !== '');
 }
 
-/** Legends and group labels around the control, e.g. "Reference 1". */
+/**
+ * Legends and labels of the groups and sections around the control, e.g.
+ * "Reference 1".
+ */
 function sectionText(control: DetectableControl): string {
   const parts: string[] = [];
   let node: Element | null = control.parentElement;
   while (node) {
     if (node instanceof HTMLFieldSetElement) {
       parts.push(node.querySelector(':scope > legend')?.textContent ?? '');
-    } else if (node.getAttribute('role') === 'group') {
-      parts.push(node.getAttribute('aria-label') ?? '');
+    }
+    const role = node.getAttribute('role');
+    if (
+      node instanceof HTMLFieldSetElement ||
+      node.localName === 'section' ||
+      role === 'group' ||
+      role === 'region'
+    ) {
+      parts.push(accessibleName(node));
     }
     node = node.parentElement;
   }
   return normalise(parts.join(' '));
+}
+
+/** `aria-label`, or the text of the elements named by `aria-labelledby`. */
+function accessibleName(element: Element): string {
+  const parts = [element.getAttribute('aria-label') ?? ''];
+  for (const id of (element.getAttribute('aria-labelledby') ?? '').split(
+    /\s+/,
+  )) {
+    if (id)
+      parts.push(element.ownerDocument.getElementById(id)?.textContent ?? '');
+  }
+  return parts.join(' ');
+}
+
+const HEADINGS = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
+
+/**
+ * The nearest heading before the control within its section (its fieldset
+ * or labelled group, else its form, else the page): many forms mark
+ * sections such as "Reference 1" with headings rather than fieldsets.
+ */
+function headingBefore(control: DetectableControl): string {
+  const scope =
+    control.closest('fieldset, section, [role="group"], [role="region"]') ??
+    control.form ??
+    control.ownerDocument.body;
+  let nearest: Element | null = null;
+  for (const heading of scope.querySelectorAll(HEADINGS)) {
+    if (
+      heading.compareDocumentPosition(control) &
+      Node.DOCUMENT_POSITION_FOLLOWING
+    ) {
+      nearest = heading;
+    } else {
+      break;
+    }
+  }
+  return nearest?.textContent ?? '';
 }
 
 export function labelText(control: DetectableControl): string {

@@ -244,3 +244,47 @@ describe('describeEvidence', () => {
     );
   });
 });
+
+describe('review regressions', () => {
+  it.each([
+    '<label>Country of origin <select></select></label>',
+    '<label>Native country <input></label>',
+    '<label>Are you a citizen? <input></label>',
+  ])('treats %s as sensitive', (html) => {
+    expect(detect(html)).toEqual({ kind: 'manual', reason: 'sensitive' });
+  });
+
+  it.each([
+    '<label>Referrer email <input type="email"></label>',
+    '<label>Referred by (full name) <input></label>',
+    '<label>Referral phone <input type="tel"></label>',
+    '<label>Colleague email <input type="email"></label>',
+    '<label>Full name of the person who referred you <input></label>',
+  ])('does not fill %s with the applicant’s details', (html) => {
+    expect(detect(html).kind).not.toBe('match');
+  });
+
+  it('is not put off by an example address in the placeholder', () => {
+    expect(
+      matched(
+        '<label>Email <input type="email" placeholder="name@company.com"></label>',
+      ),
+    ).toBe('email');
+  });
+
+  it('ignores a placeholder example when the label asks something else', () => {
+    expect(
+      matched(
+        '<label>How did you hear about us? <input placeholder="e.g. LinkedIn"></label>',
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    '<label>Other last names used <input></label>',
+    '<label>Second last name <input></label>',
+    '<label>Have you been known by another name? <input></label>',
+  ])('does not fill %s with the current name', (html) => {
+    expect(matched(html)).toBeNull();
+  });
+});
