@@ -10,7 +10,8 @@ Built so far: the floating panel (compact and expanded), profile
 onboarding/editing in a full tab with local storage and drafts, local CV
 import with review, and autofill of personal, contact, address, link and
 education fields from the confirmed saved profile, including split calling
-codes and preferred names (ADR 0010, ADR 0011).
+codes and preferred names (ADR 0010, ADR 0011), and user-confirmed choice
+of the saved record for ambiguous education sections (ADR 0012).
 
 Still to come (build only when asked, one at a time): employment autofill;
 custom dropdown widgets; application details and reusable answers; review
@@ -112,7 +113,11 @@ old (pnpm enforces a minimum release age; do not add exclusions).
   rejected values reported, other people's details and sensitive questions
   skipped. `fixtures/full-application.html` covers these together;
   `fixtures/education-application.html` covers heading-only sections,
-  calling codes and education.
+  calling codes and education; `fixtures/interactive-education.html`
+  covers choosing a record for ambiguous and numbered sections.
+- A user's choice must never make other fields eligible for automatic
+  filling: choices go through `planFill` as `SectionChoices`, are
+  previewed, re-checked by `confirmChoice` and written by `fillFields`.
 - Tests fill from `src/test/autofill-fixtures.ts` (fictional); the extension
   itself has no sample data.
 - Browser tests and design captures run headless only, in a throwaway

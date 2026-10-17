@@ -68,15 +68,16 @@ collapse.
 There is one source of truth, `panelReducer` (`panel-state.ts`), held by
 `usePanel` in the root `Panel` component:
 
-| State      | Meaning                                                        |
-| ---------- | -------------------------------------------------------------- |
-| `mode`     | `compact` or `expanded`                                        |
-| `filter`   | Expanded list filter: all, handled, needs you                  |
-| `phase`    | `ready`, `filling` (once, guarded), `done`                     |
-| `fields`   | The latest `scanFields` result                                 |
-| `values`   | `loading`, or the latest reply: ready, missing, invalid, error |
-| `outcomes` | What autofill did, verified per field                          |
-| `selected` | The field under review, by element (shared by both modes)      |
+| State       | Meaning                                                        |
+| ----------- | -------------------------------------------------------------- |
+| `mode`      | `compact` or `expanded`                                        |
+| `filter`    | Expanded list filter: all, handled, needs you                  |
+| `phase`     | `ready`, `filling` (once, guarded), `done`                     |
+| `fields`    | The latest `scanFields` result                                 |
+| `values`    | `loading`, or the latest reply: ready, missing, invalid, error |
+| `outcomes`  | What autofill did, verified per field                          |
+| `confirmed` | Fields filled from a record the user chose, until a rescan     |
+| `selected`  | The field under review, by element (shared by both modes)      |
 
 Reports, counts and the attention queue are derived on render: `outcomes`
 after autofill, otherwise `planFill(fields, values)`. Mode and filter
@@ -168,7 +169,8 @@ panel: validates the reply shape; anything else is { error }
 ```
 
 Lifecycle: values are read on open, on every rescan and immediately before
-autofill. There are no storage listeners, and a profile change never fills
+autofill or a confirmed record choice. Only extension pages and a tab's top
+frame (where the panel runs) are answered. There are no storage listeners, and a profile change never fills
 anything by itself. Without a ready profile the footer offers "Set up your
 profile", "Open your profile" or "Try again" instead of Autofill.
 
@@ -222,7 +224,8 @@ Details and reasoning are in ADR 0010 and ADR 0011.
   and graduation dates, and grade from one saved education record.
 - Modules in `src/autofill`: `detect` (what a control asks), `scan` (every
   control, with support and section), `report` and `plan-education` (the
-  plan: value or reason per field), `fill` (write and verify), plus pure
+  plan: value or reason per field), `resolve` (preview and confirm a record
+  the user chose for a section), `fill` (write and verify), plus pure
   rules in `education`, `dates`, `options` and `categories`. The background
   derives `AutofillValues` in `profile-values` (phone parsing, record
   levels).
@@ -242,7 +245,9 @@ Details and reasoning are in ADR 0010 and ADR 0011.
   radios, textareas, file inputs or custom dropdowns.
 - Preferred names use the first name only when the user chose that in
   their profile. Education records are chosen per section of the form;
-  several fitting records leave the fields for review. Dates are never
+  several fitting records leave the fields for the user, who can choose
+  one in the expanded list, preview its effect and confirm (ADR 0012).
+  Choices are never saved and never reach another section. Dates are never
   given a day the profile does not have.
 - Values are set through the native prototype setter, then a bubbling
   `input` and `change` are dispatched. A field is re-checked just before

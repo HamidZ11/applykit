@@ -106,7 +106,9 @@ Limitations:
    hidden honeypot and a separate newsletter form.
    (`job-application.html` is a shorter form; `education-application.html`
    is a long single-page internship form with a separate calling code,
-   university and school sections, and sections marked only by headings.)
+   university and school sections, and sections marked only by headings;
+   `interactive-education.html` has school and numbered education sections
+   where you choose which saved record to use.)
 4. Click the ApplyKit toolbar button. Without a saved profile the panel
    says so and offers **Set up your profile**; it fills nothing. Save a
    profile with fictional details (see below), then click the rescan button
@@ -172,7 +174,9 @@ Limitations:
 - Education: institution, qualification, field of study, start and
   graduation dates and grade, from the one saved record a form section
   asks about (university or school). When several records could fit, the
-  fields are left for you with "Several records fit".
+  fields are left for you with "Several records fit"; in the full list you
+  can choose the right record, see what it would fill, and confirm.
+- Fields your profile has no value for link to your profile page.
 - The full list groups fields by topic, so long forms do not end up under
   "Other fields".
 - Detects fields from `autocomplete`, input type, labels, `name`, `id`,
@@ -201,8 +205,12 @@ Limitations:
 - Autofill covers personal, contact, address, link and education fields;
   not employment history or written answers.
 - Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
-  and similar platforms) are listed as not supported, not filled.
-  Compatibility has been tried on one real application only.
+  and similar platforms) are listed as not supported, not filled; dropdowns
+  built from non-input elements are not listed at all yet. See
+  `docs/research/custom-dropdowns.md`. Compatibility has been tried on one
+  real application only.
+- A record you choose for a section is used for that section only, and is
+  not remembered for other forms.
 - Education dates are filled only where the field's format is clear (month
   inputs, year or month dropdowns, "MM/YYYY"-style hints, year-only
   fields); never where a day is needed. Several saved degrees, or a form
