@@ -1,0 +1,33 @@
+# Dependencies
+node_modules
+
+# WXT build output and generated types
+.output
+.wxt
+web-ext.config.ts
+stats.html
+stats-*.json
+
+# Logs
+*.log
+
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+
+# Editor and OS files
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# Packaged extensions
+*.zip
+*.crx
+*.pem
+
+# Playwright artifacts
+test-results
+playwright-report
+blob-report
