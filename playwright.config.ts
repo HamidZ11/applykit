@@ -1,9 +1,8 @@
 import { defineConfig } from '@playwright/test';
-import type { Concept, ExtensionOptions } from './e2e/extension';
 
 const FIXTURE_PORT = '4399';
 
-export default defineConfig<ExtensionOptions>({
+export default defineConfig({
   testDir: 'e2e',
   // Tests run one at a time. Each currently launches its own headless
   // browser with the extension loaded (see e2e/extension.ts).
@@ -19,10 +18,6 @@ export default defineConfig<ExtensionOptions>({
     baseURL: `http://127.0.0.1:${FIXTURE_PORT}`,
     trace: 'retain-on-failure',
   },
-  // Every browser test runs against each panel concept's real build.
-  projects: (['command-dock', 'field-inspector'] satisfies Concept[]).map(
-    (concept) => ({ name: concept, use: { concept } }),
-  ),
   webServer: {
     command: 'node scripts/serve-fixtures.mjs',
     url: `http://127.0.0.1:${FIXTURE_PORT}/basic-application.html`,

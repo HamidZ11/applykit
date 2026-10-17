@@ -1,27 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
-
-interface LocatorProps {
-  /** The page element to point at, or null for none. */
-  target: Element | null;
-  /** `pulse` shows briefly then fades; `hold` stays while the target is set. */
-  mode: 'pulse' | 'hold';
-}
+import { useEffect, useRef } from 'react';
 
 const PADDING = 4;
 
 /**
- * Draws a ring around a field on the page and scrolls it into view if needed.
+ * Draws a ring around a field on the page while it is selected, and scrolls
+ * it into view if it is off-screen.
  *
  * Rendered inside ApplyKit's own shadow root and positioned over the page, so
- * the page's DOM and styles are never touched. Remount (via `key`) to pulse
- * the same target again.
+ * the page's DOM and styles are never touched. Key it by target so the ring
+ * fades in again when the selection moves.
  */
-export function Locator({ target, mode }: LocatorProps) {
+export function Locator({ target }: { target: Element }) {
   const ring = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    if (!target) return;
     revealIfHidden(target);
 
     let frame = 0;
@@ -43,21 +35,12 @@ export function Locator({ target, mode }: LocatorProps) {
     };
   }, [target]);
 
-  if (!target || !visible) return null;
-
   return (
     <div
       ref={ring}
       aria-hidden
       data-testid="applykit-locator"
-      onAnimationEnd={() => {
-        if (mode === 'pulse') setVisible(false);
-      }}
-      className={`ak-locator pointer-events-none fixed top-0 left-0 rounded-md border-2 border-accent shadow-[0_0_0_4px_rgb(45_83_212/0.14)] ${
-        mode === 'pulse'
-          ? 'animate-[ak-locate_1600ms_var(--ease-out)_forwards]'
-          : 'animate-[ak-fade-in_120ms_var(--ease-out)]'
-      }`}
+      className="ak-locator pointer-events-none fixed top-0 left-0 animate-[ak-fade-in_120ms_var(--ease-out)] rounded-md border-2 border-accent shadow-[0_0_0_4px_rgb(45_83_212/0.14)]"
     />
   );
 }

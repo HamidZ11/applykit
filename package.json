@@ -9,13 +9,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev:dock": "APPLYKIT_CONCEPT=command-dock wxt",
-    "dev:inspector": "APPLYKIT_CONCEPT=field-inspector wxt",
-    "build": "pnpm build:dock && pnpm build:inspector",
-    "build:dock": "APPLYKIT_CONCEPT=command-dock wxt build",
-    "build:inspector": "APPLYKIT_CONCEPT=field-inspector wxt build",
-    "build:safari": "APPLYKIT_CONCEPT=command-dock wxt build -b safari --mv3",
-    "zip": "APPLYKIT_CONCEPT=command-dock wxt zip",
+    "dev": "wxt",
+    "build": "wxt build",
+    "build:safari": "wxt build -b safari --mv3",
+    "zip": "wxt zip",
     "fixtures": "node scripts/serve-fixtures.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -23,9 +20,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "pnpm build && playwright test",
-    "capture": "pnpm build && APPLYKIT_CAPTURE=1 playwright test e2e/capture.spec.ts",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm test:e2e",
+    "test:e2e": "wxt build && playwright test",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

@@ -105,18 +105,6 @@
     opacity: 0;
   }
 }
-@keyframes ak-locate {
-  0% {
-    opacity: 0;
-  }
-  12%,
-  70% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
 @keyframes ak-changed {
   from {
     background-color: var(--color-success-soft);

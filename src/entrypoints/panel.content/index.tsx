@@ -10,6 +10,8 @@ interface PanelHandle {
   ui: PanelUi | null;
   /** Set when the user closes the panel before it finished mounting. */
   cancelled: boolean;
+  /** The page element focused before ApplyKit opened, restored on close. */
+  returnFocus: Element | null;
 }
 
 declare global {
@@ -30,7 +32,11 @@ export default defineContentScript({
       return;
     }
     // Claimed synchronously so a fast second click cannot mount a duplicate.
-    const handle: PanelHandle = { ui: null, cancelled: false };
+    const handle: PanelHandle = {
+      ui: null,
+      cancelled: false,
+      returnFocus: document.activeElement,
+    };
     globalThis.__applykitPanel = handle;
     try {
       const ui = await mountPanel(ctx);
@@ -50,9 +56,11 @@ async function mountPanel(ctx: ContentScriptContext) {
   // Imported lazily because WXT evaluates this module at build time to read
   // its options. CSS and fonts are inlined rather than loaded as
   // web-accessible resources, so pages cannot probe for the extension's files.
-  const [{ default: css }, { loadPanelFonts }, { Concept }] = await Promise.all(
-    [import('./style.css?inline'), import('@/page/fonts'), import('./concept')],
-  );
+  const [{ default: css }, { loadPanelFonts }, { Panel }] = await Promise.all([
+    import('./style.css?inline'),
+    import('@/page/fonts'),
+    import('@/components/panel/Panel'),
+  ]);
   await loadPanelFonts();
 
   const ui = await createShadowRootUi(ctx, {
@@ -65,7 +73,7 @@ async function mountPanel(ctx: ContentScriptContext) {
     onMount(container) {
       const root = ReactDOM.createRoot(container);
       root.render(
-        <Concept
+        <Panel
           onClose={() => {
             void closePanel();
           }}
@@ -99,4 +107,16 @@ async function closePanel() {
       .map((animation) => animation.finished),
   );
   ui.remove();
+  restoreFocus(handle.returnFocus);
+}
+
+/** Hands focus back to the page element that had it before ApplyKit opened. */
+function restoreFocus(element: Element | null) {
+  if (
+    element instanceof HTMLElement &&
+    element !== document.body &&
+    element.isConnected
+  ) {
+    element.focus({ preventScroll: true });
+  }
 }

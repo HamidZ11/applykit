@@ -2,8 +2,8 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './extension';
 
 /**
- * Behaviour the panel concepts add on top of the shared contract, exercised on
- * the realistic job application fixture.
+ * The unified panel's compact and expanded modes on the realistic job
+ * application fixture.
  */
 
 const FIXTURE = '/job-application.html';
@@ -43,6 +43,9 @@ async function expectLocatorOver(page: Page, target: Locator) {
     .toBe(true);
 }
 
+const fieldList = (panel: Locator) =>
+  panel.getByRole('region', { name: 'Fields on this form' });
+
 test('reports honest outcomes on a realistic form without errors', async ({
   page,
   worker,
@@ -75,29 +78,24 @@ test('reports honest outcomes on a realistic form without errors', async ({
   await expect(page.locator('#given')).toHaveValue('Alex');
   await expect(page.locator('#family')).toHaveValue('Sample');
   await expect(page.locator('#email')).toHaveValue(TYPED_EMAIL);
-  // Unrecognised and unsupported fields stay untouched.
   for (const selector of ['#preferred', '#phone', '#location', '#salary']) {
     await expect(page.locator(selector)).toHaveValue('');
   }
   await expect(page.locator('#notice')).toHaveValue('');
   await expect(page.locator('[name=privacy_consent]')).not.toBeChecked();
   await expect(page.locator('#status')).toContainText('submitted: no');
-  // ApplyKit adds nothing to the page other than its own shadow host.
   expect(await bodyChildren()).toEqual(before);
   expect(errors).toEqual([]);
 });
 
-test.describe('Command Dock', () => {
-  test.beforeEach(({ concept }) => {
-    test.skip(concept !== 'command-dock', 'Command Dock only');
-  });
-
-  test('summarises the plan before autofill', async ({
+test.describe('compact mode', () => {
+  test('opens compact and summarises the plan', async ({
     page,
     clickToolbar,
   }) => {
     const panel = await openWithTypedEmail(page, clickToolbar);
 
+    await expect(panel).toHaveAttribute('data-mode', 'compact');
     await expect(panel).toContainText('Fill 2 fields from your profile');
     await expect(panel).toContainText('Keep 1 entry you already typed');
     await expect(panel).toContainText('Leave 12 for you');
@@ -112,117 +110,73 @@ test.describe('Command Dock', () => {
 
     await page.keyboard.press('Enter');
     await expect(page.locator('#given')).toHaveValue('Alex');
-    await expect(
-      panel.getByRole('button', { name: /^Go to first/ }),
-    ).toBeVisible();
 
     await page.keyboard.press('Enter');
-    const current = panel.locator('[aria-current="step"]');
-    await expect(current).toContainText('Phone');
+    await expect(panel.getByRole('button', { name: /^Phone/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await expectLocatorOver(page, page.locator('#phone'));
 
     await page.keyboard.press('Enter');
-    await expect(current).toContainText('Current location');
     await expectLocatorOver(page, page.locator('#location'));
     await expect(page.locator('#status')).toContainText('submitted: no');
   });
 
-  test('reveals the queue beyond the first five on request', async ({
+  test('Escape closes the panel and returns focus to the page', async ({
     page,
     clickToolbar,
   }) => {
-    const panel = await openWithTypedEmail(page, clickToolbar);
-    await panel.getByRole('button', { name: /^Autofill/ }).click();
-    const queue = panel.getByRole('region', { name: 'Needs you' });
-
-    await expect(queue.getByRole('listitem')).toHaveCount(5);
-    await panel.getByRole('button', { name: 'Show 7 more' }).click();
-    await expect(queue.getByRole('listitem')).toHaveCount(12);
-  });
-
-  test('closes with Escape', async ({ page, clickToolbar }) => {
     await openWithTypedEmail(page, clickToolbar);
     await page.keyboard.press('Escape');
     await expect(page.locator('applykit-panel')).toHaveCount(0);
+    await expect(page.locator('#email')).toBeFocused();
   });
 });
 
-test.describe('Field Inspector', () => {
-  test.beforeEach(({ concept }) => {
-    test.skip(concept !== 'field-inspector', 'Field Inspector only');
-  });
-
-  test('lists every field by section before autofill', async ({
-    page,
-    clickToolbar,
-  }) => {
+test.describe('expanded mode', () => {
+  test('lists every field by section', async ({ page, clickToolbar }) => {
     const panel = await openWithTypedEmail(page, clickToolbar);
-    const list = panel.getByRole('region', { name: 'Fields on this form' });
+    await panel.getByRole('button', { name: 'Show all fields' }).click();
 
-    await expect(list.getByRole('listitem')).toHaveCount(15);
+    await expect(panel).toHaveAttribute('data-mode', 'expanded');
+    await expect(fieldList(panel).getByRole('listitem')).toHaveCount(15);
     for (const section of [
       'Personal information',
       'Experience',
       'Application questions',
       'Privacy',
     ]) {
-      await expect(list.getByRole('region', { name: section })).toBeVisible();
+      await expect(
+        fieldList(panel).getByRole('region', { name: section }),
+      ).toBeVisible();
     }
-    await expect(
-      list.getByRole('button', { name: /^First name.*Alex$/ }),
-    ).toBeVisible();
-    await expect(
-      list.getByRole('button', { name: new RegExp(`^Email.*${TYPED_EMAIL}$`) }),
-    ).toBeVisible();
-    await expect(
-      panel.getByRole('button', { name: 'Autofill 2 fields' }),
-    ).toBeVisible();
   });
 
-  test('filters by who handles each field', async ({ page, clickToolbar }) => {
-    const panel = await openWithTypedEmail(page, clickToolbar);
-    const rows = panel
-      .getByRole('region', { name: 'Fields on this form' })
-      .getByRole('listitem');
-
-    await panel.getByRole('tab', { name: /^Needs you/ }).click();
-    await expect(rows).toHaveCount(12);
-    await panel.getByRole('tab', { name: /^Fillable/ }).click();
-    await expect(rows).toHaveCount(3);
-  });
-
-  test('turns the list into an execution report', async ({
+  test('opens on the matching filter from the compact plan', async ({
     page,
     clickToolbar,
   }) => {
     const panel = await openWithTypedEmail(page, clickToolbar);
-    await panel.getByRole('button', { name: /^Autofill/ }).click();
+    await panel.getByRole('button', { name: /^Leave 12 for you/ }).click();
 
-    await expect(panel.getByRole('tab', { name: /^Done\s*3$/ })).toBeVisible();
-    await panel.getByRole('button', { name: /^First name/ }).click();
-    await expect(panel).toContainText('Filled from your profile.');
-    await expect(panel).toContainText('autocomplete="given-name"');
-    await panel.getByRole('button', { name: /^Email/ }).click();
-    await expect(panel).toContainText(
-      'You had already typed this, so ApplyKit left it as is.',
-    );
-  });
-
-  test('points at the selected field on the page', async ({
-    page,
-    clickToolbar,
-  }) => {
-    const panel = await openWithTypedEmail(page, clickToolbar);
-    await panel.getByRole('button', { name: /^Autofill/ }).click();
-
-    await panel.getByRole('button', { name: /^Review 7 required/ }).click();
     await expect(
       panel.getByRole('tab', { name: /^Needs you/ }),
     ).toHaveAttribute('aria-selected', 'true');
-    await expectLocatorOver(page, page.locator('#phone'));
+    await expect(fieldList(panel).getByRole('listitem')).toHaveCount(12);
+  });
 
-    await page.keyboard.press('ArrowDown');
-    await expectLocatorOver(page, page.locator('#location'));
+  test('explains a selected field and points at it on the page', async ({
+    page,
+    clickToolbar,
+  }) => {
+    const panel = await openWithTypedEmail(page, clickToolbar);
+    await panel.getByRole('button', { name: /^Autofill/ }).click();
+    await panel.getByRole('button', { name: 'Show all fields' }).click();
+
+    await panel.getByRole('button', { name: /^First name/ }).click();
+    await expect(panel).toContainText('Filled from your profile.');
+    await expect(panel).toContainText('autocomplete="given-name"');
 
     await panel.getByRole('button', { name: /^Do you have the right/ }).click();
     await expectLocatorOver(
@@ -231,19 +185,42 @@ test.describe('Field Inspector', () => {
     );
   });
 
-  test('Escape clears the selection, then closes', async ({
+  test('Escape collapses first, then closes', async ({
     page,
     clickToolbar,
   }) => {
     const panel = await openWithTypedEmail(page, clickToolbar);
-    await panel.getByRole('button', { name: /^Phone/ }).click();
-    await expect(page.getByTestId('applykit-locator')).toBeAttached();
+    await panel.getByRole('button', { name: 'Show all fields' }).click();
 
     await page.keyboard.press('Escape');
-    await expect(page.getByTestId('applykit-locator')).toHaveCount(0);
-    await expect(panel).toBeVisible();
-
+    await expect(panel).toHaveAttribute('data-mode', 'compact');
     await page.keyboard.press('Escape');
     await expect(page.locator('applykit-panel')).toHaveCount(0);
   });
+});
+
+test('switching modes keeps results, values and the current field', async ({
+  page,
+  clickToolbar,
+}) => {
+  const panel = await openWithTypedEmail(page, clickToolbar);
+  await panel.getByRole('button', { name: /^Autofill/ }).click();
+  await panel.getByRole('button', { name: /^Go to first/ }).click();
+
+  for (let i = 0; i < 3; i++) {
+    await panel.getByRole('button', { name: 'Show all fields' }).click();
+    await expect(panel.getByRole('button', { name: /^Phone/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await panel.getByRole('button', { name: 'Show summary' }).click();
+    await expect(panel).toContainText('Filled 2 fields');
+  }
+
+  await expect(page.locator('applykit-panel')).toHaveCount(1);
+  await expect(page.locator('#given')).toHaveValue('Alex');
+  await expect(page.locator('#email')).toHaveValue(TYPED_EMAIL);
+  // Only the two fills produced input events; mode switches produced none.
+  await expect(page.locator('#status')).toContainText('input events: 3');
+  await expect(page.locator('#status')).toContainText('submitted: no');
 });

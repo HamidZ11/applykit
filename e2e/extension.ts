@@ -10,20 +10,7 @@ import {
   type Worker,
 } from '@playwright/test';
 
-export type Concept = 'command-dock' | 'field-inspector';
-
-function extensionPath(concept: Concept): string {
-  return resolve(import.meta.dirname, `../.output/${concept}/chrome-mv3`);
-}
-
-export interface ExtensionOptions {
-  /** Which panel concept build to load; set per Playwright project. */
-  concept: Concept;
-  /** Additional Chromium switches, e.g. host resolver rules for capture. */
-  browserArgs: string[];
-  /** Records a video of each page into this directory when set. */
-  videoDir: string | null;
-}
+const EXTENSION_PATH = resolve(import.meta.dirname, '../.output/chrome-mv3');
 
 interface ExtensionFixtures {
   /** Throwaway browser profile; never reuse a real one. */
@@ -64,11 +51,7 @@ const MAX_CLICK_ATTEMPTS = 5;
  * It requires `--enable-unsafe-extension-debugging`, a throwaway profile and
  * Chromium (Chrome for Testing); branded Chrome ignores `--load-extension`.
  */
-export const test = base.extend<ExtensionFixtures & ExtensionOptions>({
-  concept: ['command-dock', { option: true }],
-  browserArgs: [[], { option: true }],
-  videoDir: [null, { option: true }],
-
+export const test = base.extend<ExtensionFixtures>({
   // eslint-disable-next-line no-empty-pattern
   profileDir: async ({}, use) => {
     const profile = mkdtempSync(join(tmpdir(), 'applykit-e2e-'));
@@ -76,27 +59,17 @@ export const test = base.extend<ExtensionFixtures & ExtensionOptions>({
     rmSync(profile, { recursive: true, force: true });
   },
 
-  context: async (
-    { profileDir, concept, browserArgs, videoDir, viewport, deviceScaleFactor },
-    use,
-  ) => {
-    const path = extensionPath(concept);
+  context: async ({ profileDir }, use) => {
     const context = await chromium.launchPersistentContext(profileDir, {
       // Always headless: no visible windows. Headed runs need the user's
       // explicit permission (see CLAUDE.md).
       headless: true,
       channel: 'chromium', // new headless mode, which supports extensions
-      viewport,
-      ...(deviceScaleFactor === undefined ? {} : { deviceScaleFactor }),
-      ...(videoDir && viewport
-        ? { recordVideo: { dir: videoDir, size: viewport } }
-        : {}),
       args: [
-        `--disable-extensions-except=${path}`,
-        `--load-extension=${path}`,
+        `--disable-extensions-except=${EXTENSION_PATH}`,
+        `--load-extension=${EXTENSION_PATH}`,
         '--enable-unsafe-extension-debugging',
         '--remote-debugging-port=0',
-        ...browserArgs,
       ],
     });
     await use(context);
