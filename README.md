@@ -4,9 +4,10 @@ A free, open-source, privacy-first browser extension that saves time on
 repetitive job applications. Everything stays on your device: no account, no
 backend, no tracking.
 
-> **Status: panel and profile.** The panel is compact by default and expands
-> into a full field list. Onboarding saves your profile in this browser, but
-> autofill does not use it yet: it still fills fictional sample data.
+> **Status: profile autofill.** Save your profile once (by hand or from your
+> CV), then fill your personal, contact, address and link details on
+> application forms. ApplyKit leaves everything else to you and never
+> submits.
 
 ## Technology
 
@@ -59,8 +60,10 @@ do not.
 
 `pnpm test:e2e` builds the extension and runs `e2e/` in headless Chromium
 against the pages in `fixtures/`. The tests cover toolbar activation,
-opening, closing and repeated toggling, autofill, input and change events,
-preserving typed values, never submitting, unsupported pages such as
+opening, closing and repeated toggling, autofill from a saved fictional
+profile (seeded through the service worker), the missing-profile path, input
+and change events, preserving typed values, never submitting, skipping
+other people's details, unsupported pages such as
 `chrome://`, honest outcome reporting, both panel modes, switching between
 them, and pointing at fields on the page.
 
@@ -89,19 +92,28 @@ Limitations:
 
 1. Run `pnpm build` and load `.output/chrome-mv3` (see above).
 2. In a second terminal, run `pnpm fixtures`.
-3. Open http://127.0.0.1:4321/job-application.html, a fictional application
-   with 15 fields, of which the engine can fill three.
-4. Optionally type into a field first (for example Email) to see that
-   ApplyKit keeps it.
-5. Click the ApplyKit toolbar button. The compact panel states what it will
-   do. Press ↵ or click **Autofill**. Fields are filled with fictional values
-   (`Alex Sample`, `alex.sample@example.com`).
-6. Work through what is left: ↵ (**Go to first** / **Next field**) steps
-   through fields that need you, outlining each on the page.
+3. Open http://127.0.0.1:4321/full-application.html, a fictional
+   application that mixes your own details with a reference, an employer,
+   a hiring manager, sensitive questions, a CAPTCHA, a consent box, a
+   hidden honeypot and a separate newsletter form.
+   (`job-application.html` is a shorter form.)
+4. Click the ApplyKit toolbar button. Without a saved profile the panel
+   says so and offers **Set up your profile**; it fills nothing. Save a
+   profile with fictional details (see below), then click the rescan button
+   (↻) in the panel's footer.
+5. The compact panel states how many fields it will fill, keep and leave
+   for you. Optionally type into a field first (for example Email) to see
+   that ApplyKit keeps it. Press ↵ or click **Autofill**.
+6. The results show what was filled, kept, not accepted by the site, and
+   left for you. ↵ (**Go to first** / **Next field**) steps through fields
+   that need you, outlining each on the page.
 7. Expand with the ⤢ button in the header, or click any plan line, to see
-   every field by section, filter it, and select a field for an explanation.
-   Collapse with ⤡ or Escape; nothing is lost.
-8. The line under the form confirms the input events and that the form was
+   every field by section with its value. Select a field to see why it was
+   filled or skipped, and the evidence (label, `autocomplete`, name). Collapse
+   with ⤡ or Escape; nothing is lost.
+8. Edit your profile in another tab, then click ↻: the panel uses the
+   updated details. It never refills the page by itself.
+9. The line under the form confirms the input events and that the form was
    **not** submitted. Close with ✕, Escape (from compact), or the toolbar
    button.
 
@@ -134,14 +146,23 @@ Limitations:
   you, required first. Expanded mode lists every field by section with
   filters and per-field explanations. Both share one state.
 - Lists every field an applicant completes, with what ApplyKit will do or
-  did to each: fill, keep the user's entry, not recognised, or not
-  supported yet.
+  did to each and why: fill, keep your entry, or leave to you (not in your
+  profile, about someone else, a question only you can answer, unclear,
+  not recognised, not supported).
 - Points at any listed field on the page without modifying the page.
-- Detects first name, last name and email inputs using `autocomplete`,
-  input type, `name`, `id`, labels and placeholders.
-- Fills detected fields with fixed sample data, dispatching native
-  `input` and `change` events so framework-controlled inputs (e.g. React)
-  update.
+- Fills from your saved profile only: full, first, last and preferred name;
+  email; phone; address lines, town or city, county or region, postcode
+  and country; LinkedIn, GitHub and portfolio or website. Without a saved
+  profile, autofill is unavailable.
+- Detects fields from `autocomplete`, input type, labels, `name`, `id`,
+  placeholders and surrounding sections, and skips any field whose signals
+  disagree.
+- Never answers right-to-work, visa, salary, disability, demographic or
+  consent questions, and never fills details about references, employers
+  or hiring managers, CAPTCHAs, or hidden, disabled or read-only fields.
+- Writes with native `input` and `change` events so framework-controlled
+  inputs (e.g. React) update, then checks what the site kept and reports
+  values it rejected or reformatted.
 - Never overwrites values already entered, and never submits a form.
 - Profile onboarding and editing in a full tab: personal details,
   education, experience and links, validated and saved in
@@ -156,17 +177,22 @@ Limitations:
 
 ## Known limitations
 
-- Autofill still uses fictional sample data; the saved profile is not
-  connected to it yet.
+- Autofill covers personal, contact, address and link fields only; not
+  education, employment or written answers.
+- Detection rules are English only. They are conservative: some fields a
+  person would fill are left to you, for example a select without an empty
+  first option (treated as already answered), or a "Website" field inside
+  an employment section.
+- Country selects must offer the country by ISO code or name; custom
+  dropdown widgets, checkboxes, radios and textareas are never filled.
 - CV import reads text only: no scanned or image-only PDFs (no OCR), no
   password-protected PDFs, no older .doc files, 5 MB and 10 pages at most.
   Extraction is rule-based and conservative: unusual layouts yield fewer
   suggestions, and addresses and country are never taken from a CV. PDF
   import needs Chrome 140 or later.
 - One profile per browser; no import, export or sync.
-- Only three fields, only `<input>` elements, and only English labels.
-- No visibility check: a visually hidden text input matching a known field
-  would be filled.
+- Visibility uses the browser's own check; fields hidden by unusual
+  techniques (for example moved off-screen) may still be listed.
 - Fields inside iframes or other shadow roots are not detected.
 - The panel cannot be moved. Expanded, it is 380×600 px at the
   bottom-right and can cover the right edge of a form at 1280×720.

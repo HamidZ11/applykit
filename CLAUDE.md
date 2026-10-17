@@ -6,15 +6,14 @@ ApplyKit is a free, open-source, local-first browser extension that saves
 time on repetitive job applications. Chrome is the first target; Safari must
 keep working from the same code.
 
-Built so far: the floating panel (compact and expanded), autofill of three
-fields from sample data, profile onboarding/editing in a full tab with local
-storage and drafts, and local CV import with review. The saved profile is not
-yet connected to autofill.
+Built so far: the floating panel (compact and expanded), profile
+onboarding/editing in a full tab with local storage and drafts, local CV
+import with review, and autofill of personal, contact, address and link
+fields from the confirmed saved profile (ADR 0010).
 
-Still to come (build only when asked, one at a time): autofill from the
-saved profile and more field types; application
-details and reusable answers; review of uncertain fields. A separate
-marketing website comes later.
+Still to come (build only when asked, one at a time): education and
+employment autofill; application details and reusable answers; review of
+uncertain fields. A separate marketing website comes later.
 
 No authentication, subscriptions, backend, external databases or AI APIs.
 User data never leaves the device. Do not invent requirements beyond these.
@@ -35,6 +34,13 @@ Read `docs/architecture.md` before changing structure, and the ADRs in
   access needs an ADR and the user's approval.
 - No `web_accessible_resources` unless an ADR justifies it.
 - Autofill never submits, clicks, sends keys or overwrites user-entered values.
+- Autofill uses only the confirmed profile, read by the background worker
+  and sent to the panel as narrow `AutofillValues` (ADR 0010). Never read
+  drafts for autofill, never fall back to sample data, and keep storage
+  access out of content scripts.
+- A correct skip beats a wrong fill: never answer sensitive, consent or
+  verification questions, never fill other people's details, and skip
+  fields whose signals disagree.
 
 ## Rules against unnecessary complexity
 
@@ -101,7 +107,11 @@ old (pnpm enforces a minimum release age; do not add exclusions).
 - Autofill behaviour is tested against HTML in `fixtures/`, the same pages
   used for manual testing. Add a fixture for each new form shape supported.
 - Every autofill change keeps the safety tests: no submission, no overwriting,
-  hidden and disabled inputs untouched, React-controlled inputs updated.
+  hidden and disabled inputs untouched, React-controlled inputs updated,
+  rejected values reported, other people's details and sensitive questions
+  skipped. `fixtures/full-application.html` covers these together.
+- Tests fill from `src/test/autofill-fixtures.ts` (fictional); the extension
+  itself has no sample data.
 - Browser tests and design captures run headless only, in a throwaway
   profile, never the user's own Chrome profile. Do not launch visible
   browser windows or run repeated stress loops of browser tests without the

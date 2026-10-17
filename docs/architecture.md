@@ -9,7 +9,7 @@ storage on the user's device.
 ```
 src/
   entrypoints/          WXT entrypoints: browser integration only
-    background.ts       Toolbar click → inject the panel into the active tab
+    background.ts       Toolbar click → inject the panel; answers profile requests
     panel.content/      Runtime content script: mounts the panel in a shadow root
       style.css         Tailwind and the panel's design tokens
   components/
@@ -17,9 +17,10 @@ src/
     options/            Profile onboarding and editing page (full tab)
   components/ui/        Buttons and icons shared by the panel and profile page
   components/onboarding/ Onboarding steps, form controls, draft reducer
-  domain/               Domain types: autofill sample profile, UserProfile,
-                        profile validation schema
-  storage/              Extension storage access (profile store, presence)
+  domain/               Domain types: UserProfile, countries, profile
+                        validation schema
+  storage/              Extension storage access (profile store, autofill
+                        values source)
   cv/                   CV import: read, normalise, extract, review (no React)
   styles/theme.css      Design tokens shared by both surfaces
   messages.ts           Panel ↔ background message types
@@ -35,10 +36,10 @@ Directories are created when code needs them.
 
 ## Entrypoints
 
-| Entrypoint       | Context              | Responsibility                                                                                |
-| ---------------- | -------------------- | --------------------------------------------------------------------------------------------- |
-| `background.ts`  | Service worker       | Listens for toolbar clicks; injects `content-scripts/panel.js` with `scripting.executeScript` |
-| `panel.content/` | Page, isolated world | Mounts or removes the React panel; loads fonts; plays transitions; restores page focus        |
+| Entrypoint       | Context              | Responsibility                                                                                                                           |
+| ---------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `background.ts`  | Service worker       | Listens for toolbar clicks; injects `content-scripts/panel.js` with `scripting.executeScript`; reads the confirmed profile for the panel |
+| `panel.content/` | Page, isolated world | Mounts or removes the React panel; loads fonts; plays transitions; restores page focus                                                   |
 
 The content script uses `registration: 'runtime'`, so WXT leaves it out of the
 manifest and grants no host permissions. It is only ever injected after the
@@ -67,20 +68,26 @@ collapse.
 There is one source of truth, `panelReducer` (`panel-state.ts`), held by
 `usePanel` in the root `Panel` component:
 
-| State      | Meaning                                                   |
-| ---------- | --------------------------------------------------------- |
-| `mode`     | `compact` or `expanded`                                   |
-| `filter`   | Expanded list filter: all, handled, needs you             |
-| `phase`    | `ready` before autofill, `done` after                     |
-| `fields`   | The latest `scanFields` result                            |
-| `result`   | The latest `autofill` result                              |
-| `selected` | The field under review, by element (shared by both modes) |
+| State      | Meaning                                                        |
+| ---------- | -------------------------------------------------------------- |
+| `mode`     | `compact` or `expanded`                                        |
+| `filter`   | Expanded list filter: all, handled, needs you                  |
+| `phase`    | `ready`, `filling` (once, guarded), `done`                     |
+| `fields`   | The latest `scanFields` result                                 |
+| `values`   | `loading`, or the latest reply: ready, missing, invalid, error |
+| `outcomes` | What autofill did, verified per field                          |
+| `selected` | The field under review, by element (shared by both modes)      |
 
-Reports, counts and the attention queue are derived from `fields` and
-`result` on render. Mode and filter actions change only `mode` and `filter`:
-they never rescan, autofill or clear results and selection. The page is
-scanned on open, after autofill (to read written values) and on an explicit
-rescan; `autofill` runs only from the primary action.
+Reports, counts and the attention queue are derived on render: `outcomes`
+after autofill, otherwise `planFill(fields, values)`. Mode and filter
+actions change only `mode` and `filter`: they never rescan, autofill or
+clear results and selection. The page is scanned on open, right before
+autofill and on an explicit rescan; autofill runs only from the primary
+action, and only when the profile is `ready`.
+
+Compact mode shows counts and statuses only, never personal values. The
+expanded view shows values, and for a selected field the explanation, the
+profile property it matched and the evidence.
 
 ## Data flow
 
@@ -90,10 +97,13 @@ Toolbar click
   → panel.content: load fonts, mount Panel in shadow root (or close it)
   → usePanel (panelReducer):
       scanFields(document)           every control, with what the engine can do
-      planFill(fields, profile)      fill / keep / not recognised / unsupported
+      requestAutofillValues()        → background: profileStore.load()
+                                       → autofillValuesFrom(profile) (narrow)
+      planFill(fields, values)       fill / keep / why each other field is left
   → user presses ↵ or clicks Autofill
-      autofill(document, profile)    unchanged engine: detect, fill, never submit
-      reportFill(fields, result)     filled / kept / left for the user
+      requestAutofillValues()        again: the latest saved profile
+      scanFields + planFill          against the page as it is now
+      fillFields(plan)               re-check, write, wait, verify each field
   → compact or expanded mode renders the same report; selecting a field draws
     a locator ring over it on the page
 ```
@@ -144,8 +154,23 @@ typing; errors clear as fields change. Storage validates on every read. The
 domain model (`user-profile.ts`) has no validation or storage code; the schema
 (`profile-schema.ts`) has no storage code; the store has no UI code.
 
-The saved profile is not yet used by autofill, which still fills the
-fictional sample profile.
+### Autofill values
+
+Autofill reads only the confirmed profile, through the background worker
+(ADR 0010). The panel receives `AutofillValues`, never the profile:
+
+```
+panel: requestAutofillValues()  → applykit:get-autofill-values
+background: sender is ApplyKit? → loadAutofillValues(profileStore)
+            loaded              → { ready, values: autofillValuesFrom(profile) }
+            empty | invalid | error → { missing | invalid | error }
+panel: validates the reply shape; anything else is { error }
+```
+
+Lifecycle: values are read on open, on every rescan and immediately before
+autofill. There are no storage listeners, and a profile change never fills
+anything by itself. Without a ready profile the footer offers "Set up your
+profile", "Open your profile" or "Try again" instead of Autofill.
 
 ## Boundaries
 
@@ -155,11 +180,11 @@ fictional sample profile.
    do not call browser APIs directly.
 3. **Domain** (`src/domain`) holds plain types and data. No DOM, no browser
    APIs, no React.
-4. **Autofill** (`src/autofill`) depends only on the standard DOM and domain
-   types. It takes a `ParentNode` and a `Profile`, so it is tested in jsdom
-   against `fixtures/` without React or an extension runtime. `scanFields`
-   and the report functions are read-only and use the same rules as
-   `autofill`, so what the panel predicts is what autofill does.
+4. **Autofill** (`src/autofill`) depends only on the standard DOM and plain
+   `AutofillValues`. It has no storage, browser-extension or React code, so
+   it is tested in jsdom against `fixtures/`. `scanFields` and `planFill`
+   are read-only; `fillFields` writes only what the plan says, so what the
+   panel predicts is what autofill does.
 5. **Page helpers** (`src/page`) read from the host page (title, host) and
    register fonts. The panel never modifies the page's DOM; the field
    locator is drawn inside ApplyKit's own shadow root.
@@ -188,11 +213,26 @@ fictional sample profile.
 
 ## Autofill rules
 
-- Only text-like `<input>` elements that are enabled and editable are
-  considered.
-- Detection order: `autocomplete` token, input `type`, `name`, `id`, label
-  text (`<label>`, `aria-labelledby`, `aria-label`), `placeholder`.
-- Values are set through the native `HTMLInputElement.prototype` setter, then
-  a bubbling `InputEvent('input')` and `Event('change')` are dispatched.
-- Fields that already contain a value are skipped.
-- Autofill never clicks, presses keys, focuses buttons or submits.
+Details and reasoning are in ADR 0010.
+
+- Fields: full, first, last and preferred name; email; phone; address lines
+  1 and 2, town or city, region or county, postcode, country; LinkedIn,
+  GitHub, portfolio or website.
+- Detection signals: `autocomplete` token, input `type`, label text
+  (`<label>`, `aria-labelledby`, `aria-label`), `name`, `id`,
+  `placeholder`, and fieldset legends or labelled groups for context.
+  Exactly one unopposed match is required; conflicting signals are skipped.
+- Skipped with a reason: details about someone else (references,
+  employers, companies, hiring managers), sensitive questions (right to
+  work, visa, salary, disability, demographics, date of birth), consent
+  and declarations, CAPTCHAs, values longer than `maxlength`, and fields
+  outside the application form.
+- Writable controls: text, email, tel, url and search inputs, and native
+  selects for the country (exact option match only). Never hidden,
+  disabled, read-only or password controls, checkboxes, radios, textareas,
+  file inputs or custom widgets.
+- Values are set through the native prototype setter, then a bubbling
+  `input` and `change` are dispatched. A field is re-checked just before
+  writing and never overwritten; afterwards the value is read back and
+  reported as filled, reformatted, rejected or detached.
+- Autofill never clicks, presses keys, focuses anything or submits.

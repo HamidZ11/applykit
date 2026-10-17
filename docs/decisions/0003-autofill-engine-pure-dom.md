@@ -1,6 +1,7 @@
 # 0003: Autofill engine is pure DOM logic that fills but never submits
 
-- Status: Accepted
+- Status: Accepted; the entry point, detection and results are revised by
+  [ADR 0010](0010-saved-profile-autofill.md)
 - Date: 2026-10-17
 
 ## Context
