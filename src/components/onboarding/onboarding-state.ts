@@ -47,6 +47,8 @@ export type SaveStatus =
   | { state: 'idle' }
   | { state: 'saving' }
   | { state: 'saved'; at: string }
+  /** Another tab saved a newer profile; this tab's edits were not saved. */
+  | { state: 'conflict'; current: UserProfile }
   | { state: 'error'; message: string };
 
 export interface OnboardingState {
@@ -98,7 +100,8 @@ export type OnboardingAction =
   | { type: 'remove-link'; id: string }
   | { type: 'save-started' }
   | { type: 'save-succeeded'; profile: UserProfile }
-  | { type: 'save-failed'; message: string };
+  | { type: 'save-failed'; message: string }
+  | { type: 'save-conflict'; current: UserProfile };
 
 export function initialOnboardingState(): OnboardingState {
   return {
@@ -346,6 +349,8 @@ export function onboardingReducer(
 
     case 'save-failed':
       return { ...state, save: { state: 'error', message: action.message } };
+    case 'save-conflict':
+      return { ...state, save: { state: 'conflict', current: action.current } };
   }
 }
 

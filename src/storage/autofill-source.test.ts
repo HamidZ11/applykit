@@ -12,7 +12,7 @@ beforeEach(() => {
 
 describe('loadAutofillValues', () => {
   it('returns the values of the confirmed profile', async () => {
-    await browserProfileStore.save(fullProfile());
+    await browserProfileStore.save(fullProfile(), null);
 
     const response = await loadAutofillValues(browserProfileStore);
 
@@ -46,7 +46,7 @@ describe('loadAutofillValues', () => {
   });
 
   it('uses the confirmed profile, not a newer draft beside it', async () => {
-    await browserProfileStore.save(fullProfile());
+    await browserProfileStore.save(fullProfile(), null);
     const draft = validDraft();
     draft.personal.email = 'draft.only@example.com';
     await browserProfileStore.saveDraft({
@@ -87,11 +87,11 @@ describe('loadAutofillValues', () => {
   });
 
   it('reads the latest saved profile on every request', async () => {
-    await browserProfileStore.save(fullProfile());
+    await browserProfileStore.save(fullProfile(), null);
     await loadAutofillValues(browserProfileStore);
     const updated = fullProfile('2026-11-01T09:00:00.000Z');
     updated.personal.email = 'alex.updated@example.com';
-    await browserProfileStore.save(updated);
+    await browserProfileStore.save(updated, '2026-10-17T12:00:00.000Z');
 
     expect(await loadAutofillValues(browserProfileStore)).toMatchObject({
       values: { text: { email: 'alex.updated@example.com' } },

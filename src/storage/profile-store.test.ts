@@ -21,7 +21,7 @@ describe('browserProfileStore', () => {
   it('saves a profile and loads it back', async () => {
     const profile = validProfile();
 
-    expect(await browserProfileStore.save(profile)).toEqual({
+    expect(await browserProfileStore.save(profile, null)).toEqual({
       status: 'saved',
       profile,
     });
@@ -33,11 +33,11 @@ describe('browserProfileStore', () => {
   });
 
   it('replaces an existing profile when saving an update', async () => {
-    await browserProfileStore.save(validProfile());
+    await browserProfileStore.save(validProfile(), null);
     const updated = validProfile('2026-11-01T09:00:00.000Z');
     updated.personal.preferredName = 'Al';
 
-    await browserProfileStore.save(updated);
+    await browserProfileStore.save(updated, '2026-10-17T12:00:00.000Z');
 
     const result = await browserProfileStore.load();
     expect(result).toMatchObject({ status: 'loaded', profile: updated });
@@ -58,7 +58,7 @@ describe('browserProfileStore', () => {
     const corrupt = { not: 'a profile' };
     await fakeBrowser.storage.local.set({ profile: corrupt });
 
-    await browserProfileStore.save(validProfile());
+    await browserProfileStore.save(validProfile(), null);
 
     expect(await stored('profileBackup')).toEqual(corrupt);
     expect(await browserProfileStore.load()).toMatchObject({
@@ -67,9 +67,13 @@ describe('browserProfileStore', () => {
   });
 
   it('does not create a backup when replacing a valid profile', async () => {
-    await browserProfileStore.save(validProfile());
-    await browserProfileStore.save(validProfile('2026-11-01T09:00:00.000Z'));
+    await browserProfileStore.save(validProfile(), null);
+    const second = await browserProfileStore.save(
+      validProfile('2026-11-01T09:00:00.000Z'),
+      '2026-10-17T12:00:00.000Z',
+    );
 
+    expect(second.status).toBe('saved');
     expect(await stored('profileBackup')).toBeUndefined();
   });
 
@@ -89,10 +93,92 @@ describe('browserProfileStore', () => {
       new Error('QUOTA_BYTES quota exceeded'),
     );
 
-    const result = await browserProfileStore.save(validProfile());
+    const result = await browserProfileStore.save(validProfile(), null);
 
     expect(result).toMatchObject({ status: 'error' });
     expect(await stored('profile')).toBeUndefined();
+  });
+});
+
+describe('saving over a profile changed elsewhere', () => {
+  const FIRST = '2026-10-17T12:00:00.000Z';
+
+  it('refuses to overwrite a version this edit did not start from', async () => {
+    await browserProfileStore.save(validProfile(FIRST), null);
+    // Another tab saves first…
+    const other = validProfile('2026-11-01T09:00:00.000Z');
+    other.personal.preferredName = 'Lex';
+    await browserProfileStore.save(other, FIRST);
+    await browserProfileStore.saveDraft({
+      schemaVersion: DRAFT_SCHEMA_VERSION,
+      savedAt: '2026-11-01T09:05:00.000Z',
+      basedOn: FIRST,
+      step: 'review',
+      furthest: 4,
+      draft: validDraft(),
+    });
+
+    // …then this tab, still based on the first version, saves.
+    const mine = validProfile('2026-11-01T09:10:00.000Z');
+    const result = await browserProfileStore.save(mine, FIRST);
+
+    expect(result).toEqual({ status: 'conflict', current: other });
+    expect(await stored('profile')).toEqual(other);
+    // Nothing of this tab's work is cleared.
+    expect(await stored('profileDraft')).toBeDefined();
+  });
+
+  it('refuses a first save when a profile was saved meanwhile', async () => {
+    await browserProfileStore.save(validProfile(FIRST), null);
+
+    const result = await browserProfileStore.save(
+      validProfile('2026-11-01T09:00:00.000Z'),
+      null,
+    );
+
+    expect(result).toMatchObject({ status: 'conflict' });
+  });
+
+  it('replaces unreadable data with a backup rather than a conflict', async () => {
+    await fakeBrowser.storage.local.set({ profile: { broken: true } });
+
+    const result = await browserProfileStore.save(validProfile(), FIRST);
+
+    expect(result.status).toBe('saved');
+    expect(await stored('profileBackup')).toEqual({ broken: true });
+  });
+
+  it('lets only one of two simultaneous saves through when locks exist', async () => {
+    await browserProfileStore.save(validProfile(FIRST), null);
+    // A minimal Web Locks stand-in: one holder at a time, in order.
+    let queue: Promise<unknown> = Promise.resolve();
+    const locks = {
+      request: <T>(_name: string, task: () => Promise<T>) => {
+        const run = queue.then(task);
+        queue = run.catch(() => undefined);
+        return run;
+      },
+    };
+    vi.stubGlobal('navigator', { locks });
+    try {
+      const results = await Promise.all([
+        browserProfileStore.save(
+          validProfile('2026-11-01T09:00:00.000Z'),
+          FIRST,
+        ),
+        browserProfileStore.save(
+          validProfile('2026-11-01T09:00:01.000Z'),
+          FIRST,
+        ),
+      ]);
+
+      expect(results.map((r) => r.status).sort()).toEqual([
+        'conflict',
+        'saved',
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -114,7 +200,7 @@ describe('drafts', () => {
 
   it('saves a draft separately from the profile and loads it back', async () => {
     const saved = validProfile();
-    await browserProfileStore.save(saved);
+    await browserProfileStore.save(saved, null);
 
     expect(await browserProfileStore.saveDraft(draft())).toBe(true);
 
@@ -128,7 +214,7 @@ describe('drafts', () => {
   it('clears the draft when a profile is saved', async () => {
     await browserProfileStore.saveDraft(draft());
 
-    await browserProfileStore.save(validProfile());
+    await browserProfileStore.save(validProfile(), null);
 
     expect(await stored('profileDraft')).toBeUndefined();
   });

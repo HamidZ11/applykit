@@ -371,6 +371,55 @@ describe('first-run onboarding', () => {
 });
 
 describe('editing a saved profile', () => {
+  it('never overwrites a newer save from another tab', async () => {
+    const existing = validProfile('2026-01-01T00:00:00.000Z');
+    const newer = validProfile('2026-02-01T00:00:00.000Z');
+    newer.personal.phone = '020 7946 0999';
+    const { store, saved } = memoryStore(
+      { status: 'loaded', profile: existing, unmatchedCountry: null },
+      { saveResult: { status: 'conflict', current: newer } },
+    );
+    await render(store);
+    await click('Edit personal details');
+    type('Phone number', '020 7946 0001');
+    for (let i = 0; i < 4; i++) await click('Continue');
+
+    await click('Save changes');
+
+    // The edit started from the existing version, and says so.
+    expect(store.save).toHaveBeenCalledWith(
+      expect.anything(),
+      '2026-01-01T00:00:00.000Z',
+    );
+    expect(saved).toEqual([]);
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      'saved in another tab',
+    );
+    // This tab's edits are still here, unsaved.
+    expect(host.textContent).toContain('020 7946 0001');
+    expect(host.textContent).toContain('Unsaved changes');
+    expect(store.clearDraft).not.toHaveBeenCalled();
+
+    await click('Discard my edits and load the saved version');
+
+    expect(store.clearDraft).toHaveBeenCalled();
+    expect(host.textContent).toContain('020 7946 0999');
+    expect(host.textContent).not.toContain('020 7946 0001');
+    expect(button('Saved').disabled).toBe(true);
+  });
+
+  it('passes no version for a first save', async () => {
+    const { store } = memoryStore();
+    await render(store);
+    await start();
+    fillPersonal();
+    for (let i = 0; i < 4; i++) await click('Continue');
+
+    await click('Save profile');
+
+    expect(store.save).toHaveBeenCalledWith(expect.anything(), null);
+  });
+
   it('opens on the overview and saves changes, keeping the creation date', async () => {
     const existing = validProfile('2026-01-01T00:00:00.000Z');
     const { store, saved } = memoryStore({

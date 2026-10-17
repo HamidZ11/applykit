@@ -28,6 +28,11 @@ export type LoadResult =
 
 export type SaveResult =
   | { status: 'saved'; profile: UserProfile }
+  /**
+   * Another tab saved a different version since this one was loaded.
+   * Nothing was written; `current` is what is saved now.
+   */
+  | { status: 'conflict'; current: UserProfile }
   | { status: 'error'; message: string };
 
 export type DraftLoadResult =
@@ -38,12 +43,31 @@ export type DraftLoadResult =
 
 export interface ProfileStore {
   load(): Promise<LoadResult>;
-  /** Saves a validated profile and clears any draft. */
-  save(profile: UserProfile): Promise<SaveResult>;
+  /**
+   * Saves a validated profile and clears any draft, unless the saved
+   * profile is no longer the one the edit started from: `basedOn` is its
+   * `metadata.updatedAt`, or null when there was none.
+   */
+  save(profile: UserProfile, basedOn: string | null): Promise<SaveResult>;
   loadDraft(): Promise<DraftLoadResult>;
   /** Returns false if the draft could not be written. */
   saveDraft(draft: StoredDraft): Promise<boolean>;
   clearDraft(): Promise<boolean>;
+}
+
+/**
+ * Runs `task` while holding a lock shared by every ApplyKit page, so a
+ * check-then-write save cannot interleave with a save in another tab.
+ * `storage.local` has no transactions; the Web Locks API (one lock manager
+ * per extension origin) provides the exclusion. Where it is missing, the
+ * check still runs, but two saves at the same moment could both pass it.
+ */
+async function withProfileLock<T>(task: () => Promise<T>): Promise<T> {
+  // Missing in some environments, whatever the DOM typings say.
+  const locks: LockManager | undefined = (
+    globalThis.navigator as Navigator | undefined
+  )?.locks;
+  return locks ? locks.request('applykit:profile', task) : task();
 }
 
 export const browserProfileStore: ProfileStore = {
@@ -63,14 +87,22 @@ export const browserProfileStore: ProfileStore = {
     return stored ? { status: 'loaded', ...stored } : { status: 'invalid' };
   },
 
-  async save(profile) {
+  async save(profile, basedOn) {
     try {
-      const existing = await storage.getItem<unknown>(PROFILE_KEY);
-      if (existing !== null && parseStoredProfile(existing) === null) {
-        // Never silently discard data we could not read.
-        await storage.setItem(BACKUP_KEY, existing);
-      }
-      await storage.setItem(PROFILE_KEY, profile);
+      const conflict = await withProfileLock(async () => {
+        const existing = await storage.getItem<unknown>(PROFILE_KEY);
+        const stored = existing === null ? null : parseStoredProfile(existing);
+        if (stored && stored.profile.metadata.updatedAt !== basedOn) {
+          return stored.profile;
+        }
+        if (existing !== null && stored === null) {
+          // Never silently discard data we could not read.
+          await storage.setItem(BACKUP_KEY, existing);
+        }
+        await storage.setItem(PROFILE_KEY, profile);
+        return null;
+      });
+      if (conflict) return { status: 'conflict', current: conflict };
     } catch {
       return {
         status: 'error',

@@ -59,7 +59,7 @@ describe('background', () => {
 
 describe('background messages', () => {
   it('answers with the confirmed profile’s values', async () => {
-    await browserProfileStore.save(fullProfile());
+    await browserProfileStore.save(fullProfile(), null);
 
     expect(await send(GET_AUTOFILL_VALUES)).toMatchObject({
       status: 'ready',
@@ -72,7 +72,7 @@ describe('background messages', () => {
   });
 
   it('ignores messages from anything but ApplyKit itself', async () => {
-    await browserProfileStore.save(fullProfile());
+    await browserProfileStore.save(fullProfile(), null);
 
     expect(
       await send(GET_AUTOFILL_VALUES, 'another-extension'),
@@ -90,7 +90,7 @@ describe('background messages', () => {
   });
 
   it('answers the panel in a tab’s top frame and extension pages', async () => {
-    await browserProfileStore.save(fullProfile());
+    await browserProfileStore.save(fullProfile(), null);
 
     expect(await send(GET_AUTOFILL_VALUES)).toMatchObject({ status: 'ready' });
     expect(
@@ -99,7 +99,7 @@ describe('background messages', () => {
   });
 
   it('never sends profile values into a frame within a page', async () => {
-    await browserProfileStore.save(fullProfile());
+    await browserProfileStore.save(fullProfile(), null);
 
     expect(
       await send(GET_AUTOFILL_VALUES, fakeBrowser.runtime.id, {

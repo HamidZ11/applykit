@@ -8,7 +8,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { validateDraft, validateSection } from '@/domain/profile-schema';
-import { profileFromDraft } from '@/domain/user-profile';
+import { profileFromDraft, type UserProfile } from '@/domain/user-profile';
 import {
   browserProfileStore,
   type LoadResult,
@@ -235,9 +235,16 @@ export function OnboardingApp({
       state.saved?.metadata ?? null,
       now(),
     );
-    const outcome = await store.save(profile);
+    // The version this edit started from, so a newer save made in another
+    // tab is never overwritten silently.
+    const outcome = await store.save(
+      profile,
+      state.saved?.metadata.updatedAt ?? null,
+    );
     if (outcome.status === 'saved') {
       dispatch({ type: 'save-succeeded', profile: outcome.profile });
+    } else if (outcome.status === 'conflict') {
+      dispatch({ type: 'save-conflict', current: outcome.current });
     } else {
       dispatch({ type: 'save-failed', message: outcome.message });
     }
@@ -369,6 +376,15 @@ export function OnboardingApp({
                 )}
                 {state.save.state === 'error' && (
                   <Banner tone="danger">{state.save.message}</Banner>
+                )}
+                {state.save.state === 'conflict' && (
+                  <SaveConflict
+                    current={state.save.current}
+                    onLoadSaved={(current) => {
+                      void store.clearDraft();
+                      dispatch({ type: 'loaded', profile: current });
+                    }}
+                  />
                 )}
               </div>
 
@@ -777,6 +793,40 @@ function SaveStatus({
     );
   }
   return <span role="status" className="sr-only" />;
+}
+
+/**
+ * Another tab saved the profile after this one loaded it. This tab's edits
+ * stay on the page; replacing them with the saved version is the user's
+ * explicit choice, never automatic, and nothing is merged.
+ */
+function SaveConflict({
+  current,
+  onLoadSaved,
+}: {
+  current: UserProfile;
+  onLoadSaved: (current: UserProfile) => void;
+}) {
+  return (
+    <Banner tone="warning">
+      <span className="block">
+        Your profile was saved in another tab (
+        {formatSavedAt(current.metadata.updatedAt)}) after you opened it here,
+        so these changes were not saved. Your edits on this page are kept.
+      </span>
+      <span className="mt-2 block">
+        <button
+          type="button"
+          onClick={() => {
+            onLoadSaved(current);
+          }}
+          className="font-medium underline underline-offset-2 hover:no-underline"
+        >
+          Discard my edits and load the saved version
+        </button>
+      </span>
+    </Banner>
+  );
 }
 
 function Banner({
