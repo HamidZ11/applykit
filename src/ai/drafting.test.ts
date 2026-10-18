@@ -81,7 +81,8 @@ describe('prepare', () => {
     expect(result).toMatchObject({
       status: 'ready',
       kind: 'skills',
-      selected: ['skills', 'job:testing'],
+      // Skills and software projects, not the unrelated job.
+      selected: ['skills', 'project:inventory', 'project:timetable'],
       approved: false,
       model: 'Fast',
     });
@@ -145,8 +146,9 @@ describe('approvalFingerprint', () => {
   const item = {
     id: 'skills',
     group: 'skills' as const,
-    label: 'Skills',
-    text: 'Python',
+    title: 'Technical skills',
+    summary: 'Python',
+    text: 'Skills: Python',
   };
 
   it('changes with anything that would be sent', async () => {

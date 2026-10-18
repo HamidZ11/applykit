@@ -12,7 +12,7 @@ import type { SkillsStore } from '@/storage/skills-store';
 import { requestDraft } from './anthropic';
 import { cleanDraft } from './check';
 import { aiAvailable, type ConnectionDeps } from './connection';
-import { contextItems, defaultSelection, type ContextItem } from './context';
+import { contextItems, rankContext, type ContextItem } from './context';
 import { MODELS, type ModelChoice } from './models';
 import {
   INSUFFICIENT,
@@ -34,16 +34,22 @@ export interface DraftingDeps extends ConnectionDeps {
   approvals: ApprovalStore;
 }
 
-/** The items the user could share, from the confirmed profile only. */
-async function availableItems(deps: DraftingDeps): Promise<ContextItem[]> {
+/** The saved data items come from: the confirmed profile only. */
+async function savedData(deps: DraftingDeps) {
   const [profile, skills] = await Promise.all([
     deps.profile.load(),
     deps.skills.load(),
   ]);
-  return contextItems(
-    profile.status === 'loaded' ? profile.profile : null,
-    skills.status === 'loaded' ? skills.content : emptySkillsProjects(),
-  );
+  return {
+    profile: profile.status === 'loaded' ? profile.profile : null,
+    saved: skills.status === 'loaded' ? skills.content : emptySkillsProjects(),
+  };
+}
+
+/** The items the user could share. */
+async function availableItems(deps: DraftingDeps): Promise<ContextItem[]> {
+  const { profile, saved } = await savedData(deps);
+  return contextItems(profile, saved);
 }
 
 /**
@@ -84,11 +90,16 @@ export async function prepare(
   if (!(await aiAvailable(deps))) return { status: 'unavailable' };
   const kind = openQuestionKind(request.question);
   if (!kind) return { status: 'not-a-question' };
-  const [items, settings] = await Promise.all([
-    availableItems(deps),
+  const [{ profile, saved }, settings] = await Promise.all([
+    savedData(deps),
     deps.settings.load(),
   ]);
-  const selected = defaultSelection(kind, items);
+  const { items, selected } = rankContext(
+    kind,
+    profile,
+    saved,
+    `${request.question} ${request.role} ${request.employer}`,
+  );
   const shared = items.filter((item) => selected.includes(item.id));
   const approved =
     shared.length > 0 &&
@@ -98,7 +109,13 @@ export async function prepare(
   return {
     status: 'ready',
     kind,
-    items: items.map(({ id, label, text }) => ({ id, label, text })),
+    items: items.map(({ id, group, title, summary, text }) => ({
+      id,
+      group,
+      title,
+      summary,
+      text,
+    })),
     selected,
     approved,
     model: MODELS[settings.model].label,

@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { emptySkillsProjects } from '@/domain/skills-projects';
+import type { UserProfile } from '@/domain/user-profile';
 import {
   educationRecords,
   employmentRecords,
   fullProfile,
 } from '@/test/autofill-fixtures';
 import { savedSkills } from '@/test/skills-fixtures';
-import { contextItems, defaultSelection } from './context';
+import { contextItems, rankContext } from './context';
 
-function profile() {
+function profile(): UserProfile {
   const p = fullProfile();
   p.education = educationRecords();
   p.employment = employmentRecords();
@@ -16,51 +17,40 @@ function profile() {
 }
 
 describe('contextItems', () => {
-  it('offers skills, projects, jobs and education as written', () => {
-    expect(contextItems(profile(), savedSkills())).toEqual([
-      {
-        id: 'skills',
-        group: 'skills',
-        label: 'Skills',
-        text: 'Python, TypeScript, PostgreSQL',
-      },
-      {
-        id: 'project:inventory',
-        group: 'project',
-        label: 'Project: Inventory Dashboard',
-        text: 'Inventory Dashboard: Built a dashboard for tracking stock and generating reports. Technologies: Python, PostgreSQL. My part: Wrote the data import and the weekly report. Challenge: Duplicate stock records broke the totals. Result: Stock counts matched the warehouse again.',
-      },
-      {
-        id: 'project:timetable',
-        group: 'project',
-        label: 'Project: Example Timetable Planner',
-        text: 'Example Timetable Planner: A small web app that plans study timetables. Technologies: TypeScript.',
-      },
-      {
-        id: 'job:testing',
-        group: 'job',
-        label: 'Job: Test Centre Associate at Example Testing Services',
-        text: 'Test Centre Associate at Example Testing Services (Feb 2025 to present). Welcomed candidates, checked identification and invigilated computer-based exams.',
-      },
-      {
-        id: 'job:logistics',
-        group: 'job',
-        label: 'Job: Warehouse Operative at Example Logistics',
-        text: 'Warehouse Operative at Example Logistics (Jan 2024 to Jan 2025). Picked and packed orders, ran stock counts and kept the loading bay safe.',
-      },
-      {
-        id: 'education:degree',
-        group: 'education',
-        label: 'Education: BSc Computer Science in Computer Science',
-        text: 'BSc Computer Science in Computer Science, University of Example (Sep 2024 to Jun 2027)',
-      },
-      {
-        id: 'education:a-levels',
-        group: 'education',
-        label: 'Education: A levels in Mathematics, Physics, Computing',
-        text: 'A levels in Mathematics, Physics, Computing, Example Sixth Form College (Sep 2022 to Jun 2024), A*AA',
-      },
+  it('offers each saved entry with its exact shared text', () => {
+    const items = contextItems(profile(), savedSkills());
+
+    expect(items.map((i) => [i.group, i.title, i.summary])).toEqual([
+      ['skills', 'Technical skills', 'Python · TypeScript · PostgreSQL'],
+      ['project', 'Inventory Dashboard', 'Python · PostgreSQL'],
+      ['project', 'Example Timetable Planner', 'TypeScript'],
+      [
+        'job',
+        'Test Centre Associate · Example Testing Services',
+        'Feb 2025 to present',
+      ],
+      [
+        'job',
+        'Warehouse Operative · Example Logistics',
+        'Jan 2024 to Jan 2025',
+      ],
+      [
+        'education',
+        'BSc Computer Science in Computer Science',
+        'University of Example · Sep 2024 to Jun 2027',
+      ],
+      [
+        'education',
+        'A levels in Mathematics, Physics, Computing',
+        'Example Sixth Form College · Sep 2022 to Jun 2024',
+      ],
     ]);
+    expect(items[1]?.text).toBe(
+      'Project: Inventory Dashboard: Built a dashboard for tracking stock and generating reports. Technologies: Python, PostgreSQL. My part: Wrote the data import and the weekly report. Challenge: Duplicate stock records broke the totals. Result: Stock counts matched the warehouse again.',
+    );
+    expect(items[3]?.text).toBe(
+      'Job: Test Centre Associate at Example Testing Services (Feb 2025 to present). Welcomed candidates, checked identification and invigilated computer-based exams.',
+    );
   });
 
   it('never offers contact details, address, links or names', () => {
@@ -87,16 +77,107 @@ describe('contextItems', () => {
   });
 });
 
-describe('defaultSelection', () => {
-  const items = contextItems(profile(), savedSkills());
+describe('rankContext', () => {
+  function rank(
+    kind: Parameters<typeof rankContext>[0],
+    question: string,
+    saved = savedSkills(),
+  ) {
+    return rankContext(kind, profile(), saved, question);
+  }
 
-  it.each([
-    ['skills', ['skills', 'job:testing']],
-    ['project', ['project:inventory', 'project:timetable']],
-    ['experience', ['job:testing', 'job:logistics', 'education:degree']],
-    ['problem', ['project:inventory', 'project:timetable', 'job:testing']],
-    ['motivation', ['skills', 'job:testing', 'education:degree']],
-  ] as const)('chooses what a %s question needs', (kind, ids) => {
-    expect(defaultSelection(kind, items)).toEqual(ids);
+  it('chooses skills and software projects for a skills question, not unrelated jobs', () => {
+    const ranked = rank(
+      'skills',
+      'Describe your programming skills in two sentences.',
+    );
+
+    expect(ranked.selected).toEqual([
+      'skills',
+      'project:inventory',
+      'project:timetable',
+    ]);
+    // Selected items come first in the preview.
+    expect(ranked.items.slice(0, 3).map((i) => i.id)).toEqual(ranked.selected);
+  });
+
+  it('includes a job for a skills question only when it is technical', () => {
+    const p = profile();
+    p.employment = [
+      ...employmentRecords(),
+      {
+        id: 'support',
+        employer: 'Example Help Desk',
+        title: 'IT Support Assistant',
+        employmentType: 'part-time',
+        startDate: '2023-01',
+        endDate: '2023-08',
+        current: false,
+        description:
+          'Fixed laptops and wrote Python scripts to reset accounts.',
+      },
+    ];
+
+    expect(
+      rankContext(
+        'skills',
+        p,
+        savedSkills(),
+        'What technical skills would you bring?',
+      ).selected,
+    ).toContain('job:support');
+  });
+
+  it('chooses the closest project, not the first or newest', () => {
+    expect(
+      rank('project', 'Tell us about the timetable planner you built.')
+        .selected,
+    ).toEqual(['project:timetable']);
+    // With no project named, the one with the most detail.
+    expect(
+      rank('project', 'Tell us about a project you worked on.').selected,
+    ).toEqual(['project:inventory']);
+  });
+
+  it('prefers a recorded challenge for a problem question, and invents none', () => {
+    expect(rank('problem', 'Describe a problem you solved.').selected).toEqual([
+      'project:inventory',
+    ]);
+    const without = savedSkills();
+    without.projects = without.projects.map((p) => ({ ...p, challenge: '' }));
+
+    expect(
+      rank('problem', 'Describe a problem you solved.', without).selected,
+    ).toEqual([]);
+  });
+
+  it('chooses jobs for experience, but not unrelated ones for a technical question', () => {
+    expect(
+      rank('experience', 'What relevant experience do you have?').selected,
+    ).toEqual(['job:testing', 'job:logistics']);
+    expect(
+      rank('experience', 'What software development experience do you have?')
+        .selected,
+    ).toEqual(['skills', 'project:inventory']);
+  });
+
+  it('connects motivation to what matches the role, not to every job', () => {
+    const ranked = rank(
+      'motivation',
+      'Why are you interested in this role? Junior Data Engineer Example Fernhill Analytics',
+    );
+
+    expect(ranked.selected).toEqual(['skills', 'project:inventory']);
+  });
+
+  it('selects nothing that is not saved', () => {
+    expect(
+      rankContext(
+        'skills',
+        null,
+        emptySkillsProjects(),
+        'Describe your skills.',
+      ),
+    ).toEqual({ items: [], selected: [] });
   });
 });

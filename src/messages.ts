@@ -1,5 +1,6 @@
 import type { AiFailure } from '@/ai/anthropic';
 import type { AiStatus, ConnectFailure } from '@/ai/connection';
+import type { ContextGroup } from '@/ai/context';
 import { isModelChoice } from '@/ai/models';
 import { TEXT_FIELDS, type AutofillValues } from '@/autofill/fields';
 import type { AnswerLimits } from '@/autofill/answer-limits';
@@ -474,10 +475,15 @@ export interface AiPrepareMessage extends DraftContextRequest {
   type: typeof AI_PREPARE_TYPE;
 }
 
-/** One piece of information the user may share; `text` is what is sent. */
+/**
+ * One piece of information the user may share. `text` is exactly what is
+ * sent; the type, title and summary only help the user recognise it.
+ */
 export interface SharedItem {
   id: string;
-  label: string;
+  group: ContextGroup;
+  title: string;
+  summary: string;
   text: string;
 }
 
@@ -573,7 +579,9 @@ export function isAiDraftRequest(message: unknown): message is AiDraftRequest {
 const isSharedItem = (value: unknown) =>
   isRecord(value) &&
   typeof value.id === 'string' &&
-  typeof value.label === 'string' &&
+  oneOf(['skills', 'project', 'job', 'education'], value.group) &&
+  typeof value.title === 'string' &&
+  typeof value.summary === 'string' &&
   typeof value.text === 'string';
 
 export function isAiPrepareResponse(

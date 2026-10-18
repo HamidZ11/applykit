@@ -444,35 +444,23 @@ function SharePreview({
         )}
         <fieldset className="mt-2">
           <legend className="text-2xs text-ink-3">Your information</legend>
-          <ul className="mt-0.5 space-y-1">
+          <ul className="mt-1 divide-y divide-line">
             {preview.items.map((item: SharedItem) => (
-              <li key={item.id}>
-                <label className="flex cursor-default items-start gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(item.id)}
-                    onChange={() => {
-                      onToggle(item.id);
-                    }}
-                    className="mt-0.5 size-3.5 shrink-0 accent-accent"
-                  />
-                  <span className="min-w-0">
-                    <span className="block font-medium text-ink">
-                      {item.label}
-                    </span>
-                    <span className="block break-words text-ink-2">
-                      {item.text}
-                    </span>
-                  </span>
-                </label>
-              </li>
+              <SharedItemRow
+                key={item.id}
+                item={item}
+                checked={selected.has(item.id)}
+                onToggle={() => {
+                  onToggle(item.id);
+                }}
+              />
             ))}
           </ul>
         </fieldset>
         <p className="mt-2 text-2xs text-ink-3">
           Only what is ticked is sent, with the question, to Anthropic using
-          your key ({preview.model}). Contact details and diversity answers are
-          never shared.
+          your key ({preview.model}), exactly as each item&rsquo;s details show.
+          Contact details and diversity answers are never shared.
         </p>
       </div>
       <div className="flex gap-1.5">
@@ -616,5 +604,64 @@ function DraftReview({
         Inserted only when you choose. ApplyKit never submits the form.
       </p>
     </div>
+  );
+}
+
+const GROUP_NAME: Record<SharedItem['group'], string> = {
+  skills: 'Skills',
+  project: 'Project',
+  job: 'Job',
+  education: 'Education',
+};
+
+/**
+ * One item in the preview: its type, title and a short summary, with the
+ * exact text that would be sent one click away.
+ */
+function SharedItemRow({
+  item,
+  checked,
+  onToggle,
+}: {
+  item: SharedItem;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="flex items-start gap-2 py-1.5">
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        className="mt-3 size-3.5 shrink-0 accent-accent"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-medium tracking-wide text-ink-3 uppercase">
+          {GROUP_NAME[item.group]}
+        </p>
+        <label htmlFor={id} className="block font-medium break-words text-ink">
+          {item.title}
+        </label>
+        {item.summary && <p className="truncate text-ink-3">{item.summary}</p>}
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => {
+            setOpen(!open);
+          }}
+          className="text-2xs font-medium text-accent underline-offset-2 hover:underline"
+        >
+          {open ? 'Hide details' : 'Show details'}
+        </button>
+        {open && (
+          <p className="mt-0.5 rounded-sm bg-sunken px-1.5 py-1 break-words whitespace-pre-wrap text-ink-2">
+            {item.text}
+          </p>
+        )}
+      </div>
+    </li>
   );
 }

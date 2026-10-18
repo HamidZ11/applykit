@@ -33,6 +33,7 @@ import type {
   AiDraftResponse,
   AiPrepareResponse,
   DiversityRequest,
+  SharedItem,
   ResolveDiversityResponse,
 } from '@/messages';
 import type { Drafting } from './usePanel';
@@ -1921,12 +1922,20 @@ describe('diversity questions', () => {
 });
 
 describe('AI drafting', () => {
-  const ITEMS = [
-    { id: 'skills', label: 'Skills', text: 'Python, TypeScript, PostgreSQL' },
+  const ITEMS: SharedItem[] = [
+    {
+      id: 'skills',
+      group: 'skills',
+      title: 'Technical skills',
+      summary: 'Python · TypeScript · PostgreSQL',
+      text: 'Skills: Python, TypeScript, PostgreSQL',
+    },
     {
       id: 'project:inventory',
-      label: 'Project: Inventory Dashboard',
-      text: 'Inventory Dashboard: Built a dashboard for tracking stock.',
+      group: 'project',
+      title: 'Inventory Dashboard',
+      summary: 'Python · PostgreSQL',
+      text: 'Project: Inventory Dashboard: Built a dashboard for tracking stock.',
     },
   ];
   const DRAFT = 'I write Python and TypeScript. I use PostgreSQL daily.';
@@ -2018,7 +2027,16 @@ describe('AI drafting', () => {
     expect(text).toContain(
       'Describe your programming skills in two sentences.',
     );
-    expect(text).toContain('Python, TypeScript, PostgreSQL');
+    // Compact: type, title and summary; the exact text one click away.
+    expect(text).toContain('Technical skills');
+    expect(text).toContain('Python · TypeScript · PostgreSQL');
+    expect(text).not.toContain('Skills: Python, TypeScript, PostgreSQL');
+    act(() => {
+      findButton('Show details')?.click();
+    });
+    expect(dialog().textContent).toContain(
+      'Skills: Python, TypeScript, PostgreSQL',
+    );
     expect(text).toContain(
       'Contact details and diversity answers are never shared',
     );
