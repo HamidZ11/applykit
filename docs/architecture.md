@@ -51,7 +51,9 @@ handled so a duplicate can never appear.
 One floating panel with two presentation modes:
 
 - **Compact** (default): the plan before autofill, then the fields left for
-  the user, required first, stepped through with ↵.
+  the user, required first, stepped through with ↵. When saved answers fit
+  questions on the page, "Suggested answers" opens the expanded list with
+  them first (ADR 0016).
 - **Expanded**: every field grouped by topic (`categories.ts`), with filters and
   a per-field explanation of status and detection.
 

@@ -29,8 +29,14 @@ salary. Some questions must never be answered for the user at all.
   safeguards as the profile (ADR 0014): compare-and-set saves under their
   own Web Locks lock, each category read on its own so one damaged answer
   never hides the others, and unreadable data backed up before it is
-  replaced. Answers have no draft; each is saved when the user saves it,
-  over the latest saved answers.
+  replaced (every copy, oldest first, in `local:applicationAnswersBackup`).
+  Saves keep any fields and categories this version does not know.
+  Answers saved by a newer ApplyKit (a higher schema version) are not
+  damaged data: this version reports them as unsupported, shows a
+  read-only notice, sends the panel no answers, and never writes over
+  them. Each answer is saved when the user saves it, over the latest
+  saved answers; unsaved edits are kept per answer while the user moves
+  around the page, and leaving it with unsaved edits asks first.
 - **Delivery.** The background sends the answers with the autofill values
   (`AutofillValues.answers`), read fresh on every request, or null when
   they cannot be read, so a storage failure is never shown as "nothing
@@ -67,8 +73,12 @@ salary. Some questions must never be answered for the user at all.
   saying the same; ranges and salary bands are never chosen. A start date
   that has passed is not suggested.
 - **Suggest, then confirm one field.** Planning gives these fields the
-  status `suggest`, which autofill never writes. In the expanded list the
-  user sees the saved answer and "Use this answer". Confirming re-reads
+  status `suggest`, which autofill never writes. The compact panel shows
+  "Suggested answers · N available" (only `suggest` fields: never missing
+  or incompatible answers, typed entries, sensitive questions or guided
+  controls) with "Review answers", which opens the full list with those
+  fields first, each showing its saved answer and "Use this answer", and
+  writes nothing. Confirming re-reads
   the answers, rescans the page and fills that one field through
   `fillFields` only if it is still on the page, still empty, worded the
   same, recognised the same and planned with exactly the value shown

@@ -192,9 +192,9 @@ Limitations:
 - Saved application answers: notice period, relocation (within your
   country and abroad), working arrangement, earliest start date and salary
   expectation, saved under **Application answers** on the profile page.
-  On a form they appear as "Saved answer" in the full list with **Use this
-  answer**; Autofill never fills them, and each is filled only when you
-  choose it. Units, pay periods and currencies are never converted: a
+  On a form the compact panel shows **Suggested answers** with how many fit,
+  and **Review answers** lists them with **Use this answer**; Autofill
+  never fills them, and each is filled only when you choose it. Units, pay periods and currencies are never converted: a
   question that asks differently says why your answer does not fit.
 - Fields your profile has no value for link to your profile page.
 - Custom dropdowns are counted as fields and, when ApplyKit recognises
@@ -239,7 +239,8 @@ Limitations:
   questions in other units, periods or currencies, relocation questions
   that do not say where (unless both of your answers agree), text date
   fields without a stated format and past start dates are left to you.
-  Recognition is English-only and pattern-based.
+  Recognition is English-only and pattern-based. Answers saved by a
+  newer version of ApplyKit are kept but can only be edited there.
 - Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
   and similar platforms) are listed and never filled: the full list shows
   the saved value to choose and a "Go to field" button. Only standard ARIA
