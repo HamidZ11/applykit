@@ -978,6 +978,27 @@ const CONTROLS = 'input:not([type="hidden"]), select, textarea';
  * select your legal sex").
  */
 function genderContext(control: DetectableControl, heading: string): string {
+  const options =
+    control instanceof HTMLSelectElement
+      ? [...control.options].map((o) => o.text)
+      : [];
+  return normalise(
+    [
+      groupName(control.closest(SECTIONS)),
+      heading,
+      fieldHints(control),
+      ...options,
+    ].join(' | '),
+  );
+}
+
+/**
+ * Text that describes this one field: its description (`aria-describedby`,
+ * `aria-description`, `title`) and the text around it that belongs to no
+ * other field (the largest wrapper holding only this control), such as
+ * "Maximum 200 words" under a box. Raw, not normalised.
+ */
+export function fieldHints(control: Element): string {
   const root = control.getRootNode();
   const byId = (id: string) =>
     root instanceof Document || root instanceof ShadowRoot
@@ -987,7 +1008,6 @@ function genderContext(control: DetectableControl, heading: string): string {
     .split(/\s+/)
     .filter(Boolean)
     .map((id) => byId(id)?.textContent ?? '');
-  // The largest wrapper holding no other field: its hints are this one's.
   let wrapper: Element = control;
   for (
     let node = control.parentElement;
@@ -997,21 +1017,12 @@ function genderContext(control: DetectableControl, heading: string): string {
     if (node.querySelectorAll(CONTROLS).length > 1) break;
     wrapper = node;
   }
-  const options =
-    control instanceof HTMLSelectElement
-      ? [...control.options].map((o) => o.text)
-      : [];
-  return normalise(
-    [
-      groupName(control.closest(SECTIONS)),
-      heading,
-      ...described,
-      control.getAttribute('aria-description') ?? '',
-      control.getAttribute('title') ?? '',
-      wrapper === control ? '' : wrapper.textContent,
-      ...options,
-    ].join(' | '),
-  );
+  return [
+    ...described,
+    control.getAttribute('aria-description') ?? '',
+    control.getAttribute('title') ?? '',
+    wrapper === control ? '' : wrapper.textContent,
+  ].join(' | ');
 }
 
 /**

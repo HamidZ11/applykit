@@ -126,7 +126,8 @@ describe('scanFields', () => {
       salary: 'salaryExpectation',
       dob: 'manual:sensitive',
       sponsorship: 'manual:sensitive',
-      motivation: 'unsupported',
+      // An open question, for the applicant's own words (ADR 0019).
+      motivation: 'open',
       captcha: 'manual:verification',
       privacy_consent: 'manual:consent',
     });
@@ -352,7 +353,7 @@ describe('a heading-based internship form', () => {
       // A monitoring question: filled only if the user turned on reuse.
       gender: 'diversityGender',
       'school-type': 'manual:sensitive',
-      motivation: 'unsupported',
+      motivation: 'open',
       privacy: 'manual:consent',
     });
   });

@@ -8,6 +8,7 @@ import {
   controlContext,
   detectControl,
   duringScan,
+  fieldHints,
   formOf,
   nameOf,
   placeholderOf,
@@ -16,6 +17,12 @@ import {
   type Evidence,
   type ManualReason,
 } from './detect';
+import {
+  MAX_QUESTION_LENGTH,
+  openQuestionKind,
+  readLimits,
+  type OpenQuestion,
+} from './open-question';
 
 export type FormControl =
   HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -67,6 +74,11 @@ export type FieldSupport =
   | { status: 'manual'; reason: ManualReason }
   /** A text field ApplyKit does not recognise. */
   | { status: 'unrecognised' }
+  /**
+   * An open question the applicant answers in their own words, which AI
+   * drafting may help with (ADR 0019). Never filled by autofill.
+   */
+  | { status: 'open'; question: OpenQuestion }
   /**
    * A control ApplyKit does not fill. For a custom dropdown built on a text
    * input, `field` says what it appears to ask for.
@@ -468,19 +480,20 @@ function describe(element: FieldElement, root: ParentNode): ScannedField {
       : null;
 
   const context = controlContext(element);
+  const label = fieldLabel(element, question);
   return {
     element,
-    label: fieldLabel(element, question),
+    label,
     section: sectionOf(element, question),
     kind: kindOf(element),
     required: isRequired(element, root),
-    support: supportOf(element),
+    support: supportOf(element, label),
     context: context.text,
     group: context.group,
   };
 }
 
-function supportOf(element: FieldElement): FieldSupport {
+function supportOf(element: FieldElement, label: string): FieldSupport {
   const detection = detectControl(element);
   if (detection.kind === 'manual') {
     return { status: 'manual', reason: detection.reason };
@@ -519,6 +532,11 @@ function supportOf(element: FieldElement): FieldSupport {
     };
   }
 
+  if (detection.kind === 'none') {
+    const open = openQuestionOf(element, label);
+    if (open) return { status: 'open', question: open };
+  }
+
   // What the engine can write: text-like inputs, and native selects whose
   // options it can match exactly.
   const matched = detection.kind === 'match' ? detection.field : null;
@@ -548,6 +566,38 @@ function supportOf(element: FieldElement): FieldSupport {
     case 'none':
       return { status: 'unrecognised' };
   }
+}
+
+/**
+ * An open question in a text box: a textarea, or a text input whose
+ * length says it wants more than a word or two. Only ever drafted on the
+ * user's request, never filled by autofill.
+ */
+function openQuestionOf(
+  element: FieldElement,
+  label: string,
+): OpenQuestion | null {
+  const textArea = isTextArea(element);
+  if (!textArea && !(isInput(element) && element.type === 'text')) return null;
+  const hints = fieldHints(element);
+  const kind = openQuestionKind(label, hints);
+  if (!kind) return null;
+  const maxLength = element.maxLength > 0 ? element.maxLength : null;
+  const placeholder = element.placeholder;
+  const limits = readLimits(`${label} | ${hints} | ${placeholder}`, maxLength);
+  if (
+    !textArea &&
+    (maxLength === null || maxLength < 100) &&
+    limits.words === null &&
+    limits.sentences === null
+  ) {
+    return null;
+  }
+  return {
+    kind,
+    question: label.trim().slice(0, MAX_QUESTION_LENGTH),
+    limits,
+  };
 }
 
 function kindOf(element: FieldElement): FieldKind {

@@ -696,8 +696,9 @@ describe('questions saved answers never reach', () => {
       expect(byId(reports, id).status, id).toBe('manual');
       expect(byId(reports, id).suggestion, id).toBeNull();
     }
+    // Never a saved answer: an open question for the applicant's own words.
     expect(byId(reports, 'motivation')).toMatchObject({
-      status: 'unsupported',
+      status: 'open',
       target: null,
     });
   });

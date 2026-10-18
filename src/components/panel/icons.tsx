@@ -32,6 +32,7 @@ const STATUS_ICON: Record<Exclude<FieldStatus, 'fill'>, LucideIcon> = {
   // An empty ring: not an error, just the applicant's to answer.
   unsupported: Circle,
   manual: Circle,
+  open: Circle,
   'other-person': Circle,
 };
 
@@ -54,6 +55,7 @@ const STATUS_COLOR: Record<FieldStatus, string> = {
   duplicate: 'text-warning',
   unsupported: 'text-ink-3',
   manual: 'text-ink-3',
+  open: 'text-ink-3',
   'other-person': 'text-ink-3',
 };
 

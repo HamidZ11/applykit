@@ -136,6 +136,7 @@ export function categoryOf(field: ScannedField): FieldCategory {
   const label = normalise(field.label);
   const surroundings = `${label} ${field.context}`;
   if (DISCLOSURE.test(surroundings)) return 'sensitive';
+  if (support.status === 'open') return 'questions';
   if (support.status === 'manual') {
     // Reasons for leaving, gaps in employment, disciplinary records.
     if (support.reason === 'answer') return 'employment';

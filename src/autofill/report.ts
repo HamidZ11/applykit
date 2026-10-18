@@ -59,6 +59,11 @@ export type FieldStatus =
   /** Several saved records could fit, and the form does not say which. */
   | 'ambiguous'
   | 'unrecognised'
+  /**
+   * An open question for the applicant's own words. Never written by
+   * autofill; AI drafting may help, only on request (ADR 0019).
+   */
+  | 'open'
   | 'unsupported'
   | 'manual'
   | 'conflict'
@@ -125,6 +130,7 @@ const REASON = {
   otherPerson:
     'This seems to ask about someone else or an organisation, such as a reference or employer.',
   unrecognised: 'ApplyKit does not know what this field asks for.',
+  open: 'An open question for you to answer in your own words. ApplyKit never fills it automatically.',
   unsupported: 'ApplyKit does not fill this kind of field yet.',
   noProfile: 'Set up your profile so ApplyKit can fill this.',
   tooLong: 'Your saved value is longer than this field allows.',
@@ -224,6 +230,8 @@ function planField(
       };
     case 'unrecognised':
       return { ...base, status: 'unrecognised', reason: REASON.unrecognised };
+    case 'open':
+      return { ...base, status: 'open', reason: REASON.open };
     case 'unsupported':
       if (support.custom?.field && isDiversityField(support.custom.field)) {
         // Guided without the saved answer: it is read only to fill a list.

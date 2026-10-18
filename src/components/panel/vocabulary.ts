@@ -23,6 +23,7 @@ export const STATUS_LABEL: Record<FieldStatus, string> = {
   duplicate: 'Asked twice',
   unsupported: 'Not supported yet',
   manual: 'Answer yourself',
+  open: 'Open question',
   'other-person': 'Not about you',
 };
 
