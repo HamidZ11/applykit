@@ -506,10 +506,10 @@ describe('employment fields', () => {
     expect(
       matched(inSection('Employment history', 'Desired job title')),
     ).toBeNull();
-    // Availability is a saved-answer question, never employment history.
+    // Neither employment history nor, inside a job section, availability.
     expect(
       matched(inSection('Employment history', 'Earliest start date')),
-    ).toBe('startDate');
+    ).toBeNull();
   });
 
   it.each([

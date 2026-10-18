@@ -702,3 +702,168 @@ describe('questions saved answers never reach', () => {
     });
   });
 });
+
+describe('cases found in review', () => {
+  const ANSWERS = [
+    'noticePeriod',
+    'relocation',
+    'workArrangement',
+    'startDate',
+    'salaryExpectation',
+  ];
+
+  it.each([
+    'Current and expected salary',
+    'Current/expected salary',
+    'Current total compensation and salary expectations',
+    'Salary today and expected salary',
+    'What do you make now and what salary are you expecting?',
+    'Current package and salary expectations',
+    'Salary expectation in previous role',
+    'What were your salary expectations last year?',
+    'Expected salary – minimum acceptable',
+    'Salary expectations: lowest you would accept',
+  ])('keeps “%s” sensitive', (label) => {
+    expect(detected(`<label>${label} <input></label>`)).toBe(
+      'manual:sensitive',
+    );
+  });
+
+  it('keeps an expectation label with a current-pay name sensitive', () => {
+    expect(
+      detected('<label>Expected salary <input name="current_salary"></label>'),
+    ).toBe('manual:sensitive');
+  });
+
+  it.each([
+    'Would you relocate within Europe?',
+    'Are you willing to relocate within the EU?',
+    'Are you planning to relocate within the next six months?',
+    'Would you be willing to relocate outside of London?',
+    'Would you relocate to London, Paris or another location?',
+  ])('never guesses where “%s” means', (label) => {
+    expect(one(`<label>${label} <input></label>`).status).not.toBe('suggest');
+  });
+
+  it('reads "within" and "outside" the saved country', () => {
+    expect(
+      one(
+        '<label>Are you willing to relocate within the United Kingdom? <input></label>',
+      ).fillValue,
+    ).toBe('Yes');
+    expect(
+      one('<label>Would you relocate outside the UK? <input></label>')
+        .fillValue,
+    ).toBe('No');
+  });
+
+  it.each([
+    'Do you require relocation?',
+    'Relocation date',
+    'Preferred relocation city',
+    'Will the company relocate you?',
+    'Relocation offered?',
+    'Are you currently relocating?',
+    'Have you relocated for a job before?',
+    'Would your family be willing to relocate with you?',
+    'Would your dependants relocate with you?',
+    'Are you relocating from outside the UK?',
+  ])('does not take “%s” for willingness to relocate', (label) => {
+    expect(ANSWERS).not.toContain(detected(`<label>${label} <input></label>`));
+  });
+
+  it('never chooses a notice option that is a range or a bound', () => {
+    const select = (saved: number, unit: 'weeks' | 'months', options: string) =>
+      one(
+        `<label>Notice period <select><option value="">Select…</option>${options}</select></label>`,
+        { ...savedAnswers(), noticePeriod: { amount: saved, unit } },
+      ).status;
+    const bands =
+      '<option>Immediately</option><option>&lt; 1 month</option><option>1-3 months</option><option>&gt; 3 months</option>';
+    expect(select(1, 'months', bands)).toBe('no-option');
+    expect(select(3, 'months', bands)).toBe('no-option');
+    expect(select(3, 'months', '<option>3+ months</option>')).toBe('no-option');
+    expect(
+      select(
+        1,
+        'months',
+        '<option>Up to 1 month</option><option>1 month+</option>',
+      ),
+    ).toBe('no-option');
+  });
+
+  it.each([
+    'Are you currently serving your notice period?',
+    'Is your notice period negotiable?',
+    'When does your notice period end?',
+    'What notice period does the company require from new hires?',
+    'Your line manager’s notice period',
+    'Notice period for your direct reports',
+  ])('does not take “%s” for the applicant’s notice period', (label) => {
+    expect(ANSWERS).not.toContain(detected(`<label>${label} <input></label>`));
+  });
+
+  it.each([
+    'Describe your working style',
+    'Describe your home work setup',
+    'What working model does your current team use?',
+  ])('does not take “%s” for a working preference', (label) => {
+    expect(ANSWERS).not.toContain(detected(`<label>${label} <input></label>`));
+  });
+
+  it('leaves preferences inside a past job to the job', () => {
+    expect(
+      detected(
+        '<fieldset><legend>Employment history</legend><label>Working arrangement <select><option>Hybrid</option></select></label></fieldset>',
+      ),
+    ).not.toBe('workArrangement');
+    expect(
+      detected(
+        '<fieldset><legend>Employment history</legend><label>Available from <input type="date"></label></fieldset>',
+      ),
+    ).not.toBe('startDate');
+    // Notice for the current job is still the applicant's notice period.
+    expect(
+      detected(
+        '<fieldset><legend>Current employment</legend><label>Notice period <input></label></fieldset>',
+      ),
+    ).toBe('noticePeriod');
+  });
+
+  it.each([
+    'When can you join a call with us?',
+    'When could you start the online assessment?',
+    'Date available to start interviews',
+  ])('does not take “%s” for a start date', (label) => {
+    expect(detected(`<label>${label} <input type="date"></label>`)).not.toBe(
+      'startDate',
+    );
+  });
+
+  it('never lets a placeholder example outweigh the label', () => {
+    expect(
+      detected(
+        '<label>Anything else we should know? <input placeholder="For example, your notice period"></label>',
+      ),
+    ).not.toBe('noticePeriod');
+  });
+
+  it('never fills a salary field that counts in thousands', () => {
+    expect(
+      one('<label>Expected annual salary (£k) <input></label>').status,
+    ).toBe('unusable');
+    expect(
+      one(
+        '<label>Expected annual salary in GBP (thousands) <input type="number"></label>',
+      ).status,
+    ).toBe('unusable');
+  });
+
+  it('leaves a date field that states two formats', () => {
+    expect(
+      one(
+        '<label>Earliest start date (DD/MM/YYYY or MM/DD/YYYY) <input></label>',
+      ).status,
+    ).toBe('ambiguous');
+  });
+});

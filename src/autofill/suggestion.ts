@@ -11,7 +11,7 @@ import {
   type EmploymentField,
   type EmploymentValue,
 } from './fields';
-import { answerGuidance } from './answers';
+import { answerGuidance, homeNames } from './answers';
 import { asksExpectedEnd, employmentTypeLabel } from './plan-employment';
 import type { RecordChoice } from './records';
 import type { ScannedField } from './scan';
@@ -51,7 +51,13 @@ export function suggestionFor(
   { values, education, employment, now }: SuggestionContext,
 ): Suggestion {
   if (isAnswerField(target)) {
-    const plan = answerGuidance(field, target, values.answers, now);
+    const plan = answerGuidance(
+      field,
+      target,
+      values.answers,
+      now,
+      homeNames(values),
+    );
     if ('display' in plan) {
       return value(plan.display, 'From your saved application answers.');
     }

@@ -432,33 +432,44 @@ const ANSWER_RULES: Record<
       /\bhow much notice\b/,
       /\bnotice (?:do you need to|must you|are you required to|you need to|you must|you would need to) give\b/,
     ],
+    // Notice someone received or is serving, whether it can change or when
+    // it ends, and the notice other people or the company require.
     exclude:
-      /\b(?:received|served|given to you|redundan\w*|dismiss\w*|terminat\w*|probation\w*)\b/,
+      /\b(?:received|served|serving|given to you|redundan\w*|dismiss\w*|terminat\w*|probation\w*|negotiab\w*|end|ends|ending|expir\w*|company|new hires|reports|team)\b/,
   },
   relocation: {
-    include: [/\brelocat\w*\b/],
+    // Willingness to move, not plans, support, dates or places.
+    include: [
+      /\b(?:willing\w*|open|consider\w*|prepared|happy|able) (?:to |for )?relocat\w*/,
+      /\b(?:would|could|can|will) you relocate\b/,
+      /^(?:relocation|relocate)$/,
+    ],
     exclude:
-      /\b(?:assistance|package|support|costs?|allowance|expenses|budget|bonus|where|which (?:city|country|location|office)|reasons?)\b/,
+      /\b(?:assistance|package|support|costs?|allowance|expenses|budget|bonus|where|which|reasons?|requir\w*|need\w*|date|city|offer\w*|company|currently|before|from|planning|plans?)\b/,
   },
   workArrangement: {
     include: [
-      /\b(?:working|work) (?:arrangement|model|setup|set up|style|location type|location preference)s?\b/,
+      /\b(?:working|work) (?:arrangement|model|location type|location preference)s?\b/,
       /\bremote,? hybrid,? (?:or|and) (?:office|on ?site|in office)\b/,
       /\bprefer\w*\b.*\b(?:remote|hybrid|on ?site|office based)\b/,
     ],
-    exclude: null,
+    // How someone works, or how a team or company works, is not a preference.
+    exclude:
+      /\b(?:current|currently|team|company|describe|style|setup|set up)\b/,
   },
   startDate: {
     include: [
       /\b(?:earliest|possible|available|availability|proposed|desired|anticipated) (?:start(?:ing)? date|date (?:to|you can|you could) start)\b/,
-      /\bwhen (?:can|could|would|will) you (?:start|begin|commence|join)\b/,
+      // Starting the job, not a call or an assessment.
+      /\bwhen (?:can|could|would|will) you (?:start|begin|commence|join)(?: (?:the|this|a|new|role|job|position|post|work|working|with|us|employment|in|it))*$/,
       // A duration rather than a date: recognised, then left to the user.
       /\bhow (?:soon|quickly) (?:can|could|would|will) you (?:start|begin|commence|join)\b/,
-      /\bdate (?:you are |you re )?available (?:to start|from)\b/,
-      /\bavailab\w* to (?:start|begin|commence)\b/,
+      /\bdate (?:you are |you re )?available (?:to start|from)$/,
+      /\bavailab\w* to (?:start|begin|commence)(?: (?:the|this|a|new|role|job|position|post|work|employment))*$/,
       /^(?:date )?available from$/,
     ],
-    exclude: null,
+    exclude:
+      /\b(?:call|interview\w*|assessment|tests?|meeting|chat|course|training|exams?|session)\b/,
   },
   salaryExpectation: {
     include: [SALARY_EXPECTATION],
@@ -466,9 +477,18 @@ const ANSWER_RULES: Record<
   },
 };
 
-/** Salary questions that stay sensitive: what someone earns or earned. */
+/**
+ * Anything about what someone earns, earned or would settle for keeps a
+ * salary question sensitive, wherever it appears in the question.
+ */
 const SALARY_HISTORY =
-  /\b(?:current|previous|present|last|former|past|existing|minimum|lowest) (?:annual |base |basic |gross )?(?:salary|pay|compensation|remuneration|rate|earnings)\b|\bsalary history\b|\bearn(?:s|ing|ings|ed)?\b/;
+  /\b(?:current|currently|previous|present|last|former|past|existing|minimum|lowest|least|now|today|make|made|earn\w*|package|total|history|accept\w*)\b/;
+
+/**
+ * Inside a past job's section, these questions describe that job (its
+ * arrangement, start, pay). A notice period there is still the applicant's.
+ */
+const ANSWERS_IN_JOB_SECTIONS = new Set<AnswerField>(['noticePeriod']);
 
 /** Words a salary-expectation question may use without being sensitive. */
 const SALARY_WORDS =
@@ -584,7 +604,7 @@ const OTHER_PERSON_EMPLOYMENT =
  * employer?" is about the applicant; anyone else's plans are not.
  */
 const OTHER_PERSON_ANSWER =
-  /\b(?:references?|referees?|referr\w*|referrals?|colleagues?|friends?|relatives?|interviewers?|hiring|recruit\w*|emergency|next of kin|guardian|parent|spouse|partner|landlord|agency|agencies|clients?)\b/;
+  /\b(?:references?|referees?|referr\w*|referrals?|colleagues?|friends?|relatives?|interviewers?|hiring|recruit\w*|emergency|next of kin|guardian|parents?|spouse|partner|landlord|agency|agencies|clients?|family|dependants?|dependents?|children|manager s|direct reports)\b/;
 const OTHER_PERSON_HEADING_EMPLOYMENT =
   /\b(?:references?|referees?|referr\w*|referrals?|hiring|recruit\w*|managers?|supervisors?|representatives?|contacts?|emergency|next of kin|guardian|spouse|partner|landlord|agency|agencies|clients?|customers?|person to (?:speak|contact)|speak to)\b/;
 
@@ -635,7 +655,8 @@ export function detectControl(control: DetectableControl): Detection {
   // other sensitive wording, or asking what they earn, still is.
   const salaryQuestion =
     questions.some((q) => SALARY_EXPECTATION.test(q.normalised)) &&
-    !SALARY_HISTORY.test(wording);
+    !SALARY_HISTORY.test(wording) &&
+    !SALARY_HISTORY.test(technical);
   const screened = (text: string) =>
     salaryQuestion ? text.replace(SALARY_WORDS, ' ') : text;
   if (
@@ -692,9 +713,10 @@ export function detectControl(control: DetectableControl): Detection {
       add(field, { signal, text: raw });
     }
   }
-  for (const { raw, normalised } of questions) {
+  for (const { signal, raw, normalised } of questions) {
     for (const field of matchAnswer(normalised)) {
-      add(field, { signal: 'label', text: raw });
+      if (inWorkHistory && !ANSWERS_IN_JOB_SECTIONS.has(field)) continue;
+      add(field, { signal, text: raw });
     }
   }
   for (const field of [...candidates.keys()]) {
@@ -876,7 +898,7 @@ function matchEducation(text: string, inEducation: boolean): EducationField[] {
 function questionTexts(
   control: DetectableControl,
   texts: TextSignal[],
-): { raw: string; normalised: string }[] {
+): { signal: Signal; raw: string; normalised: string }[] {
   const questions = texts.filter(
     (t) => t.signal === 'label' || t.signal === 'placeholder',
   );
@@ -887,7 +909,7 @@ function questionTexts(
     control.closest('fieldset')?.querySelector(':scope > legend')
       ?.textContent ?? '';
   const raw = legend.replace(/\s+/g, ' ').trim();
-  return raw ? [{ raw, normalised: normalise(raw) }] : [];
+  return raw ? [{ signal: 'label', raw, normalised: normalise(raw) }] : [];
 }
 
 /** The saved-answer questions a piece of question text asks. */
@@ -900,8 +922,10 @@ function matchAnswer(text: string): AnswerField[] {
   ][]) {
     if (!rules.include.some((pattern) => pattern.test(text))) continue;
     if (rules.exclude?.test(text)) continue;
+    // A yes/no question about one arrangement or about notice ("Is your
+    // notice period negotiable?") does not ask for the saved answer.
     if (
-      field === 'workArrangement' &&
+      (field === 'workArrangement' || field === 'noticePeriod') &&
       YES_NO.test(text) &&
       !/\bprefer\w*\b/.test(text)
     ) {

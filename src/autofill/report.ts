@@ -1,5 +1,5 @@
 import type { Evidence } from './detect';
-import { planAnswer } from './answers';
+import { homeNames, planAnswer } from './answers';
 import {
   AUTOFILL_FIELD_LABEL,
   type AnswerField,
@@ -286,7 +286,13 @@ function planField(
   if (isAnswerField(support.field)) {
     return planSuggestion(
       matched,
-      planAnswer(field, support.field, context.values.answers, context.now),
+      planAnswer(
+        field,
+        support.field,
+        context.values.answers,
+        context.now,
+        homeNames(context.values),
+      ),
     );
   }
 

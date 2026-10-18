@@ -10,7 +10,7 @@ import type {
   WorkArrangement,
 } from '@/domain/application-answers';
 import { normalise } from './detect';
-import type { AnswerField } from './fields';
+import type { AnswerField, AutofillValues } from './fields';
 import { comparable, usableOptions } from './options';
 import type { ControlField, ScannedField } from './scan';
 
@@ -58,6 +58,7 @@ export function planAnswer(
   target: AnswerField,
   answers: ApplicationAnswers | null,
   now: Date,
+  home: readonly string[] = [],
 ): AnswerPlan {
   if (!answers) {
     return {
@@ -70,7 +71,7 @@ export function planAnswer(
     case 'noticePeriod':
       return planNotice(field, answers.noticePeriod);
     case 'relocation':
-      return planRelocation(field, answers.relocation);
+      return planRelocation(field, answers.relocation, home);
     case 'workArrangement':
       return planArrangement(field, answers.workArrangement);
     case 'startDate':
@@ -89,6 +90,7 @@ export function answerGuidance(
   target: AnswerField,
   answers: ApplicationAnswers | null,
   now: Date,
+  home: readonly string[] = [],
 ): AnswerPlan {
   if (!answers) return planAnswer(field as ControlField, target, null, now);
   switch (target) {
@@ -99,7 +101,11 @@ export function answerGuidance(
         text(noticeText(answers.noticePeriod))
       );
     case 'relocation': {
-      const answer = relocationAnswer(question(field), answers.relocation);
+      const answer = relocationAnswer(
+        question(field),
+        answers.relocation,
+        home,
+      );
       return 'reason' in answer ? answer : text(WILLINGNESS_TEXT[answer.value]);
     }
     case 'workArrangement':
@@ -118,6 +124,18 @@ export function answerGuidance(
         : text(salaryText(answers.salary));
     }
   }
+}
+
+/**
+ * The saved country's names as questions write them ("uk", "united
+ * kingdom"), so "within the UK" can be read as within the user's country.
+ */
+export function homeNames(values: AutofillValues): string[] {
+  const { country } = values;
+  if (!country) return [];
+  return [country.name, country.alpha3, country.code, ...country.aliases]
+    .map((name) => normalise(name))
+    .filter((name) => /^[a-z ]+$/.test(name));
 }
 
 const text = (value: string): AnswerPlan => ({
@@ -187,6 +205,14 @@ const NO_NOTICE =
  * null for ranges and anything else ("1-3 months", "Up to a month").
  */
 function noticeOption(optionText: string): NoticePeriod | null {
+  // "< 1 month", "3+ months", "Up to a month": a bound, not a period.
+  if (
+    /[<>+≤≥]|\b(?:up to|less|more|over|under|at least|or more|or less|plus|max\w*|min\w*|between)\b/i.test(
+      optionText,
+    )
+  ) {
+    return null;
+  }
   const value = comparable(optionText);
   if (NO_NOTICE.test(value)) return { amount: 0, unit: 'weeks' };
   const match = /^(\d+|[a-z]+) (day|week|month)s?$/.exec(value);
@@ -236,13 +262,25 @@ function planNotice(
 
 // Relocation
 
-const ABROAD =
-  /\b(?:international\w*|abroad|overseas|another country|other countries|a different country|outside (?:of )?(?:the |your )?[a-z]+)\b/;
+/** Places that always mean the applicant's own country, or another one. */
 const AT_HOME =
-  /\b(?:within (?:the |your )?[a-z]+|another (?:city|town|region|office|location)|elsewhere in (?:the )?[a-z]+|nationally|domestic\w*)\b/;
-/** "Relocate to London": a particular place the saved answer never named. */
-const PARTICULAR_PLACE =
-  /\brelocat\w* to (?!another\b|a different\b|other\b|any\b|a new\b)[a-z]+/;
+  /\b(?:within (?:the |your )?(?:own |home )?country|elsewhere in (?:the |your )?country|nationally|domestically)\b/;
+const ABROAD =
+  /\b(?:international\w*|abroad|overseas|another country|other countries|a different country|outside (?:of )?(?:the |your )?(?:own |home )?country)\b/;
+/** Any other place or time: "within Europe", "to London", "within six months". */
+const ELSEWHERE =
+  /\brelocat\w*\b.*\b(?:within|outside|to|across|around|near)\b/;
+
+/** Whether `text` says "within" or "outside" one of the home country's names. */
+function namesHome(
+  text: string,
+  home: readonly string[],
+  preposition: string,
+): boolean {
+  return home.some((name) =>
+    new RegExp(`\\b${preposition} (?:of )?(?:the )?${name}\\b`).test(text),
+  );
+}
 
 export const WILLINGNESS_TEXT: Record<Willingness, string> = {
   yes: 'Yes',
@@ -254,10 +292,14 @@ export const WILLINGNESS_TEXT: Record<Willingness, string> = {
 function relocationAnswer(
   text: string,
   saved: Relocation | null,
+  home: readonly string[],
 ): { value: Willingness } | Exclude<AnswerPlan, { display: string }> {
   if (!saved) return NOT_SAVED as Exclude<AnswerPlan, { display: string }>;
-  const abroad = ABROAD.test(text);
-  const atHome = AT_HOME.test(text);
+  const abroad = ABROAD.test(text) || namesHome(text, home, 'outside');
+  const atHome =
+    AT_HOME.test(text) ||
+    namesHome(text, home, 'within') ||
+    namesHome(text, home, 'elsewhere in');
   if (abroad && atHome) {
     return {
       status: 'ambiguous',
@@ -265,11 +307,11 @@ function relocationAnswer(
         'This asks about moving both within your country and abroad. Answer it yourself.',
     };
   }
-  if (!abroad && !atHome && PARTICULAR_PLACE.test(text)) {
+  if (!abroad && !atHome && ELSEWHERE.test(text)) {
     return {
       status: 'ambiguous',
       reason:
-        'This asks about moving to a particular place. Your saved answer is general, so answer it yourself.',
+        'This asks about a particular place or time. Your saved answer is general, so answer it yourself.',
     };
   }
   if (abroad || atHome) {
@@ -305,8 +347,9 @@ const WILLINGNESS_OPTIONS: Record<Willingness, RegExp> = {
 function planRelocation(
   field: ControlField,
   saved: Relocation | null,
+  home: readonly string[],
 ): AnswerPlan {
-  const answer = relocationAnswer(question(field), saved);
+  const answer = relocationAnswer(question(field), saved, home);
   if ('reason' in answer) return answer;
   return planOption(
     field,
@@ -456,17 +499,25 @@ function planStartDate(
     };
   }
   const hints = `${field.label} ${element.placeholder}`;
-  for (const [pattern, order] of [
-    [DAY_FIRST, [day, month, year]],
-    [MONTH_FIRST, [month, day, year]],
-    [YEAR_FIRST, [year, month, day]],
-  ] as const) {
+  const formats = (
+    [
+      [DAY_FIRST, [day, month, year]],
+      [MONTH_FIRST, [month, day, year]],
+      [YEAR_FIRST, [year, month, day]],
+    ] as const
+  ).flatMap(([pattern, order]) => {
     const match = pattern.exec(hints);
-    if (match?.[1]) {
-      const written = order.join(match[1]);
-      return { display: longDate(value), fillValue: written };
-    }
+    return match?.[1] ? [order.join(match[1])] : [];
+  });
+  if (formats.length > 1) {
+    return {
+      status: 'ambiguous',
+      reason:
+        'This field states more than one date format, so ApplyKit cannot tell which it wants.',
+    };
   }
+  const [written] = formats;
+  if (written) return { display: longDate(value), fillValue: written };
   return {
     status: 'unusable',
     reason:
@@ -555,6 +606,13 @@ function salaryFit(
   saved: Salary,
 ): AnswerPlan | { period: SalaryPeriod | null; currency: Currency | null } {
   const { periods, currencies, dollar } = salaryUnits(field);
+  if (/\bk\b|\bthousands?\b|\b000s\b|'000/i.test(rawQuestion(field))) {
+    return {
+      status: 'unusable',
+      reason:
+        'This asks for the amount in thousands. ApplyKit does not convert it.',
+    };
+  }
   if (periods.length > 1 || currencies.length > 1) {
     return {
       status: 'ambiguous',
