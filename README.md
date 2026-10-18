@@ -117,6 +117,9 @@ Limitations:
    `reusable-answers.html` asks notice period, start date, relocation,
    working arrangement and salary questions next to eligibility, equal
    opportunities and declaration questions;
+   `diversity-application.html` has equal-opportunities monitoring
+   lists, radios and a custom dropdown next to sex, health, adjustments,
+   right-to-work and consent questions;
    `custom-controls.html` is built from custom dropdowns.)
 4. Click the ApplyKit toolbar button. Without a saved profile the panel
    says so and offers **Set up your profile**; it fills nothing. Save a
@@ -206,6 +209,12 @@ Limitations:
   degree's expected graduation date and suggested the same way, with the
   date they rest on. Only an end date still to come counts; ApplyKit never
   assumes a past end date means you graduated.
+- Diversity & Inclusion (optional): save answers to gender, ethnic group,
+  disability, religion or belief and sexual orientation on the profile
+  page. **Reuse my saved diversity answers** is off by default; with it
+  on, Autofill fills monitoring lists whose question it recognises
+  exactly and that offer the same answer. The panel never shows your
+  answers, and **Clear all diversity preferences** deletes them.
 - Fields your profile has no value for link to your profile page.
 - Custom dropdowns are counted as fields and, when ApplyKit recognises
   them, show "From your saved profile" with the value to choose, plus
@@ -220,7 +229,9 @@ Limitations:
   placeholders and surrounding sections, and skips any field whose signals
   disagree.
 - Never answers right-to-work, visa, current pay or salary history,
-  disability, demographic or consent questions, reasons for leaving or
+  health, sex, reasonable adjustments or consent questions, or
+  monitoring questions unless you turned on reuse of your diversity
+  answers, reasons for leaving or
   gaps in employment, and never fills details about references, employer
   contacts, hiring managers or emergency contacts, CAPTCHAs, or hidden,
   disabled or read-only fields.
@@ -256,6 +267,11 @@ Limitations:
   has passed, and Yes/No questions asked as text fields are left to you.
   Answers saved by a
   newer version of ApplyKit are kept but can only be edited there.
+- Diversity answers fill only native lists: radio buttons, multiple
+  selects and custom dropdowns are left to you, and Male/Female lists are
+  never used for gender identity. Recognition is English-only and limited
+  to exact UK wordings; age, caring responsibilities and socio-economic
+  background are not covered.
 - Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
   and similar platforms) are listed and never filled: the full list shows
   the saved value to choose and a "Go to field" button. Only standard ARIA

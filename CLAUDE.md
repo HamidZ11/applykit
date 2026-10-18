@@ -17,7 +17,8 @@ employment autofill with the same per-section record choice (ADR 0015),
 saved application answers, suggested and filled only when the user
 confirms each one (ADR 0016), and graduation answers worked out from the
 saved degree's expected graduation date, suggested the same way
-(ADR 0017).
+(ADR 0017), and opt-in diversity preferences for the five exact
+monitoring questions (ADR 0018).
 
 Still to come (build only when asked, one at a time): custom dropdown
 widgets; review
@@ -47,7 +48,9 @@ Read `docs/architecture.md` before changing structure, and the ADRs in
   drafts for autofill, never fall back to sample data, and keep storage
   access out of content scripts.
 - A correct skip beats a wrong fill: never answer sensitive, consent or
-  verification questions, never fill other people's details, and skip
+  verification questions (the one exception: the five exact monitoring
+  questions, with the user's reuse opt-in, ADR 0018; diversity answers
+  never reach the panel), never fill other people's details, and skip
   fields whose signals disagree.
 
 ## Rules against unnecessary complexity
@@ -127,7 +130,8 @@ old (pnpm enforces a minimum release age; do not add exclusions).
   (ADR 0014). Never make stored data unreadable through a form-rule
   change; never overwrite or drop a profile or draft silently.
   `fixtures/custom-controls.html` covers listing, deduplication and page
-  furniture.
+  furniture; `fixtures/diversity-application.html` covers monitoring
+  questions next to sensitive and consent questions.
 - A user's choice must never make other fields eligible for automatic
   filling: choices go through `planFill` as `SectionChoices`, are
   previewed, re-checked by `confirmChoice` and written by `fillFields`.

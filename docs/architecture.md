@@ -174,6 +174,26 @@ opened at `options.html#answers`). Each category is typed and optional;
 each answer is saved on its own, compare-and-set, over the latest saved
 answers. There is no draft.
 
+### Diversity preferences
+
+Optional answers to five equal-opportunities monitoring questions
+(gender, ethnic group, disability, religion or belief, sexual
+orientation) live in `local:diversityPreferences` (ADR 0018), edited in
+the "Diversity & Inclusion" section (`DiversityView`,
+`options.html#diversity`) with a reuse switch that is off by default.
+The panel never receives the answers: autofill values carry only
+`{ reuse, saved }` (categories with an answer, none while reuse is off).
+At Autofill the panel sends each monitoring question's category and its
+list's options; the background re-reads the store and answers with one
+of those options or a reason:
+
+```
+panel: withDiversityChoices(plan) → applykit:resolve-diversity { category, options }[]
+background: sender is ApplyKit, top frame? → resolveDiversity(diversityStore, requests)
+            reuse on, saved, one matching option → { value } | { reason }
+panel: writes only a value its own list offered, through fillFields
+```
+
 ### Autofill values
 
 Autofill reads only the confirmed profile and the saved application
@@ -182,8 +202,8 @@ receives `AutofillValues`, never the profile:
 
 ```
 panel: requestAutofillValues()  → applykit:get-autofill-values
-background: sender is ApplyKit? → loadAutofillValues(profileStore, answersStore)
-            loaded              → { ready, values: autofillValuesFrom(profile, answers | null) }
+background: sender is ApplyKit? → loadAutofillValues(profileStore, answersStore, diversityStore)
+            loaded              → { ready, values: autofillValuesFrom(profile, answers, diversity) }
             empty | invalid | error → { missing | invalid | error }
 panel: validates the reply shape; anything else is { error }
 ```
@@ -238,8 +258,8 @@ profile", "Open your profile" or "Try again" instead of Autofill.
 
 ## Autofill rules
 
-Details and reasoning are in ADR 0010, ADR 0011, ADR 0015, ADR 0016 and
-ADR 0017.
+Details and reasoning are in ADR 0010, ADR 0011, ADR 0015, ADR 0016,
+ADR 0017 and ADR 0018.
 
 - Fields: full, first, last and preferred name; email; phone, or its
   calling code and national number separately; address lines 1 and 2, town
@@ -252,7 +272,10 @@ ADR 0017.
   answers, only ever suggested (`suggest`) and written one field at a
   time when the user chooses "Use this answer" (ADR 0016). Graduation
   timing worked out from the one saved degree a question can be about,
-  suggested the same way (ADR 0017).
+  suggested the same way (ADR 0017). Gender, ethnic group, disability,
+  religion or belief and sexual orientation from the diversity
+  preferences, only with reuse on, into native lists with an option
+  that says the saved answer (ADR 0018).
 - Modules in `src/autofill`: `detect` (what a control asks), `scan` (every
   control, with support and section), `report`, `plan-education` and
   `plan-employment` (the plan: value or reason per field), `records` (what
@@ -261,7 +284,8 @@ ADR 0017.
   record the user chose for a section, and a saved answer the user chose
   to use), `answers` (what a saved answer gives one question, or why
   not), `graduation` (what a saved degree's expected graduation says about
-  a graduation question), `suggestion` (saved values shown
+  a graduation question), `diversity` (monitoring questions and
+  which option says a saved answer), `suggestion` (saved values shown
   as guidance for fields ApplyKit cannot fill), `fill` (write and verify),
   plus pure rules in `education`, `dates`, `options` and `categories`.
   `src/page/navigate.ts` takes the user to a field ("Go to field"): it
@@ -280,7 +304,8 @@ ADR 0017.
 - Skipped with a reason: details about someone else (references,
   employer contacts and addresses, companies outside a job section, hiring
   managers), sensitive questions (right to work, visa, current pay and
-  salary history, disability, demographics, date of birth), consent and
+  salary history, health, sex, date of birth, and monitoring questions
+  other than the five exact ones in ADR 0018), consent and
   declarations,
   questions only the applicant can answer (reasons for leaving, gaps in
   employment), CAPTCHAs, values longer than `maxlength`, and fields
@@ -290,7 +315,8 @@ ADR 0017.
 - Writable controls: text, email, tel, url and search inputs; month and
   number inputs for education and job dates; native selects for country,
   calling code, education and job fields (exact or explicitly equivalent
-  options only); textareas only for a saved job description; date,
+  options only); native single selects for monitoring questions (ADR 0018);
+  textareas only for a saved job description; date,
   month and number inputs for saved answers whose units they state.
   Never
   hidden, disabled, read-only or password controls, checkboxes (an "I
