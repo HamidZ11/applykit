@@ -70,6 +70,16 @@ export function addSkills(current: readonly string[], text: string): string[] {
   return [...current, ...added];
 }
 
+/** A project with nothing entered, such as one added by mistake. */
+export function isBlankProject(project: Project): boolean {
+  return (
+    project.name.trim() === '' &&
+    project.description.trim() === '' &&
+    project.technologies.length === 0 &&
+    project.link.trim() === ''
+  );
+}
+
 /** Technologies typed as a comma-separated list. */
 export function parseTechnologies(text: string): string[] {
   return addSkills([], text);

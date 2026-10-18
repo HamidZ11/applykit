@@ -204,3 +204,133 @@ describe('SkillsProjectsView', () => {
     expect(host.querySelectorAll('input, textarea, button')).toHaveLength(0);
   });
 });
+
+describe('removing projects without losing other changes', () => {
+  function projects(): HTMLLIElement[] {
+    return [...host.querySelectorAll<HTMLLIElement>('li[aria-label]')];
+  }
+
+  function inProject(index: number, label: string) {
+    const item = projects()[index];
+    const labelEl = [...(item?.querySelectorAll('label') ?? [])].find(
+      (l) => l.textContent.replace(/Optional$/, '').trim() === label,
+    );
+    const element = document.getElementById(labelEl?.htmlFor ?? '');
+    if (
+      !(element instanceof HTMLInputElement) &&
+      !(element instanceof HTMLTextAreaElement)
+    ) {
+      throw new Error(`No ${label} in project ${String(index)}`);
+    }
+    return element;
+  }
+
+  function removeIn(index: number) {
+    const remove = [
+      ...(projects()[index]?.querySelectorAll('button') ?? []),
+    ].find((b) => b.textContent.trim() === 'Remove project');
+    act(() => {
+      remove?.click();
+    });
+  }
+
+  it('keeps unrelated edits when an accidental project is removed after a failed save', async () => {
+    await browserSkillsStore.save(savedSkills(), null, NOW);
+    await render(new Date('2026-10-18T13:00:00.000Z'));
+    type(inProject(0, 'Short description'), 'Edited description.');
+    await click('Add project');
+    type(inProject(2, 'Name'), 'Half-finished');
+    await click('Save skills and projects');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      'Some details need fixing',
+    );
+
+    removeIn(2);
+    await flush();
+
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(inProject(0, 'Short description').value).toBe('Edited description.');
+    await click('Save skills and projects');
+    expect(await browserSkillsStore.load()).toMatchObject({
+      content: {
+        projects: [
+          { id: 'inventory', description: 'Edited description.' },
+          { id: 'timetable' },
+        ],
+      },
+    });
+  });
+
+  it('drops a blank project added by mistake instead of blocking the save', async () => {
+    await render();
+    type(field('Add a skill'), 'Go');
+    await click('Add');
+    await click('Add project');
+    type(inProject(0, 'Name'), 'Example Rota Tool');
+    type(inProject(0, 'Short description'), 'Plans shifts.');
+    await click('Add project');
+
+    await click('Save skills and projects');
+
+    expect(await browserSkillsStore.load()).toMatchObject({
+      content: {
+        skills: ['Go'],
+        projects: [{ name: 'Example Rota Tool' }],
+      },
+    });
+    expect(projects()).toHaveLength(1);
+  });
+
+  it('removes a project from the middle, keeping the others’ typed text', async () => {
+    await render();
+    for (const name of ['One', 'Two', 'Three']) {
+      await click('Add project');
+      const last = projects().length - 1;
+      type(inProject(last, 'Name'), name);
+      type(inProject(last, 'Short description'), `${name} description.`);
+      type(inProject(last, 'Technologies'), `${name}Lang, `);
+    }
+
+    removeIn(1);
+    await flush();
+
+    expect(projects().map((p) => p.getAttribute('aria-label'))).toEqual([
+      'One',
+      'Three',
+    ]);
+    expect(inProject(1, 'Technologies').value).toBe('ThreeLang, ');
+    await click('Save skills and projects');
+    expect(await browserSkillsStore.load()).toMatchObject({
+      content: {
+        projects: [
+          { name: 'One', technologies: ['OneLang'] },
+          { name: 'Three', technologies: ['ThreeLang'] },
+        ],
+      },
+    });
+  });
+
+  it('removes a saved project and saves', async () => {
+    await browserSkillsStore.save(savedSkills(), null, NOW);
+    await render(new Date('2026-10-18T13:00:00.000Z'));
+
+    removeIn(0);
+    await flush();
+    await click('Save skills and projects');
+
+    expect(await browserSkillsStore.load()).toMatchObject({
+      content: { projects: [{ id: 'timetable' }] },
+    });
+  });
+
+  it('keeps a skill typed but not yet added when saving', async () => {
+    await render();
+    type(field('Add a skill'), 'Rust');
+
+    await click('Save skills and projects');
+
+    expect(await browserSkillsStore.load()).toMatchObject({
+      content: { skills: ['Rust'] },
+    });
+  });
+});

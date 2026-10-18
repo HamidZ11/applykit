@@ -3,6 +3,7 @@ import { Plus, X } from 'lucide-react';
 import {
   LIMITS,
   addSkills,
+  isBlankProject,
   newProject,
   parseTechnologies,
   skillsProjectsErrors,
@@ -113,9 +114,13 @@ export function SkillsProjectsView({
 
   const content = draft ?? load.content;
   const dirty = draft !== null;
+  const unsaved = dirty || skillText.trim() !== '';
   const errors = showErrors ? skillsProjectsErrors(content) : {};
   const change = (next: SkillsProjects) => {
+    // A message about the previous state, such as "Some details need
+    // fixing", must not outlive the change that fixed it.
     setNotice('');
+    setProblem(null);
     setDraft(next);
   };
   const changeProject = (id: string, patch: Partial<Project>) => {
@@ -133,14 +138,20 @@ export function SkillsProjectsView({
   };
 
   const save = async () => {
-    if (Object.keys(skillsProjectsErrors(content)).length > 0) {
+    // Blank projects (added by mistake) are dropped rather than blocking
+    // the save, and a skill typed but not yet added is kept.
+    const toSave: SkillsProjects = {
+      skills: addSkills(content.skills, skillText),
+      projects: content.projects.filter((p) => !isBlankProject(p)),
+    };
+    if (Object.keys(skillsProjectsErrors(toSave)).length > 0) {
       setShowErrors(true);
       setProblem('Some details need fixing before they can be saved.');
       return;
     }
     setBusy(true);
     setProblem(null);
-    const result = await store.save(content, load.updatedAt, now());
+    const result = await store.save(toSave, load.updatedAt, now());
     setBusy(false);
     switch (result.status) {
       case 'saved':
@@ -151,6 +162,7 @@ export function SkillsProjectsView({
           damaged: false,
         });
         setDraft(null);
+        setSkillText('');
         setShowErrors(false);
         setRevision((r) => r + 1);
         setNotice('Skills and projects saved.');
@@ -182,7 +194,7 @@ export function SkillsProjectsView({
       className="mt-6 space-y-8"
       onSubmit={(event) => {
         event.preventDefault();
-        if (dirty && !busy) void save();
+        if (unsaved && !busy) void save();
       }}
     >
       {load.damaged && (
@@ -335,8 +347,8 @@ export function SkillsProjectsView({
       <div>
         {problem && <Problem>{problem}</Problem>}
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <PrimaryButton type="submit" disabled={!dirty || busy}>
-            {busy ? 'Saving…' : dirty ? 'Save skills and projects' : 'Saved'}
+          <PrimaryButton type="submit" disabled={!unsaved || busy}>
+            {busy ? 'Saving…' : unsaved ? 'Save skills and projects' : 'Saved'}
           </PrimaryButton>
           {dirty && !busy && (
             <GhostButton
