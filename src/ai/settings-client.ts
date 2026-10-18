@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 import {
   AI_CONNECT_TYPE,
   AI_DISCONNECT_TYPE,
+  AI_SESSION_ONLY_TYPE,
   AI_STATUS_TYPE,
   isAiConnectResponse,
   isAiStatus,
@@ -19,6 +20,13 @@ import { browserHostAccess } from './host-access';
 export interface AiSettingsClient {
   /** Whether this browser has what AI drafting needs. */
   supported(): boolean;
+  /**
+   * Whether a key may be remembered on this device. Not in Safari, where
+   * extension storage on disk cannot be kept from content scripts.
+   */
+  canRemember(): boolean;
+  /** Moves a remembered key to this session only, keeping it. */
+  keepForSessionOnly(): Promise<boolean>;
   status(): Promise<AiStatus | null>;
   /** Asks for the host permission; call it first in the user's click. */
   requestPermission(): Promise<boolean>;
@@ -45,6 +53,15 @@ export const browserAiSettingsClient: AiSettingsClient = {
     const permissions = (browser as { permissions?: unknown }).permissions;
     return (
       typeof area?.setAccessLevel === 'function' && permissions !== undefined
+    );
+  },
+  canRemember: () => import.meta.env.BROWSER !== 'safari',
+  async keepForSessionOnly() {
+    const reply = await send({ type: AI_SESSION_ONLY_TYPE });
+    return (
+      typeof reply === 'object' &&
+      reply !== null &&
+      (reply as { ok?: unknown }).ok === true
     );
   },
   async status() {

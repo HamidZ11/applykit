@@ -381,6 +381,7 @@ export function isResolveDiversityResponse(
 export const AI_STATUS_TYPE = 'applykit:ai-status';
 export const AI_CONNECT_TYPE = 'applykit:ai-connect';
 export const AI_DISCONNECT_TYPE = 'applykit:ai-disconnect';
+export const AI_SESSION_ONLY_TYPE = 'applykit:ai-session-only';
 
 export interface AiConnectMessage {
   type: typeof AI_CONNECT_TYPE;
@@ -396,6 +397,10 @@ export function isAiStatusMessage(message: unknown): boolean {
 
 export function isAiDisconnectMessage(message: unknown): boolean {
   return hasType(message, AI_DISCONNECT_TYPE);
+}
+
+export function isAiSessionOnlyMessage(message: unknown): boolean {
+  return hasType(message, AI_SESSION_ONLY_TYPE);
 }
 
 export function isAiConnectMessage(

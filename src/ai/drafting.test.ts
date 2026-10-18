@@ -49,6 +49,7 @@ function deps(over: Partial<DraftingDeps> = {}): DraftingDeps {
     settings: browserAiSettingsStore,
     usage: browserAiUsageStore,
     now: () => NOW,
+    canRemember: true,
     profile: {
       load: () =>
         Promise.resolve({

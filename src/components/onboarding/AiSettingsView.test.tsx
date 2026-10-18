@@ -53,6 +53,11 @@ function fakeClient(
   let current = status;
   const client = {
     supported: vi.fn(() => true),
+    canRemember: vi.fn(() => true),
+    keepForSessionOnly: vi.fn(() => {
+      current = { ...current, remembered: false };
+      return Promise.resolve(true);
+    }),
     status: vi.fn(() => Promise.resolve(current)),
     requestPermission: vi.fn(() => Promise.resolve(true)),
     connect: vi.fn((_key: string, remember: boolean) => {
@@ -299,5 +304,36 @@ describe('AiSettingsView', () => {
       'AI drafting is not available in this browser.',
     );
     expect(client.status).not.toHaveBeenCalled();
+  });
+
+  it('offers no remembering in a browser that cannot isolate it', async () => {
+    const client = fakeClient(OFF, { canRemember: vi.fn(() => false) });
+    await render(client);
+    await typeKey();
+
+    expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(host.textContent).toContain('your key is kept only until it closes');
+    await submit();
+    expect(client.connect).toHaveBeenCalledWith(KEY, false);
+  });
+
+  it('moves an already remembered key to this session, never deleting it silently', async () => {
+    const client = fakeClient(
+      { ...ON, remembered: true },
+      { canRemember: vi.fn(() => false) },
+    );
+    await render(client);
+    expect(host.textContent).toContain(
+      'this browser cannot keep remembered keys isolated',
+    );
+    expect(client.disconnect).not.toHaveBeenCalled();
+
+    act(() => {
+      button('Keep for this session only').click();
+    });
+    await flush();
+
+    expect(client.keepForSessionOnly).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain('Kept until the browser closes');
   });
 });

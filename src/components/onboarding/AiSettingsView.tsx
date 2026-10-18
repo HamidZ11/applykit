@@ -59,6 +59,7 @@ export function AiSettingsView({
   const keyId = useId();
   const limitId = useId();
   const supported = client.supported();
+  const canRemember = client.canRemember();
 
   useEffect(() => {
     if (!supported) return;
@@ -184,6 +185,37 @@ export function AiSettingsView({
                 : 'Kept until the browser closes'}
             </p>
           </div>
+          {status.remembered && !canRemember && (
+            <Banner tone="warning">
+              Your key is remembered on this device, but this browser cannot
+              keep remembered keys isolated. Keep it for this session only, or
+              remove it.{' '}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void client.keepForSessionOnly().then(async (ok) => {
+                    const next = await client.status();
+                    setBusy(false);
+                    if (next) setPhase({ kind: 'ready', status: next });
+                    if (ok) {
+                      setNotice(
+                        'Your key is now kept only until the browser closes.',
+                      );
+                    } else {
+                      setProblem(
+                        'ApplyKit could not move your key. Try again.',
+                      );
+                    }
+                  });
+                }}
+                className="font-medium underline underline-offset-2 hover:no-underline"
+              >
+                Keep for this session only
+              </button>
+            </Banner>
+          )}
 
           <fieldset>
             <legend className="mb-1.5 text-xs font-medium text-ink-2">
@@ -364,26 +396,34 @@ export function AiSettingsView({
               . ApplyKit checks it with a free request.
             </p>
           </div>
-          <label className="flex cursor-default items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(event) => {
-                setRemember(event.target.checked);
-              }}
-              className="mt-0.5 size-4 shrink-0 rounded-xs accent-accent"
-            />
-            <span>
-              <span className="block">Remember on this device</span>
-              <span className="mt-0.5 block text-xs text-ink-2">
-                Off: the key is forgotten when the browser closes. On: it is
-                stored in this browser&rsquo;s extension storage without
-                encryption, readable by anyone with access to this browser
-                profile, and, in some browsers, by a page that compromises the
-                tab ApplyKit runs in.
+          {!canRemember && (
+            <p className="max-w-[60ch] text-xs text-ink-2">
+              In this browser, your key is kept only until it closes: remembered
+              keys cannot be kept isolated here.
+            </p>
+          )}
+          {canRemember && (
+            <label className="flex cursor-default items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(event) => {
+                  setRemember(event.target.checked);
+                }}
+                className="mt-0.5 size-4 shrink-0 rounded-xs accent-accent"
+              />
+              <span>
+                <span className="block">Remember on this device</span>
+                <span className="mt-0.5 block text-xs text-ink-2">
+                  Off: the key is forgotten when the browser closes. On: it is
+                  stored in this browser&rsquo;s extension storage without
+                  encryption, readable by anyone with access to this browser
+                  profile, and, in some browsers, by a page that compromises the
+                  tab ApplyKit runs in.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+          )}
           <PrimaryButton type="submit" disabled={busy || key.trim() === ''}>
             {busy ? 'Connecting…' : 'Connect'}
           </PrimaryButton>

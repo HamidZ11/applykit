@@ -1,6 +1,12 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
-import { aiAvailable, aiStatus, connect, disconnect } from '@/ai/connection';
+import {
+  aiAvailable,
+  aiStatus,
+  connect,
+  disconnect,
+  keepForSessionOnly,
+} from '@/ai/connection';
 import { draft, prepare, type DraftingDeps } from '@/ai/drafting';
 import { browserHostAccess } from '@/ai/host-access';
 import {
@@ -9,6 +15,7 @@ import {
   isAiDraftRequest,
   isAiDisconnectMessage,
   isAiPrepareMessage,
+  isAiSessionOnlyMessage,
   isAiStatusMessage,
   isGetAutofillValuesMessage,
   isGetPanelSettingsMessage,
@@ -66,6 +73,8 @@ export default defineBackground(() => {
     settings: browserAiSettingsStore,
     usage: browserAiUsageStore,
     now: () => new Date(),
+    // Safari cannot keep storage.local from content scripts (ADR 0019).
+    canRemember: import.meta.env.BROWSER !== 'safari',
     profile: browserProfileStore,
     skills: browserSkillsStore,
     approvals: browserApprovalStore,
@@ -211,14 +220,17 @@ export default defineBackground(() => {
       if (
         isAiStatusMessage(message) ||
         isAiConnectMessage(message) ||
-        isAiDisconnectMessage(message)
+        isAiDisconnectMessage(message) ||
+        isAiSessionOnlyMessage(message)
       ) {
         if (!extensionPage(sender.url)) return undefined;
         const reply: Promise<unknown> = isAiConnectMessage(message)
           ? connect(ai, message.key, message.remember)
           : isAiDisconnectMessage(message)
             ? disconnect(ai).then((ok) => ({ ok }))
-            : aiStatus(ai);
+            : isAiSessionOnlyMessage(message)
+              ? keepForSessionOnly(ai).then((ok) => ({ ok }))
+              : aiStatus(ai);
         reply.then(sendResponse, () => {
           sendResponse(null);
         });

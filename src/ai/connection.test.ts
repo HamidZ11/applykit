@@ -11,6 +11,7 @@ import {
   aiStatus,
   connect,
   disconnect,
+  keepForSessionOnly,
   type ConnectionDeps,
 } from './connection';
 import type { HostAccess } from './host-access';
@@ -57,6 +58,7 @@ function deps(over: Partial<ConnectionDeps> = {}): ConnectionDeps {
     usage: browserAiUsageStore,
     fetch: accepts(),
     now: () => NOW,
+    canRemember: true,
     ...over,
   };
 }
@@ -148,6 +150,26 @@ describe('AI connection', () => {
     expect(await aiStatus(deps({ host: access }))).toMatchObject({
       connected: false,
       keyHint: null,
+    });
+  });
+
+  it('never remembers a key where it cannot be isolated', async () => {
+    await connect(deps({ canRemember: false }), KEY, true);
+
+    expect(await browserCredentialStore.load()).toEqual({
+      key: KEY,
+      remembered: false,
+    });
+  });
+
+  it('moves a remembered key to the session, keeping it', async () => {
+    await connect(deps(), KEY, true);
+
+    expect(await keepForSessionOnly(deps())).toBe(true);
+
+    expect(await browserCredentialStore.load()).toEqual({
+      key: KEY,
+      remembered: false,
     });
   });
 });

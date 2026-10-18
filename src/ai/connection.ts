@@ -18,6 +18,11 @@ export interface ConnectionDeps {
   usage: AiUsageStore;
   fetch?: Fetch;
   now: () => Date;
+  /**
+   * Whether a key may be remembered on this device. Not in Safari, where
+   * `storage.local` cannot be kept from content scripts.
+   */
+  canRemember: boolean;
 }
 
 /** What the AI settings show. Never the key itself. */
@@ -94,7 +99,7 @@ export async function connect(
     deps.fetch ? { fetch: deps.fetch } : {},
   );
   if (!checked.ok) return { ok: false, failure: checked.failure };
-  if (!(await deps.credentials.save(trimmed, remember))) {
+  if (!(await deps.credentials.save(trimmed, remember && deps.canRemember))) {
     return { ok: false, failure: 'not-saved' };
   }
   return { ok: true, status: await aiStatus(deps) };
@@ -105,4 +110,17 @@ export async function disconnect(deps: ConnectionDeps): Promise<boolean> {
   const removed = await deps.credentials.remove();
   await deps.host.remove();
   return removed;
+}
+
+/**
+ * Moves a remembered key to this session only, for a browser that cannot
+ * keep remembered keys isolated. The key is kept, never silently deleted.
+ */
+export async function keepForSessionOnly(
+  deps: ConnectionDeps,
+): Promise<boolean> {
+  const credential = await deps.credentials.load();
+  if (!credential) return false;
+  if (!credential.remembered) return true;
+  return deps.credentials.save(credential.key, false);
 }
