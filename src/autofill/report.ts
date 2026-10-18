@@ -1,7 +1,10 @@
 import type { Evidence } from './detect';
+import { planAnswer } from './answers';
 import {
   AUTOFILL_FIELD_LABEL,
+  type AnswerField,
   type AutofillField,
+  isAnswerField,
   isEducationField,
   isEmploymentField,
   type AutofillValues,
@@ -32,6 +35,11 @@ import {
  */
 export type FieldStatus =
   | 'fill'
+  /**
+   * A saved answer fits this question. Never written by autofill: only
+   * when the user confirms this one field.
+   */
+  | 'suggest'
   | 'filled'
   | 'reformatted'
   | 'keep'
@@ -231,11 +239,13 @@ function planField(
           reason:
             field.kind === 'checkbox'
               ? 'ApplyKit never ticks boxes: many sites only notice a real click. Tick it yourself if it applies.'
-              : `${
-                  target
-                    ? `This looks like your ${AUTOFILL_FIELD_LABEL[target].toLowerCase()}, but it`
-                    : 'This'
-                } is a custom dropdown, which ApplyKit cannot fill. Choose it yourself on this page.`,
+              : field.kind === 'radio'
+                ? 'ApplyKit never chooses between radio buttons: many sites only notice a real click. Choose it yourself on this page.'
+                : `${
+                    target
+                      ? `This looks like your ${AUTOFILL_FIELD_LABEL[target].toLowerCase()}, but it`
+                      : 'This'
+                  } is a custom dropdown, which ApplyKit cannot fill. Choose it yourself on this page.`,
         };
       }
       return { ...base, status: 'unsupported', reason: REASON.unsupported };
@@ -273,6 +283,13 @@ function planField(
     };
   }
 
+  if (isAnswerField(support.field)) {
+    return planSuggestion(
+      matched,
+      planAnswer(field, support.field, context.values.answers, context.now),
+    );
+  }
+
   const planned = planValue(field, support.field, context);
   if ('reason' in planned) {
     return {
@@ -308,9 +325,39 @@ function planField(
   };
 }
 
+/**
+ * A saved answer, offered for the user to confirm: never `fill`, so
+ * autofill never writes it.
+ */
+function planSuggestion(
+  matched: Omit<FieldReport, 'status'>,
+  plan: ReturnType<typeof planAnswer>,
+): FieldReport {
+  if ('reason' in plan) {
+    return { ...matched, status: plan.status, reason: plan.reason };
+  }
+  const { element } = matched.field;
+  if (
+    !(element instanceof HTMLSelectElement) &&
+    'maxLength' in element &&
+    typeof element.maxLength === 'number' &&
+    element.maxLength > 0 &&
+    plan.fillValue.length > element.maxLength
+  ) {
+    return { ...matched, status: 'manual', reason: REASON.tooLong };
+  }
+  return {
+    ...matched,
+    status: 'suggest',
+    value: plan.display,
+    fillValue: plan.fillValue,
+    note: 'From your saved application answers.',
+  };
+}
+
 function planValue(
   field: ControlField,
-  target: AutofillField,
+  target: Exclude<AutofillField, AnswerField>,
   { values, splitPhone, education, employment, now }: FormContext,
 ): Planned {
   if (isEmploymentField(target)) {

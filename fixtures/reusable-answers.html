@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Graduate Analyst · Example Northgate Bank Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional application for saved application answers. Notice period
+      asked three ways (a list of ranges, in weeks, in days), start date as
+      a date input, as "how soon after an offer" and already answered,
+      relocation within the UK (a list) and abroad (radio buttons), working
+      arrangement as a custom dropdown, salary as a yearly amount in GBP and
+      as an hourly rate, a motivation question, right to work, visa
+      sponsorship, equal opportunities questions, a declaration and a
+      signature. "Ask in months instead" replaces the weeks field, as some
+      forms do. Every name is invented. Used by unit tests and manual
+      testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #1d4f91;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 19px;
+        margin: 32px 0 0;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+      }
+      h3 {
+        font-size: 15px;
+        margin: 20px 0 0;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      section {
+        margin-top: 8px;
+        padding: 4px 16px 16px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 16px;
+      }
+      label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      .req {
+        color: #cf222e;
+      }
+      input:not([type='checkbox'], [type='radio']),
+      select,
+      textarea,
+      .combo {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      input:disabled {
+        background: #f6f8fa;
+        color: var(--muted);
+      }
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+      .choice {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 400;
+        margin-top: 10px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 4px 0 0;
+      }
+      [role='listbox'] {
+        margin: 4px 0 0;
+        padding: 4px 0;
+        list-style: none;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      [role='option'] {
+        padding: 4px 10px;
+      }
+      button.link {
+        margin: 6px 0 0;
+        padding: 0;
+        color: var(--brand);
+        background: none;
+        font-weight: 500;
+      }
+      button {
+        margin-top: 28px;
+        padding: 10px 18px;
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--brand);
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      output {
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar"><span class="logo"></span>Example Northgate Bank</div>
+    </header>
+    <main>
+      <h1>Graduate Analyst</h1>
+      <p class="meta">Leeds · Full-time · Closing 30 November</p>
+
+      <form id="application" action="/submitted" method="post">
+        <h2>Your details</h2>
+        <div class="row">
+          <div>
+            <label for="first">First name <span class="req">*</span></label>
+            <input id="first" name="firstName" required />
+          </div>
+          <div>
+            <label for="last">Last name <span class="req">*</span></label>
+            <input id="last" name="lastName" required />
+          </div>
+        </div>
+        <label for="email">Email address</label>
+        <input id="email" name="email" type="email" />
+
+        <fieldset>
+          <legend>Availability</legend>
+          <label for="notice">Notice period</label>
+          <select id="notice" name="noticeBand">
+            <option value="">Select…</option>
+            <option value="0">Immediately available</option>
+            <option value="lt1">Less than 1 month</option>
+            <option value="1to3">1–3 months</option>
+            <option value="gt3">More than 3 months</option>
+          </select>
+          <div id="notice-weeks-slot">
+            <label for="notice-weeks">Notice period in weeks</label>
+            <input id="notice-weeks" name="noticeWeeks" />
+          </div>
+          <button type="button" id="ask-months" class="link">
+            Ask in months instead
+          </button>
+          <label for="notice-days">Notice period in days</label>
+          <input id="notice-days" name="noticeDays" type="number" />
+          <label for="start-date">Earliest available start date</label>
+          <input id="start-date" name="startDate" type="date" />
+          <label for="start-offer"
+            >How soon could you start after receiving an offer?</label
+          >
+          <input id="start-offer" name="startAfterOffer" />
+          <label for="start-begin"
+            >When would you be available to begin? (DD/MM/YYYY)</label
+          >
+          <input id="start-begin" name="availableFrom" value="01/02/2027" />
+        </fieldset>
+
+        <fieldset>
+          <legend>Location and working pattern</legend>
+          <label for="relocate-uk"
+            >Are you willing to relocate within the UK?</label
+          >
+          <select id="relocate-uk" name="relocateUk">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <fieldset>
+            <legend>Would you consider relocating outside the UK?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="relocate-abroad-yes"
+                name="relocateAbroad"
+                value="yes"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" name="relocateAbroad" value="no" /> No</label
+            >
+          </fieldset>
+          <label for="arrangement" id="arrangement-label"
+            >Preferred working arrangement</label
+          >
+          <input
+            id="arrangement"
+            class="combo"
+            name="arrangement"
+            role="combobox"
+            aria-controls="arrangement-options"
+            aria-expanded="false"
+            aria-autocomplete="list"
+            placeholder="Choose…"
+          />
+          <ul
+            id="arrangement-options"
+            role="listbox"
+            aria-labelledby="arrangement-label"
+            hidden
+          >
+            <li role="option" id="arr-remote">Fully remote</li>
+            <li role="option" id="arr-hybrid">Hybrid</li>
+            <li role="option" id="arr-office">Office based</li>
+          </ul>
+        </fieldset>
+
+        <fieldset>
+          <legend>Pay expectations</legend>
+          <label for="salary-annual">Expected annual salary (GBP)</label>
+          <input id="salary-annual" name="salaryAnnual" inputmode="numeric" />
+          <label for="salary-hourly">Expected hourly rate (£)</label>
+          <input id="salary-hourly" name="salaryHourly" inputmode="decimal" />
+        </fieldset>
+
+        <h2>About this role</h2>
+        <label for="motivation"
+          >Why do you want to work at Example Northgate Bank?</label
+        >
+        <textarea id="motivation" name="motivation"></textarea>
+
+        <fieldset>
+          <legend>Eligibility to work</legend>
+          <fieldset>
+            <legend>Do you have the right to work in the UK?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="rtw-yes"
+                name="rightToWork"
+                value="yes"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" name="rightToWork" value="no" /> No</label
+            >
+          </fieldset>
+          <label for="sponsorship"
+            >Will you now or in the future require visa sponsorship?</label
+          >
+          <select id="sponsorship" name="sponsorship">
+            <option value="">Select…</option>
+            <option>Yes</option>
+            <option>No</option>
+          </select>
+        </fieldset>
+
+        <fieldset>
+          <legend>Equal opportunities monitoring</legend>
+          <p class="hint">
+            Optional. Used only to monitor our recruitment, never to assess your
+            application.
+          </p>
+          <label for="gender">Gender</label>
+          <select id="gender" name="gender">
+            <option value="">Prefer not to say</option>
+            <option>Woman</option>
+            <option>Man</option>
+            <option>Non-binary</option>
+          </select>
+          <label for="ethnicity">Ethnic group</label>
+          <select id="ethnicity" name="ethnicity">
+            <option value="">Prefer not to say</option>
+            <option>Asian or Asian British</option>
+            <option>Black, Black British, Caribbean or African</option>
+            <option>Mixed or multiple ethnic groups</option>
+            <option>White</option>
+            <option>Another ethnic group</option>
+          </select>
+          <label for="disability"
+            >Do you consider yourself to have a disability?</label
+          >
+          <select id="disability" name="disability">
+            <option value="">Prefer not to say</option>
+            <option>Yes</option>
+            <option>No</option>
+          </select>
+        </fieldset>
+
+        <h2>Declaration</h2>
+        <label class="choice"
+          ><input type="checkbox" id="privacy" name="privacy" required /> I have
+          read the privacy notice and agree to my data being processed.</label
+        >
+        <label for="signature">Type your full name as your signature</label>
+        <input id="signature" name="signature" />
+
+        <button type="submit">Submit application</button>
+      </form>
+
+      <output id="status">Fixture · submitted: no · input events: 0</output>
+    </main>
+
+    <script>
+      // Lets reviewers confirm what the page observed.
+      const form = document.getElementById('application');
+      const status = document.getElementById('status');
+      let submitted = false;
+      let inputEvents = 0;
+      const render = () => {
+        status.textContent = `Fixture · submitted: ${submitted ? 'YES' : 'no'} · input events: ${inputEvents}`;
+      };
+      form.addEventListener('input', () => {
+        inputEvents += 1;
+        render();
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitted = true;
+        render();
+      });
+
+      // Replaces the weeks field with a months field, as some forms do
+      // when an answer changes.
+      document.getElementById('ask-months').addEventListener('click', () => {
+        document.getElementById('notice-weeks-slot').innerHTML = `
+          <label for="notice-months">Notice period in months</label>
+          <input id="notice-months" name="noticeMonths" />`;
+      });
+    </script>
+  </body>
+</html>

@@ -74,6 +74,11 @@ const BY_TARGET: Record<AutofillField, FieldCategory> = {
   employmentEnd: 'employment',
   currentlyEmployed: 'employment',
   jobDescription: 'employment',
+  noticePeriod: 'questions',
+  relocation: 'questions',
+  workArrangement: 'questions',
+  startDate: 'questions',
+  salaryExpectation: 'questions',
 };
 
 /** Equality, diversity and social-mobility questions. */
@@ -108,6 +113,10 @@ const TOPICS: [FieldCategory, RegExp][] = [
   ],
 ];
 
+/** Questions about why someone is applying. */
+const MOTIVATION =
+  /\b(?:why do you want|why are you (?:interested|applying)|what interests you|what attracts you|why should we|motivation)\b/;
+
 const QUESTION =
   /^(?:how|why|what|which|when|where|who|do|does|did|are|is|have|has|will|would|can|could|please|tell|describe|explain)\b/;
 
@@ -133,6 +142,8 @@ export function categoryOf(field: ScannedField): FieldCategory {
   // "Referee job title" in a reference section is about the referee.
   if (OTHER_PEOPLE.test(field.context)) return 'references';
 
+  // "Why do you want to work here?" is about this application, not jobs.
+  if (MOTIVATION.test(label)) return 'questions';
   for (const text of [label, field.context]) {
     for (const [category, words] of TOPICS) {
       if (words.test(text)) return category;

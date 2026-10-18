@@ -6,6 +6,7 @@ import type { FieldKind, ScannedField } from '@/autofill/scan';
 /** Short status label, shared by both modes so the words mean one thing. */
 export const STATUS_LABEL: Record<FieldStatus, string> = {
   fill: 'Will fill',
+  suggest: 'Saved answer',
   filled: 'Filled',
   reformatted: 'Filled, reformatted',
   keep: 'Your entry',
@@ -49,6 +50,8 @@ export function explain(report: FieldReport): string {
   switch (report.status) {
     case 'fill':
       return withNote(`ApplyKit will fill this with your ${target}.`, report);
+    case 'suggest':
+      return 'Your saved answer fits this question. ApplyKit fills it only if you choose to use it.';
     case 'filled':
       return withNote(
         `Filled with your ${target}. The site accepted it.`,

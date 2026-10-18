@@ -59,13 +59,20 @@ describe('scanFields', () => {
         true,
         'manual:sensitive',
       ],
-      ['Notice period', 'Application questions', 'select', true, 'unsupported'],
+      // Saved-answer questions: suggested, never filled by autofill.
+      [
+        'Notice period',
+        'Application questions',
+        'select',
+        true,
+        'noticePeriod',
+      ],
       [
         'Salary expectation (GBP)',
         'Application questions',
         'text',
         false,
-        'manual:sensitive',
+        'salaryExpectation',
       ],
       [
         'How did you hear about this role?',
@@ -116,7 +123,7 @@ describe('scanFields', () => {
       'ref-phone': 'other-person',
       'ec-name': 'other-person',
       'ec-phone': 'other-person',
-      salary: 'manual:sensitive',
+      salary: 'salaryExpectation',
       dob: 'manual:sensitive',
       sponsorship: 'manual:sensitive',
       motivation: 'unsupported',

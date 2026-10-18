@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { ChevronRight, CircleDashed, ShieldCheck } from 'lucide-react';
+import { isAnswerField } from '@/autofill/fields';
 import { FieldRow, fieldKey } from './FieldRow';
 import { Icon } from '@/components/ui/icons';
 import { StatusGlyph } from './icons';
@@ -85,7 +86,10 @@ function Plan({ model }: { model: PanelModel }) {
  * footer carries the matching action; autofill stays unavailable.
  */
 function ProfileNotice({ model }: { model: PanelModel }) {
-  const recognised = model.reports.filter((r) => r.target !== null).length;
+  // Saved-answer questions are never filled by autofill, so not counted.
+  const recognised = model.reports.filter(
+    (r) => r.target !== null && !isAnswerField(r.target),
+  ).length;
   const status = model.values.status;
   if (status === 'loading') {
     return (

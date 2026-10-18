@@ -1,6 +1,7 @@
 import { parseYearMonth, currentMonthIndex, monthIndex } from './dates';
 import { PREDICTED } from './education';
 import {
+  isAnswerField,
   isEducationField,
   isEmploymentField,
   type AutofillField,
@@ -10,6 +11,7 @@ import {
   type EmploymentField,
   type EmploymentValue,
 } from './fields';
+import { answerGuidance } from './answers';
 import { asksExpectedEnd, employmentTypeLabel } from './plan-employment';
 import type { RecordChoice } from './records';
 import type { ScannedField } from './scan';
@@ -48,6 +50,16 @@ export function suggestionFor(
   target: AutofillField,
   { values, education, employment, now }: SuggestionContext,
 ): Suggestion {
+  if (isAnswerField(target)) {
+    const plan = answerGuidance(field, target, values.answers, now);
+    if ('display' in plan) {
+      return value(plan.display, 'From your saved application answers.');
+    }
+    if (plan.status === 'no-value') return missing(plan.reason);
+    return plan.status === 'ambiguous'
+      ? { kind: 'ambiguous', reason: plan.reason }
+      : { kind: 'unsuitable', reason: plan.reason };
+  }
   if (isEmploymentField(target)) {
     if (!employment) return missing('Your profile has no jobs saved.');
     if ('status' in employment) {

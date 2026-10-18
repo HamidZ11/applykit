@@ -48,7 +48,15 @@ export default defineBackground(() => {
 
       // Content scripts cannot open extension pages themselves.
       if (isOpenProfileMessage(message)) {
-        browser.runtime.openOptionsPage().then(
+        // The answers section has its own address; opening it needs no
+        // extra permission.
+        const opened =
+          message.section === 'answers'
+            ? browser.tabs.create({
+                url: `${browser.runtime.getURL('/options.html')}#answers`,
+              })
+            : browser.runtime.openOptionsPage();
+        opened.then(
           () => {
             sendResponse({ ok: true });
           },

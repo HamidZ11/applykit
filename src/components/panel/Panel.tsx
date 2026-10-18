@@ -43,7 +43,7 @@ export function Panel({
   /** Where the confirmed profile's values come from; replaced in tests. */
   loadValues?: LoadValues;
   /** Opens the profile page; replaced in tests. */
-  openProfile?: () => Promise<boolean>;
+  openProfile?: (section?: 'answers') => Promise<boolean>;
 }) {
   const model = usePanel(loadValues, undefined, openProfile);
   const frame = useRef<HTMLDivElement>(null);

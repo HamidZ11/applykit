@@ -16,12 +16,19 @@ import {
   type ReportSummary,
 } from '@/autofill/report';
 import {
+  confirmAnswer,
   confirmChoice,
   previewChoice,
+  type ChoiceCheck,
   type ChoicePreview,
   type SectionChoice,
 } from '@/autofill/resolve';
-import { scanFields, type FieldElement } from '@/autofill/scan';
+import type { AutofillValues } from '@/autofill/fields';
+import {
+  scanFields,
+  type FieldElement,
+  type ScannedField,
+} from '@/autofill/scan';
 import type { AutofillValuesResponse } from '@/messages';
 import { goToField, type GoToResult } from '@/page/navigate';
 import { readPageContext, type PageContext } from '@/page/page-context';
@@ -78,8 +85,15 @@ export interface PanelModel extends PanelState {
   ) => Promise<ChoiceResult>;
   /** Scrolls to a field of the current scan and focuses it if safe. */
   goToField: (element: FieldElement) => GoToResult;
+  /**
+   * Fills one question with the saved answer the user chose to use, after
+   * re-checking the question and the saved answer (`previewed`).
+   */
+  applyAnswer: (previewed: FieldReport) => Promise<ChoiceResult>;
   /** Opens the profile page; a failure is reported in `problem`. */
   openProfile: () => void;
+  /** Opens the saved application answers; failures as for the profile. */
+  openAnswers: () => void;
   /** Why the last profile action failed, in words the user can act on. */
   problem: string | null;
 }
@@ -99,7 +113,7 @@ export interface PanelModel extends PanelState {
 export function usePanel(
   loadValues: LoadValues = requestAutofillValues,
   root: ParentNode = document,
-  openProfileRequest: () => Promise<boolean> = openProfile,
+  openProfileRequest: (section?: 'answers') => Promise<boolean> = openProfile,
 ): PanelModel {
   /** Why an action failed, shown in the panel; cleared on the next try. */
   const [problem, setProblem] = useState<string | null>(null);
@@ -111,17 +125,27 @@ export function usePanel(
   const latestRequest = useRef(0);
   const filling = useRef(false);
 
+  const openPage = useCallback(
+    (section?: 'answers') => {
+      setProblem(null);
+      void openProfileRequest(section).then((opened) => {
+        if (opened) return;
+        setProblem(
+          isExtensionContextValid()
+            ? 'ApplyKit could not open your profile. Try again, or open it from your browser’s extension settings.'
+            : CONTEXT_LOST,
+        );
+      });
+    },
+    [openProfileRequest],
+  );
+
   const openProfileAction = useCallback(() => {
-    setProblem(null);
-    void openProfileRequest().then((opened) => {
-      if (opened) return;
-      setProblem(
-        isExtensionContextValid()
-          ? 'ApplyKit could not open your profile. Try again, or open it from your browser’s extension settings.'
-          : CONTEXT_LOST,
-      );
-    });
-  }, [openProfileRequest]);
+    openPage();
+  }, [openPage]);
+  const openAnswersAction = useCallback(() => {
+    openPage('answers');
+  }, [openPage]);
 
   const refreshValues = useCallback(async () => {
     const request = ++latestRequest.current;
@@ -181,17 +205,21 @@ export function usePanel(
     [state.fields, values],
   );
 
-  const applyChoice = useCallback(
+  /**
+   * Writes what the user confirmed, as for autofill: with the latest saved
+   * values and the page as it is now, only if `check` still agrees with
+   * what they saw.
+   */
+  const confirmAndFill = useCallback(
     async (
-      choice: SectionChoice,
-      previewed: readonly FieldReport[],
+      check: (fields: ScannedField[], values: AutofillValues) => ChoiceCheck,
+      notice: (filled: number) => string,
     ): Promise<ChoiceResult> => {
       if (filling.current) {
         return { ok: false, message: 'ApplyKit is still filling. Try again.' };
       }
       filling.current = true;
       try {
-        // As for autofill: the latest saved profile and the page as it is now.
         const request = ++latestRequest.current;
         const latest = await loadValues();
         if (request === latestRequest.current) {
@@ -204,20 +232,14 @@ export function usePanel(
               'Your saved profile could not be read. Nothing was filled.',
           };
         }
-        const check = confirmChoice(
-          scanFields(root),
-          latest.values,
-          choice,
-          previewed,
-        );
-        if (!check.ok) return check;
-        const outcomes = await fillFields(check.plan);
+        const checked = check(scanFields(root), latest.values);
+        if (!checked.ok) return checked;
+        const outcomes = await fillFields(checked.plan);
         const filled = outcomes.filter(
           (r) =>
             r.chosen && (r.status === 'filled' || r.status === 'reformatted'),
         ).length;
-        const notice = `Filled ${plural(filled, 'field')} from the record you chose. Nothing was submitted.`;
-        dispatch({ type: 'resolved', outcomes, notice });
+        dispatch({ type: 'resolved', outcomes, notice: notice(filled) });
         return { ok: true, filled, total: outcomes.length };
       } catch {
         return {
@@ -229,6 +251,28 @@ export function usePanel(
       }
     },
     [loadValues, root],
+  );
+
+  const applyChoice = useCallback(
+    (choice: SectionChoice, previewed: readonly FieldReport[]) =>
+      confirmAndFill(
+        (fields, values) => confirmChoice(fields, values, choice, previewed),
+        (filled) =>
+          `Filled ${plural(filled, 'field')} from the record you chose. Nothing was submitted.`,
+      ),
+    [confirmAndFill],
+  );
+
+  const applyAnswer = useCallback(
+    (previewed: FieldReport) =>
+      confirmAndFill(
+        (fields, values) => confirmAnswer(fields, values, previewed),
+        (filled) =>
+          filled === 1
+            ? 'Filled your saved answer. Nothing was submitted.'
+            : 'Your saved answer was not accepted by the page. Nothing was submitted.',
+      ),
+    [confirmAndFill],
   );
 
   const goTo = useCallback(
@@ -296,8 +340,10 @@ export function usePanel(
     next,
     previewChoice: preview,
     applyChoice,
+    applyAnswer,
     goToField: goTo,
     openProfile: openProfileAction,
+    openAnswers: openAnswersAction,
     // An old panel left on the page after ApplyKit was reloaded can no
     // longer reach it; "Try again" cannot help, so say what will.
     problem:

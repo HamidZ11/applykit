@@ -51,6 +51,20 @@ export const EMPLOYMENT_FIELDS = [
 
 export type EmploymentField = (typeof EMPLOYMENT_FIELDS)[number];
 
+/**
+ * Questions answered from the saved application answers: only ever
+ * suggested, and written only when the user confirms each one.
+ */
+export const ANSWER_FIELDS = [
+  'noticePeriod',
+  'relocation',
+  'workArrangement',
+  'startDate',
+  'salaryExpectation',
+] as const;
+
+export type AnswerField = (typeof ANSWER_FIELDS)[number];
+
 export const AUTOFILL_FIELDS = [
   ...TEXT_FIELDS,
   'country',
@@ -58,6 +72,7 @@ export const AUTOFILL_FIELDS = [
   'phoneNational',
   ...EDUCATION_FIELDS,
   ...EMPLOYMENT_FIELDS,
+  ...ANSWER_FIELDS,
 ] as const;
 
 export type AutofillField = (typeof AUTOFILL_FIELDS)[number];
@@ -93,6 +108,11 @@ export const AUTOFILL_FIELD_LABEL: Record<AutofillField, string> = {
   employmentEnd: 'Employment end date',
   currentlyEmployed: 'Current role',
   jobDescription: 'Role description',
+  noticePeriod: 'Notice period',
+  relocation: 'Willingness to relocate',
+  workArrangement: 'Working arrangement',
+  startDate: 'Earliest start date',
+  salaryExpectation: 'Salary expectation',
 };
 
 export function isEducationField(
@@ -105,6 +125,10 @@ export function isEmploymentField(
   field: AutofillField,
 ): field is EmploymentField {
   return (EMPLOYMENT_FIELDS as readonly string[]).includes(field);
+}
+
+export function isAnswerField(field: AutofillField): field is AnswerField {
+  return (ANSWER_FIELDS as readonly string[]).includes(field);
 }
 
 /** Fields answered from one saved record, chosen per section of a form. */

@@ -12,6 +12,8 @@ import {
 
 export interface OpenProfileMessage {
   type: 'applykit:open-profile';
+  /** Open at the saved application answers instead of the profile. */
+  section?: 'answers';
 }
 
 export const OPEN_PROFILE: OpenProfileMessage = {
@@ -66,7 +68,9 @@ function hasType(message: unknown, type: string): boolean {
 export function isOpenProfileMessage(
   message: unknown,
 ): message is OpenProfileMessage {
-  return hasType(message, OPEN_PROFILE.type);
+  if (!hasType(message, OPEN_PROFILE.type)) return false;
+  const { section } = message as { section?: unknown };
+  return section === undefined || section === 'answers';
 }
 
 export function isGetAutofillValuesMessage(

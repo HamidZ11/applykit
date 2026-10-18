@@ -1,4 +1,4 @@
-import { isRecordField, type AutofillField } from './fields';
+import { isAnswerField, isRecordField, type AutofillField } from './fields';
 import {
   controlContext,
   detectControl,
@@ -140,6 +140,11 @@ const SELECT_FIELDS = new Set<AutofillField>([
   'employmentType',
   'employmentStart',
   'employmentEnd',
+  'noticePeriod',
+  'relocation',
+  'workArrangement',
+  'startDate',
+  'salaryExpectation',
 ]);
 
 /**
@@ -153,6 +158,16 @@ const DATE_FIELDS = new Set<AutofillField>([
   'employmentStart',
   'employmentEnd',
 ]);
+
+/**
+ * Saved answers that suit special inputs: a start date in a date or month
+ * input, a notice period or salary in a number input.
+ */
+const ANSWER_INPUTS: Record<string, ReadonlySet<AutofillField>> = {
+  date: new Set(['startDate']),
+  month: new Set(['startDate']),
+  number: new Set(['noticePeriod', 'salaryExpectation']),
+};
 
 /** Long answers ApplyKit may fill: only a saved description of a job. */
 const TEXTAREA_FIELDS = new Set<AutofillField>(['jobDescription']);
@@ -404,7 +419,11 @@ function firstOfEachDetail(fields: ScannedField[]): ScannedField[] {
   const seenInSection = new Map<Element | null, Set<string>>();
   return fields.map((field) => {
     const { support, element } = field;
-    if (support.status !== 'match') return field;
+    // Saved answers are each confirmed by the user, so asking twice
+    // ("Notice period in weeks", "… in days") is not a risk.
+    if (support.status !== 'match' || isAnswerField(support.field)) {
+      return field;
+    }
     let scope = seen;
     if (isRecordField(support.field)) {
       scope = seenInSection.get(field.group) ?? new Set();
@@ -460,12 +479,18 @@ function supportOf(element: FieldElement): FieldSupport {
   }
 
   // Custom dropdowns built on a text input commit a choice through their own
-  // scripts; typing into them would not select anything. Checkboxes are
-  // only guided: many sites register a tick only from a real click.
+  // scripts; typing into them would not select anything. Checkboxes and
+  // radio buttons are only guided: many sites register them only from a
+  // real click.
   if (
     !isFormControl(element) ||
     isCustomDropdown(element) ||
-    (detection.kind === 'match' && detection.field === 'currentlyEmployed')
+    (detection.kind === 'match' &&
+      (detection.field === 'currentlyEmployed' ||
+        // Radio groups are never answered, only guided.
+        (isAnswerField(detection.field) &&
+          isInput(element) &&
+          element.type === 'radio')))
   ) {
     return {
       status: 'unsupported',
@@ -483,7 +508,8 @@ function supportOf(element: FieldElement): FieldSupport {
     ? TEXT_INPUT_TYPES.has(element.type) ||
       (DATE_INPUT_TYPES.has(element.type) &&
         matched !== null &&
-        DATE_FIELDS.has(matched))
+        (DATE_FIELDS.has(matched) ||
+          (ANSWER_INPUTS[element.type]?.has(matched) ?? false)))
     : matched !== null &&
       (isTextArea(element) ? TEXTAREA_FIELDS : SELECT_FIELDS).has(matched);
   if (!writable) return { status: 'unsupported' };

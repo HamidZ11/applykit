@@ -3,6 +3,7 @@ import {
   Check,
   Circle,
   CircleDashed,
+  CircleDot,
   CircleHelp,
   CircleSlash,
   CircleX,
@@ -12,6 +13,8 @@ import type { FieldStatus } from '@/autofill/report';
 import { Icon } from '@/components/ui/icons';
 
 const STATUS_ICON: Record<Exclude<FieldStatus, 'fill'>, LucideIcon> = {
+  // A saved answer waiting for the user to confirm it.
+  suggest: CircleDot,
   filled: Check,
   reformatted: Check,
   keep: PenLine,
@@ -34,6 +37,7 @@ const STATUS_ICON: Record<Exclude<FieldStatus, 'fill'>, LucideIcon> = {
 
 const STATUS_COLOR: Record<FieldStatus, string> = {
   fill: 'text-accent',
+  suggest: 'text-accent',
   filled: 'text-success',
   reformatted: 'text-success',
   keep: 'text-ink-2',

@@ -188,7 +188,7 @@ describe('detectControl', () => {
     it.each([
       '<label>Do you have the right to work in the UK? <input></label>',
       '<label>Will you require visa sponsorship? <input></label>',
-      '<label>Salary expectations <input></label>',
+      '<label>Current salary <input></label>',
       '<label>Do you consider yourself to have a disability? <select></select></label>',
       '<label>Gender <select></select></label>',
       '<label>Ethnicity <input></label>',
@@ -506,9 +506,10 @@ describe('employment fields', () => {
     expect(
       matched(inSection('Employment history', 'Desired job title')),
     ).toBeNull();
+    // Availability is a saved-answer question, never employment history.
     expect(
       matched(inSection('Employment history', 'Earliest start date')),
-    ).toBeNull();
+    ).toBe('startDate');
   });
 
   it.each([

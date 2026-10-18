@@ -1,6 +1,8 @@
 import {
+  isAnswerField,
   isEducationField,
   isEmploymentField,
+  type AnswerField,
   type AutofillField,
   type EducationField,
   type EmploymentField,
@@ -117,7 +119,7 @@ const AUTOCOMPLETE_NOT_PERSONAL = new Set(['work', 'fax', 'pager']);
  * spaces). Anchored patterns only match a whole label or attribute.
  */
 const TEXT_RULES: Record<
-  Exclude<AutofillField, EducationField | EmploymentField>,
+  Exclude<AutofillField, EducationField | EmploymentField | AnswerField>,
   RegExp[]
 > = {
   fullName: [
@@ -409,6 +411,74 @@ const EMPLOYER_DETAILS = new Set<AutofillField>([
   'country',
 ]);
 
+/** Questions about what someone expects to earn, not what they earn. */
+const SALARY_EXPECTATION =
+  /\b(?:(?:salary|pay|compensation|remuneration|rate) expectations?|expected (?:annual |yearly |monthly |base |basic |starting )?(?:salary|pay|compensation|remuneration|rate|hourly rate|day rate|daily rate)|desired (?:annual |yearly |base |starting )?(?:salary|pay|compensation)|salary (?:requirements?|expected|sought)|what (?:annual |yearly |monthly |hourly |starting )?(?:salary|pay|rate) (?:are|would) you (?:be )?(?:expecting|seeking|looking for|expect))\b/;
+
+/**
+ * Questions with a saved application answer, read from wording people see
+ * (labels, accessible names, a radio group's legend), never from technical
+ * names. `exclude` turns a match into something else: notice someone
+ * received, relocation support, a particular place, salary history.
+ */
+const ANSWER_RULES: Record<
+  AnswerField,
+  { include: RegExp[]; exclude: RegExp | null }
+> = {
+  noticePeriod: {
+    include: [
+      /\bnotice period\b/,
+      /\bperiod of notice\b/,
+      /\bhow much notice\b/,
+      /\bnotice (?:do you need to|must you|are you required to|you need to|you must|you would need to) give\b/,
+    ],
+    exclude:
+      /\b(?:received|served|given to you|redundan\w*|dismiss\w*|terminat\w*|probation\w*)\b/,
+  },
+  relocation: {
+    include: [/\brelocat\w*\b/],
+    exclude:
+      /\b(?:assistance|package|support|costs?|allowance|expenses|budget|bonus|where|which (?:city|country|location|office)|reasons?)\b/,
+  },
+  workArrangement: {
+    include: [
+      /\b(?:working|work) (?:arrangement|model|setup|set up|style|location type|location preference)s?\b/,
+      /\bremote,? hybrid,? (?:or|and) (?:office|on ?site|in office)\b/,
+      /\bprefer\w*\b.*\b(?:remote|hybrid|on ?site|office based)\b/,
+    ],
+    exclude: null,
+  },
+  startDate: {
+    include: [
+      /\b(?:earliest|possible|available|availability|proposed|desired|anticipated) (?:start(?:ing)? date|date (?:to|you can|you could) start)\b/,
+      /\bwhen (?:can|could|would|will) you (?:start|begin|commence|join)\b/,
+      // A duration rather than a date: recognised, then left to the user.
+      /\bhow (?:soon|quickly) (?:can|could|would|will) you (?:start|begin|commence|join)\b/,
+      /\bdate (?:you are |you re )?available (?:to start|from)\b/,
+      /\bavailab\w* to (?:start|begin|commence)\b/,
+      /^(?:date )?available from$/,
+    ],
+    exclude: null,
+  },
+  salaryExpectation: {
+    include: [SALARY_EXPECTATION],
+    exclude: null,
+  },
+};
+
+/** Salary questions that stay sensitive: what someone earns or earned. */
+const SALARY_HISTORY =
+  /\b(?:current|previous|present|last|former|past|existing|minimum|lowest) (?:annual |base |basic |gross )?(?:salary|pay|compensation|remuneration|rate|earnings)\b|\bsalary history\b|\bearn(?:s|ing|ings|ed)?\b/;
+
+/** Words a salary-expectation question may use without being sensitive. */
+const SALARY_WORDS =
+  /\b(?:salary|salaries|pay|compensation|remuneration|wages?)\b/g;
+
+/** Yes/no questions about one arrangement are not a preference. */
+const YES_NO = /^(?:are|can|could|would|will|is|do|does|have|has)\b/;
+
+const MAX_QUESTION_WORDS = 20;
+
 /** Address parts are short labels; longer text is likely a question. */
 const SHORT_ONLY = new Set<AutofillField>(['city', 'region', 'country']);
 const MAX_WORDS = 8;
@@ -509,6 +579,12 @@ const OTHER_PERSON_HEADING =
  */
 const OTHER_PERSON_EMPLOYMENT =
   /\b(?:references?|referees?|referr\w*|referrals?|colleagues?|friends?|relatives?|interviewers?|hiring|recruit\w*|managers?|supervisors?|representatives?|contacts?|emergency|next of kin|guardian|parent|spouse|partner|landlord|agency|agencies|clients?|customers?|person to (?:speak|contact)|speak to)\b/;
+/**
+ * For saved-answer questions: "How much notice must you give your
+ * employer?" is about the applicant; anyone else's plans are not.
+ */
+const OTHER_PERSON_ANSWER =
+  /\b(?:references?|referees?|referr\w*|referrals?|colleagues?|friends?|relatives?|interviewers?|hiring|recruit\w*|emergency|next of kin|guardian|parent|spouse|partner|landlord|agency|agencies|clients?)\b/;
 const OTHER_PERSON_HEADING_EMPLOYMENT =
   /\b(?:references?|referees?|referr\w*|referrals?|hiring|recruit\w*|managers?|supervisors?|representatives?|contacts?|emergency|next of kin|guardian|spouse|partner|landlord|agency|agencies|clients?|customers?|person to (?:speak|contact)|speak to)\b/;
 
@@ -553,9 +629,18 @@ export function detectControl(control: DetectableControl): Detection {
     .map((t) => t.normalised)
     .join(' | ');
   const hasLabel = texts.some((t) => t.signal === 'label');
+  // The question people read: labels, and a radio group's legend.
+  const questions = questionTexts(control, texts);
+  // Asking what someone expects to earn is not sensitive in itself; any
+  // other sensitive wording, or asking what they earn, still is.
+  const salaryQuestion =
+    questions.some((q) => SALARY_EXPECTATION.test(q.normalised)) &&
+    !SALARY_HISTORY.test(wording);
+  const screened = (text: string) =>
+    salaryQuestion ? text.replace(SALARY_WORDS, ' ') : text;
   if (
-    SENSITIVE.test(wording) ||
-    (hasLabel ? SENSITIVE_IDENTIFIER : SENSITIVE).test(technical)
+    SENSITIVE.test(screened(wording)) ||
+    (hasLabel ? SENSITIVE_IDENTIFIER : SENSITIVE).test(screened(technical))
   ) {
     return { kind: 'manual', reason: 'sensitive' };
   }
@@ -605,6 +690,11 @@ export function detectControl(control: DetectableControl): Detection {
     if (inEmployment && !inEducation) continue;
     for (const field of matchEducation(normalised, inEducation)) {
       add(field, { signal, text: raw });
+    }
+  }
+  for (const { raw, normalised } of questions) {
+    for (const field of matchAnswer(normalised)) {
+      add(field, { signal: 'label', text: raw });
     }
   }
   for (const field of [...candidates.keys()]) {
@@ -672,14 +762,18 @@ export function detectControl(control: DetectableControl): Detection {
   const keys = [...candidates.keys()];
   const onlyEducation = keys.length > 0 && keys.every(isEducationField);
   const onlyEmployment = keys.length > 0 && keys.every(isEmploymentField);
+  const onlyAnswers = keys.length > 0 && keys.every(isAnswerField);
   const otherPerson = onlyEducation
     ? OTHER_PERSON_EDUCATION
     : onlyEmployment
       ? OTHER_PERSON_EMPLOYMENT
-      : OTHER_PERSON;
-  const otherPersonHeading = onlyEmployment
-    ? OTHER_PERSON_HEADING_EMPLOYMENT
-    : OTHER_PERSON_HEADING;
+      : onlyAnswers
+        ? OTHER_PERSON_ANSWER
+        : OTHER_PERSON;
+  const otherPersonHeading =
+    onlyEmployment || onlyAnswers
+      ? OTHER_PERSON_HEADING_EMPLOYMENT
+      : OTHER_PERSON_HEADING;
   if (
     notPersonal ||
     otherPerson.test(all) ||
@@ -769,6 +863,50 @@ function matchEducation(text: string, inEducation: boolean): EducationField[] {
       : rules.strong;
     if (!patterns.some((pattern) => pattern.test(text))) continue;
     if (excluded(field, text)) continue;
+    matches.push(field);
+  }
+  return matches;
+}
+
+/**
+ * The wording of the question a control answers: its label and
+ * placeholder, and for a radio button the legend of its group (the
+ * button's own label is an option, such as "Yes").
+ */
+function questionTexts(
+  control: DetectableControl,
+  texts: TextSignal[],
+): { raw: string; normalised: string }[] {
+  const questions = texts.filter(
+    (t) => t.signal === 'label' || t.signal === 'placeholder',
+  );
+  if (!(control instanceof HTMLInputElement && control.type === 'radio')) {
+    return questions;
+  }
+  const legend =
+    control.closest('fieldset')?.querySelector(':scope > legend')
+      ?.textContent ?? '';
+  const raw = legend.replace(/\s+/g, ' ').trim();
+  return raw ? [{ raw, normalised: normalise(raw) }] : [];
+}
+
+/** The saved-answer questions a piece of question text asks. */
+function matchAnswer(text: string): AnswerField[] {
+  if (text.split(' ').length > MAX_QUESTION_WORDS) return [];
+  const matches: AnswerField[] = [];
+  for (const [field, rules] of Object.entries(ANSWER_RULES) as [
+    AnswerField,
+    { include: RegExp[]; exclude: RegExp | null },
+  ][]) {
+    if (!rules.include.some((pattern) => pattern.test(text))) continue;
+    if (rules.exclude?.test(text)) continue;
+    if (
+      field === 'workArrangement' &&
+      YES_NO.test(text) &&
+      !/\bprefer\w*\b/.test(text)
+    ) {
+      continue;
+    }
     matches.push(field);
   }
   return matches;

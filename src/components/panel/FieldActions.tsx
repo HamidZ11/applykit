@@ -1,6 +1,11 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { ListChecks, LocateFixed, UserRound } from 'lucide-react';
-import type { AutofillValues } from '@/autofill/fields';
+import {
+  ListChecks,
+  LocateFixed,
+  MessageSquareText,
+  UserRound,
+} from 'lucide-react';
+import { isAnswerField, type AutofillValues } from '@/autofill/fields';
 import { needsYou, type FieldReport } from '@/autofill/report';
 import type { FieldElement } from '@/autofill/scan';
 import type { Suggestion } from '@/autofill/suggestion';
@@ -39,10 +44,19 @@ export function FieldActions({
     suggestion?.kind === 'missing';
   const [choosing, setChoosing] = useState(false);
   const canChoose = records.length > 1;
+  // Saved application answers are edited apart from the profile.
+  const answer = report.target !== null && isAnswerField(report.target);
+  const source = answer ? 'From your saved answers' : 'From your saved profile';
 
   return (
     <>
-      {suggestion && <Guidance suggestion={suggestion} />}
+      {suggestion && <Guidance suggestion={suggestion} source={source} />}
+      {status === 'suggest' && report.value !== null && (
+        <Guidance
+          suggestion={{ kind: 'value', value: report.value, note: null }}
+          source={source}
+        />
+      )}
       {status === 'no-option' && (
         <p className="mt-1 text-ink-2">
           Choose the right option on the page yourself. ApplyKit never picks an
@@ -62,6 +76,9 @@ export function FieldActions({
       ) : (
         (canChoose || profileLacksIt || needsYou(report)) && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {status === 'suggest' && (
+              <UseAnswerButton report={report} model={model} />
+            )}
             {canChoose && (
               <SecondaryButton
                 size="sm"
@@ -73,14 +90,24 @@ export function FieldActions({
                 Choose a saved record
               </SecondaryButton>
             )}
-            {profileLacksIt && (
-              <SecondaryButton size="sm" onClick={model.openProfile}>
-                <Icon icon={UserRound} size={14} className="text-ink-3" />
-                {status === 'no-profile'
-                  ? 'Set up your profile'
-                  : 'Edit your profile'}
-              </SecondaryButton>
-            )}
+            {profileLacksIt &&
+              (answer && status !== 'no-profile' ? (
+                <SecondaryButton size="sm" onClick={model.openAnswers}>
+                  <Icon
+                    icon={MessageSquareText}
+                    size={14}
+                    className="text-ink-3"
+                  />
+                  Edit application answers
+                </SecondaryButton>
+              ) : (
+                <SecondaryButton size="sm" onClick={model.openProfile}>
+                  <Icon icon={UserRound} size={14} className="text-ink-3" />
+                  {status === 'no-profile'
+                    ? 'Set up your profile'
+                    : 'Edit your profile'}
+                </SecondaryButton>
+              ))}
             {needsYou(report) && (
               <GoToButton element={report.field.element} model={model} />
             )}
@@ -95,13 +122,19 @@ export function FieldActions({
  * What the saved profile says for a field ApplyKit cannot fill: guidance
  * for choosing on the page, inside the panel only.
  */
-function Guidance({ suggestion }: { suggestion: Suggestion }) {
+function Guidance({
+  suggestion,
+  source,
+}: {
+  suggestion: Suggestion;
+  source: string;
+}) {
   if (suggestion.kind !== 'value') {
     return <p className="mt-1 text-ink-2">{suggestion.reason}</p>;
   }
   return (
     <div className="mt-2 rounded-md border border-line bg-white px-2.5 py-2">
-      <p className="text-2xs text-ink-3">From your saved profile</p>
+      <p className="text-2xs text-ink-3">{source}</p>
       <p className="mt-0.5 font-medium break-words text-ink">
         {suggestion.value}
       </p>
@@ -109,6 +142,57 @@ function Guidance({ suggestion }: { suggestion: Suggestion }) {
         <p className="mt-0.5 text-2xs text-ink-3">{suggestion.note}</p>
       )}
     </div>
+  );
+}
+
+/**
+ * Writes the saved answer into this one field, after the panel re-checks
+ * the question and the saved answer. The only way an answer is filled.
+ */
+function UseAnswerButton({
+  report,
+  model,
+}: {
+  report: FieldReport;
+  model: PanelModel;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      <PrimaryButton
+        disabled={busy}
+        className="h-7 px-2.5 text-xs"
+        onClick={(event) => {
+          // The field's row button, where focus returns once it is filled.
+          const row =
+            event.currentTarget
+              .closest('li')
+              ?.querySelector<HTMLButtonElement>(':scope > button') ?? null;
+          setBusy(true);
+          setError(null);
+          void model.applyAnswer(report).then((result) => {
+            setBusy(false);
+            if (result.ok && result.filled > 0) {
+              row?.focus({ preventScroll: true });
+            } else {
+              setError(
+                result.ok
+                  ? 'The page did not accept the answer. Enter it yourself.'
+                  : result.message,
+              );
+            }
+          });
+        }}
+      >
+        {busy ? 'Filling…' : 'Use this answer'}
+      </PrimaryButton>
+      {error && (
+        <p role="alert" className="basis-full text-danger">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
 

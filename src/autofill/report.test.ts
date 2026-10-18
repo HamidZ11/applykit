@@ -73,7 +73,12 @@ describe('planFill', () => {
       expect(report.fillValue).toBeNull();
     }
     expect(byId(left, 'ref-name').status).toBe('other-person');
-    expect(byId(left, 'salary').status).toBe('manual');
+    // A saved-answer question: never filled by autofill, and here there
+    // is no saved answer to suggest.
+    expect(byId(left, 'salary')).toMatchObject({
+      status: 'no-value',
+      fillValue: null,
+    });
     expect(byId(left, 'captcha').status).toBe('manual');
   });
 

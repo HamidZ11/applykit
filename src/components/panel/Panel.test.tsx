@@ -22,6 +22,7 @@ import {
   gcseRecord,
   sampleValues,
 } from '@/test/autofill-fixtures';
+import { savedAnswers } from '@/test/answer-fixtures';
 import { loadFixture } from '@/test/load-fixture';
 import { Panel } from './Panel';
 
@@ -1061,6 +1062,156 @@ describe('field actions', () => {
     ]) {
       expect(findButton(name), name).toBeUndefined();
     }
+  });
+});
+
+describe('saved application answers', () => {
+  function withAnswers(answers = savedAnswers()): AutofillValuesResponse {
+    return ready(autofillValuesFrom(fullProfile(), answers));
+  }
+
+  beforeEach(async () => {
+    loadFixture('reusable-answers.html');
+    document.body.append(host);
+    await open(withAnswers());
+    click('Show all fields');
+  });
+
+  function field(id: string): HTMLInputElement {
+    const element = document.getElementById(id);
+    if (!element) throw new Error(`No #${id}`);
+    return element as HTMLInputElement;
+  }
+
+  it('lists answer questions under Application questions, unfilled', () => {
+    expect(dialog().textContent).toContain('Application questions');
+    expect(button(/^Notice period in weeks/).textContent).toContain('4');
+    expect(field('notice-weeks').value).toBe('');
+  });
+
+  it('shows the saved answer and a clear action to use it', () => {
+    click(/^Notice period in weeks/);
+
+    expect(dialog().textContent).toContain('From your saved answers');
+    expect(dialog().textContent).toContain(
+      'ApplyKit fills it only if you choose to use it.',
+    );
+    const use = button('Use this answer');
+    expect(use.type).toBe('button');
+    expect(use.disabled).toBe(false);
+    expect(findButton('Go to field')).toBeDefined();
+  });
+
+  it('never fills saved answers when the user presses Autofill', async () => {
+    click('Show summary');
+
+    await autofill();
+
+    expect(field('first').value).toBe('Alex');
+    for (const id of ['notice-weeks', 'start-date', 'salary-annual']) {
+      expect(field(id).value, id).toBe('');
+    }
+  });
+
+  it('fills one question after the user confirms it', async () => {
+    click(/^Notice period in weeks/);
+
+    click('Use this answer');
+    await settle();
+
+    expect(field('notice-weeks').value).toBe('4');
+    expect(field('salary-annual').value).toBe('');
+    // The saved answers are read again before writing.
+    expect(loadValues).toHaveBeenCalledTimes(2);
+    expect(fillFields).toHaveBeenCalledTimes(1);
+    expect(announcement()).toBe(
+      'Filled your saved answer. Nothing was submitted.',
+    );
+    expect(dialog().textContent).toContain('Filled · your choice');
+    expect(document.activeElement).toBe(button(/^Notice period in weeks/));
+    expect(findButton('Use this answer')).toBeUndefined();
+  });
+
+  it('writes nothing when the saved answer changed meanwhile', async () => {
+    click(/^Notice period in weeks/);
+    profile = withAnswers({
+      ...savedAnswers(),
+      noticePeriod: { amount: 8, unit: 'weeks' },
+    });
+
+    click('Use this answer');
+    await settle();
+
+    expect(field('notice-weeks').value).toBe('');
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'This question or your saved answer has changed. Nothing was filled; check it again.',
+    );
+    expect(fillFields).not.toHaveBeenCalled();
+  });
+
+  it('keeps what the user typed before confirming', async () => {
+    click(/^Notice period in weeks/);
+    field('notice-weeks').value = '6';
+
+    click('Use this answer');
+    await settle();
+
+    expect(field('notice-weeks').value).toBe('6');
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'You entered an answer here, so ApplyKit left it as it is.',
+    );
+  });
+
+  it('explains an answer that does not fit, without offering to use it', () => {
+    click(/^Expected hourly rate/);
+
+    expect(dialog().textContent).toContain(
+      'Your saved salary is a yearly amount, but this asks for an hourly rate.',
+    );
+    expect(findButton('Use this answer')).toBeUndefined();
+  });
+
+  it('links questions without a saved answer to the answers editor', async () => {
+    act(() => {
+      root.unmount();
+    });
+    const openPage = vi.fn(() => Promise.resolve(true));
+    root = createRoot(host);
+    profile = withAnswers({ ...savedAnswers(), noticePeriod: null });
+    act(() => {
+      root.render(
+        <Panel
+          onClose={onClose}
+          loadValues={loadValues}
+          openProfile={openPage}
+        />,
+      );
+    });
+    await settle();
+    click('Show all fields');
+    click(/^Notice period in weeks/);
+
+    click('Edit application answers');
+
+    expect(openPage).toHaveBeenCalledWith('answers');
+    expect(findButton(/Edit your profile$/)).toBeUndefined();
+  });
+
+  it('guides a radio group without choosing', () => {
+    click(/^Would you consider relocating outside the UK/);
+
+    expect(dialog().textContent).toContain(
+      'ApplyKit never chooses between radio buttons',
+    );
+    expect(dialog().textContent).toContain('From your saved answers');
+    expect(findButton('Use this answer')).toBeUndefined();
+  });
+
+  it('keeps the compact mode free of answer actions', () => {
+    click('Show summary');
+
+    expect(findButton('Use this answer')).toBeUndefined();
+    expect(dialog().textContent).not.toContain('£32,000');
   });
 });
 

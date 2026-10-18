@@ -171,3 +171,48 @@ function samePlan(
     })
   );
 }
+
+/**
+ * Re-checks one saved answer the user chose to use, against a fresh scan
+ * and freshly read answers, just before writing: the question must still
+ * be on the page, read the same and be recognised the same way, still be
+ * empty, and still receive exactly the value the user saw. Anything else
+ * writes nothing. The returned plan is the one field, for `fillFields`.
+ */
+export function confirmAnswer(
+  fields: readonly ScannedField[],
+  values: AutofillValues,
+  previewed: FieldReport,
+  now: Date = new Date(),
+): ChoiceCheck {
+  const element = previewed.field.element;
+  if (!element.isConnected || !fields.some((f) => f.element === element)) {
+    return {
+      ok: false,
+      message:
+        'This question is no longer on the page. Rescan to see the form as it is now.',
+    };
+  }
+  const current = planFill(fields, values, now).find(
+    (report) => report.field.element === element,
+  );
+  if (current?.status === 'keep') {
+    return {
+      ok: false,
+      message: 'You entered an answer here, so ApplyKit left it as it is.',
+    };
+  }
+  if (
+    current?.status !== 'suggest' ||
+    current.target !== previewed.target ||
+    current.field.label !== previewed.field.label ||
+    current.fillValue !== previewed.fillValue
+  ) {
+    return {
+      ok: false,
+      message:
+        'This question or your saved answer has changed. Nothing was filled; check it again.',
+    };
+  }
+  return { ok: true, plan: [{ ...current, status: 'fill', chosen: true }] };
+}
