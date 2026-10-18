@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { loadFixture } from '@/test/load-fixture';
 import { NO_LIMITS } from './answer-limits';
-import { openQuestionKind, type OpenQuestion } from './open-question';
+import {
+  openQuestionKind,
+  prohibitsAi,
+  type OpenQuestion,
+} from './open-question';
 import { planFill, type FieldReport } from './report';
 import { confirmDraft } from './resolve';
 import { scanFields } from './scan';
@@ -136,6 +140,7 @@ const SKILLS_QUESTION: OpenQuestion = {
   kind: 'skills',
   question: 'Describe your programming skills in two sentences.',
   limits: { ...NO_LIMITS, sentences: { min: 2, max: 2 } },
+  aiProhibited: false,
 };
 
 /** The question as it was when a draft was requested. */
@@ -281,5 +286,47 @@ describe('exclusions found in review', () => {
     expect(openQuestionKind('Describe a café project you built.')).toBe(
       'project',
     );
+  });
+});
+
+describe('prohibitsAi', () => {
+  it.each([
+    'Please do not use AI tools to write your answers.',
+    'Do not use ChatGPT or other AI to complete this section.',
+    'AI-generated answers will not be accepted.',
+    'Answers must be written without the use of AI.',
+    'Use of generative AI is not permitted for this application.',
+    'You must not use artificial intelligence to write your responses.',
+    'No AI-generated content.',
+  ])('recognises “%s”', (text) => {
+    expect(prohibitsAi(text)).toBe(true);
+  });
+
+  it.each([
+    'Answer in your own words.',
+    'Please answer honestly.',
+    'Describe your experience with AI tools.',
+    'We use AI to help screen applications.',
+    'Do not use air quotes.',
+    'Tell us about a project using machine learning.',
+  ])('does not take “%s” as a prohibition', (text) => {
+    expect(prohibitsAi(text)).toBe(false);
+  });
+
+  it('applies to questions in the same section only', () => {
+    document.body.innerHTML = `<form>
+      <fieldset><legend>Your answers</legend>
+        <p>Do not use AI to write these answers.</p>
+        <label for="a">Describe a project you worked on.</label><textarea id="a"></textarea>
+      </fieldset>
+      <fieldset><legend>Skills</legend>
+        <label for="b">Describe your technical skills.</label><textarea id="b"></textarea>
+      </fieldset></form>`;
+    const support = Object.fromEntries(
+      scanFields(document, visible).map((f) => [f.element.id, f.support]),
+    );
+
+    expect(support.a).toMatchObject({ question: { aiProhibited: true } });
+    expect(support.b).toMatchObject({ question: { aiProhibited: false } });
   });
 });

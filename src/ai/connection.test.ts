@@ -76,6 +76,8 @@ describe('AI connection', () => {
       dailyLimit: 50,
       requestsToday: 0,
       estimatedCostToday: 0,
+      writingSample: '',
+      avoid: '',
     });
     expect(await aiAvailable(deps())).toBe(false);
   });

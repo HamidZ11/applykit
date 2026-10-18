@@ -1,3 +1,4 @@
+import { describeViolation, limitViolations } from '@/autofill/answer-limits';
 import { openQuestionKind } from '@/autofill/open-question';
 import { emptySkillsProjects } from '@/domain/skills-projects';
 import type {
@@ -7,6 +8,7 @@ import type {
   DraftContextRequest,
 } from '@/messages';
 import type { ApprovalStore } from '@/storage/ai-approvals';
+import type { AiSettings } from '@/storage/ai-settings';
 import type { ProfileStore } from '@/storage/profile-store';
 import type { SkillsStore } from '@/storage/skills-store';
 import { requestDraft } from './anthropic';
@@ -46,10 +48,37 @@ async function savedData(deps: DraftingDeps) {
   };
 }
 
+/**
+ * The applicant's writing preferences as an item of their own: shown in
+ * the preview like any other, sent only when ticked, and given to the
+ * model as style guidance, never as facts.
+ */
+function styleItem(settings: AiSettings): ContextItem | null {
+  const sample = settings.writingSample.trim();
+  const avoid = settings.avoid.trim();
+  if (!sample && !avoid) return null;
+  return {
+    id: 'style',
+    group: 'style',
+    title: 'Writing preferences',
+    summary: [sample && 'Writing sample', avoid && `Avoid: ${avoid}`]
+      .filter(Boolean)
+      .join(' · ')
+      .slice(0, 80),
+    text: [sample && `Writing sample: ${sample}`, avoid && `Avoid: ${avoid}`]
+      .filter(Boolean)
+      .join('\n'),
+  };
+}
+
 /** The items the user could share. */
-async function availableItems(deps: DraftingDeps): Promise<ContextItem[]> {
+async function availableItems(
+  deps: DraftingDeps,
+  settings: AiSettings,
+): Promise<ContextItem[]> {
   const { profile, saved } = await savedData(deps);
-  return contextItems(profile, saved);
+  const style = styleItem(settings);
+  return [...contextItems(profile, saved), ...(style ? [style] : [])];
 }
 
 /**
@@ -69,6 +98,8 @@ export async function approvalFingerprint(
     limits: request.limits,
     role: request.role,
     employer: request.employer,
+    mode: request.mode,
+    original: request.original,
     shared: [...shared]
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((item) => [item.id, item.text]),
@@ -94,14 +125,24 @@ export async function prepare(
     savedData(deps),
     deps.settings.load(),
   ]);
-  const { items, selected } = rankContext(
+  const ranked = rankContext(
     kind,
     profile,
     saved,
     `${request.question} ${request.role} ${request.employer}`,
   );
+  const style = styleItem(settings);
+  const items = [...ranked.items, ...(style ? [style] : [])];
+  // Improving the applicant's own text needs no facts unless they add
+  // some; their writing preferences are ticked when saved.
+  const selected = [
+    ...(request.mode === 'improve' ? [] : ranked.selected),
+    ...(style ? [style.id] : []),
+  ];
   const shared = items.filter((item) => selected.includes(item.id));
+  // Improving is approved every time: the text is the applicant's own.
   const approved =
+    request.mode === 'draft' &&
     shared.length > 0 &&
     (await deps.approvals.has(
       await approvalFingerprint(settings.model, request, shared),
@@ -138,12 +179,11 @@ export async function draft(
   if (!(await aiAvailable(deps))) return { status: 'unavailable' };
   const kind = openQuestionKind(request.question);
   if (!kind) return { status: 'not-a-question' };
-  const [items, settings] = await Promise.all([
-    availableItems(deps),
-    deps.settings.load(),
-  ]);
+  const settings = await deps.settings.load();
+  const items = await availableItems(deps, settings);
   const shared = items.filter((item) => request.selected.includes(item.id));
-  if (shared.length === 0) {
+  const facts = shared.filter((item) => item.group !== 'style');
+  if (request.mode === 'draft' && facts.length === 0) {
     return { status: 'failed', failure: 'no-context', retryAfterSeconds: null };
   }
   const fingerprint = await approvalFingerprint(
@@ -151,7 +191,12 @@ export async function draft(
     request,
     shared,
   );
-  if (!request.approve && !(await deps.approvals.has(fingerprint))) {
+  // The applicant's own text is sent only with approval each time, so an
+  // approval can never carry over to another field or text.
+  if (
+    !request.approve &&
+    (request.mode === 'improve' || !(await deps.approvals.has(fingerprint)))
+  ) {
     return { status: 'needs-approval' };
   }
   const credential = await deps.credentials.load();
@@ -166,21 +211,34 @@ export async function draft(
       retryAfterSeconds: null,
     };
   }
-  if (request.approve) await deps.approvals.add(fingerprint);
+  if (request.approve && request.mode === 'draft') {
+    await deps.approvals.add(fingerprint);
+  }
+  const mismatch =
+    request.mode === 'improve'
+      ? limitViolations(request.original, request.limits)
+          .map(describeViolation)
+          .join(' ') || null
+      : null;
 
   const reply = await requestDraft(
     {
       key: credential.key,
       model: settings.model,
       system: SYSTEM_PROMPT,
-      prompt: buildPrompt(
+      prompt: buildPrompt({
         kind,
-        request.question,
-        request.limits,
-        shared.map((item) => item.text),
-        request.role,
-        request.employer,
-      ),
+        question: request.question,
+        limits: request.limits,
+        facts: facts.map((item) => item.text),
+        preferences:
+          shared.find((item) => item.group === 'style')?.text ?? null,
+        role: request.role,
+        employer: request.employer,
+        mode: request.mode,
+        original: request.original,
+        mismatch,
+      }),
       maxTokens: maxTokensFor(request.limits, settings.model),
     },
     {

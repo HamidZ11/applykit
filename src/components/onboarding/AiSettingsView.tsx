@@ -7,7 +7,13 @@ import {
   type AiSettingsClient,
 } from '@/ai/settings-client';
 import { GhostButton, PrimaryButton } from '@/components/ui/primitives';
-import { MAX_DAILY_LIMIT, isDailyLimit } from '@/storage/ai-settings';
+import {
+  MAX_AVOID,
+  MAX_DAILY_LIMIT,
+  MAX_WRITING_SAMPLE,
+  isDailyLimit,
+  type AiSettings,
+} from '@/storage/ai-settings';
 import { CONTROL, CONTROL_STATE } from './fields';
 import { Banner, Notice, Problem, SectionShell } from './page-parts';
 
@@ -131,14 +137,21 @@ export function AiSettingsView({
       });
   };
 
-  const save = (model: ModelChoice, dailyLimit: number) => {
+  const save = (changes: Partial<AiSettings>) => {
     setProblem(null);
-    void client.saveSettings({ model, dailyLimit }).then((saved) => {
+    const next: AiSettings = {
+      model: status.model,
+      dailyLimit: status.dailyLimit,
+      writingSample: status.writingSample,
+      avoid: status.avoid,
+      ...changes,
+    };
+    void client.saveSettings(next).then((saved) => {
       if (!saved) {
         setProblem('ApplyKit could not save this setting. Try again.');
         return;
       }
-      setPhase({ kind: 'ready', status: { ...status, model, dailyLimit } });
+      setPhase({ kind: 'ready', status: { ...status, ...next } });
       setNotice('Saved.');
     });
   };
@@ -187,7 +200,7 @@ export function AiSettingsView({
                     name="ai-model"
                     checked={status.model === choice}
                     onChange={() => {
-                      save(choice, status.dailyLimit);
+                      save({ model: choice });
                     }}
                     className="mt-1 size-4 shrink-0 accent-accent"
                   />
@@ -222,7 +235,7 @@ export function AiSettingsView({
               onBlur={() => {
                 const value = Number(limit);
                 if (isDailyLimit(value)) {
-                  if (value !== status.dailyLimit) save(status.model, value);
+                  if (value !== status.dailyLimit) save({ dailyLimit: value });
                 } else {
                   setLimit(String(status.dailyLimit));
                   setProblem(
@@ -248,6 +261,14 @@ export function AiSettingsView({
               .
             </p>
           </div>
+
+          <WritingPreferences
+            sample={status.writingSample}
+            avoid={status.avoid}
+            onSave={(writingSample, avoid) => {
+              save({ writingSample, avoid });
+            }}
+          />
 
           <GhostButton
             tone="danger"
@@ -372,5 +393,80 @@ export function AiSettingsView({
       {problem && <Problem>{problem}</Problem>}
       <Notice>{notice}</Notice>
     </>,
+  );
+}
+
+/**
+ * Optional: how the applicant likes to write. Never inferred from drafts,
+ * never required, and shared only when ticked in a request's preview.
+ */
+function WritingPreferences({
+  sample,
+  avoid,
+  onSave,
+}: {
+  sample: string;
+  avoid: string;
+  onSave: (sample: string, avoid: string) => void;
+}) {
+  const [draftSample, setDraftSample] = useState(sample);
+  const [draftAvoid, setDraftAvoid] = useState(avoid);
+  const sampleId = useId();
+  const avoidId = useId();
+  const changed = draftSample !== sample || draftAvoid !== avoid;
+  return (
+    <section className="space-y-3 border-t border-line pt-5">
+      <div>
+        <h2 className="text-base font-medium">Writing preferences</h2>
+        <p className="mt-0.5 max-w-[60ch] text-xs text-ink-3">
+          Optional. Drafts use a natural, professional style by default. These
+          are shared only when you tick them before a request.
+        </p>
+      </div>
+      <div>
+        <label
+          htmlFor={sampleId}
+          className="mb-1.5 block text-xs font-medium text-ink-2"
+        >
+          A short sample of your own writing
+        </label>
+        <textarea
+          id={sampleId}
+          rows={3}
+          maxLength={MAX_WRITING_SAMPLE}
+          value={draftSample}
+          onChange={(event) => {
+            setDraftSample(event.target.value);
+          }}
+          className={`${CONTROL} ${CONTROL_STATE(false)} resize-y px-3 py-2 leading-[22px]`}
+        />
+      </div>
+      <div>
+        <label
+          htmlFor={avoidId}
+          className="mb-1.5 block text-xs font-medium text-ink-2"
+        >
+          Words or styles to avoid
+        </label>
+        <input
+          id={avoidId}
+          maxLength={MAX_AVOID}
+          value={draftAvoid}
+          placeholder="For example: exclamation marks, “passionate”"
+          onChange={(event) => {
+            setDraftAvoid(event.target.value);
+          }}
+          className={`${CONTROL} ${CONTROL_STATE(false)} h-9 px-3`}
+        />
+      </div>
+      <PrimaryButton
+        disabled={!changed}
+        onClick={() => {
+          onSave(draftSample.trim(), draftAvoid.trim());
+        }}
+      >
+        Save preferences
+      </PrimaryButton>
+    </section>
   );
 }

@@ -217,6 +217,8 @@ describe('AI drafting messages', () => {
     },
     role: '',
     employer: '',
+    mode: 'draft',
+    original: '',
   };
 
   it('accepts a well-formed preview request', () => {

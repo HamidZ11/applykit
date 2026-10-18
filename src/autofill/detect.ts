@@ -1201,7 +1201,7 @@ function accessibleName(element: Element): string {
 
 const HEADINGS = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
 
-const SECTIONS = 'fieldset, section, [role="group"], [role="region"]';
+export const SECTIONS = 'fieldset, section, [role="group"], [role="region"]';
 
 /**
  * Headings per scope, kept only while a scan runs (`duringScan`), so a

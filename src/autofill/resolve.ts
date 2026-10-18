@@ -305,3 +305,85 @@ export function confirmDraft(
     ],
   };
 }
+
+/**
+ * Re-checks an improved answer the applicant confirmed should replace
+ * their own text: the same open question, unchanged since they asked,
+ * still writable, still holding exactly the text they approved sending
+ * (`original`), and the new text within the limits. The write itself is
+ * `replaceText`, which checks the text once more.
+ */
+export function confirmReplace(
+  fields: readonly ScannedField[],
+  previewed: FieldReport,
+  text: string,
+  drafted: OpenQuestion,
+  original: string,
+):
+  | {
+      ok: true;
+      element: HTMLInputElement | HTMLTextAreaElement;
+      report: FieldReport;
+    }
+  | { ok: false; message: string } {
+  const { element } = previewed.field;
+  const current = fields.find((field) => field.element === element);
+  if (!element.isConnected || !current) {
+    return {
+      ok: false,
+      message:
+        'This question is no longer on the page. Rescan to see the form as it is now.',
+    };
+  }
+  if (
+    current.support.status !== 'open' ||
+    current.label !== previewed.field.label ||
+    current.support.question.question !== drafted.question ||
+    JSON.stringify(current.support.question.limits) !==
+      JSON.stringify(drafted.limits)
+  ) {
+    return {
+      ok: false,
+      message:
+        'This question has changed since the answer was improved. Nothing was replaced.',
+    };
+  }
+  if (
+    !(element instanceof HTMLInputElement) &&
+    !(element instanceof HTMLTextAreaElement)
+  ) {
+    return { ok: false, message: 'This field cannot be written to.' };
+  }
+  if (element.disabled || element.readOnly) {
+    return {
+      ok: false,
+      message: 'This field can no longer be written to. Nothing was replaced.',
+    };
+  }
+  if (element.value !== original) {
+    return {
+      ok: false,
+      message:
+        'Your answer on the page has changed since you asked for an improvement, so ApplyKit left it as it is.',
+    };
+  }
+  const answer = text.trim();
+  if (answer === '') {
+    return { ok: false, message: 'The answer is empty. Nothing was replaced.' };
+  }
+  const maxLength = element.maxLength > 0 ? element.maxLength : null;
+  if (
+    limitViolations(answer, current.support.question.limits).length > 0 ||
+    (maxLength !== null && answer.length > maxLength)
+  ) {
+    return {
+      ok: false,
+      message:
+        'The answer does not meet the length this question asks for. Change it, then replace.',
+    };
+  }
+  const [report] = planFill([current], null);
+  if (!report)
+    return { ok: false, message: 'This field cannot be written to.' };
+  return { ok: true, element, report };
+}

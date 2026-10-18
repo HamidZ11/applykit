@@ -11,7 +11,13 @@ import type { UserProfile, YearMonth } from '@/domain/user-profile';
  * title and summary only help the user find it.
  */
 
-export type ContextGroup = 'skills' | 'project' | 'job' | 'education';
+export type ContextGroup =
+  | 'skills'
+  | 'project'
+  | 'job'
+  | 'education'
+  /** The applicant's own writing preferences; guidance, not facts. */
+  | 'style';
 
 export interface ContextItem {
   /** Stable for the same saved entry: `skills`, `project:<id>`. */

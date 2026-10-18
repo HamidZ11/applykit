@@ -301,6 +301,8 @@ describe('AI drafting preview', () => {
         },
         role: '',
         employer: '',
+        mode: 'draft',
+        original: '',
       }),
     ).toEqual({ status: 'unavailable' });
   });
@@ -354,6 +356,8 @@ describe('AI drafting port', () => {
     },
     role: '',
     employer: '',
+    mode: 'draft',
+    original: '',
     selected: ['skills'],
     approve: true,
   };

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { withDiversityChoices } from '@/autofill/diversity';
-import { fillFields } from '@/autofill/fill';
+import { fillFields, replaceText } from '@/autofill/fill';
 import {
   attentionQueue,
   planFill,
@@ -20,6 +20,7 @@ import {
   confirmAnswer,
   confirmChoice,
   confirmDraft,
+  confirmReplace,
   previewChoice,
   type ChoiceCheck,
   type ChoicePreview,
@@ -132,6 +133,16 @@ export interface PanelModel extends PanelState {
     previewed: FieldReport,
     text: string,
     drafted: OpenQuestion,
+  ) => Promise<ChoiceResult>;
+  /**
+   * Replaces the applicant's own answer with an improved one they
+   * confirmed, only if the field still holds exactly `original`.
+   */
+  replaceAnswer: (
+    previewed: FieldReport,
+    text: string,
+    drafted: OpenQuestion,
+    original: string,
   ) => Promise<ChoiceResult>;
   /** Opens the skills and projects; failures as for the profile. */
   openSkills: () => void;
@@ -404,6 +415,67 @@ export function usePanel(
     [root],
   );
 
+  const replaceAnswer = useCallback(
+    async (
+      previewed: FieldReport,
+      text: string,
+      drafted: OpenQuestion,
+      original: string,
+    ): Promise<ChoiceResult> => {
+      if (filling.current) {
+        return { ok: false, message: 'ApplyKit is still filling. Try again.' };
+      }
+      filling.current = true;
+      try {
+        const checked = confirmReplace(
+          scanFields(root),
+          previewed,
+          text,
+          drafted,
+          original,
+        );
+        if (!checked.ok) return checked;
+        const answer = text.trim();
+        const outcome = await replaceText(checked.element, original, answer);
+        if (outcome === 'changed') {
+          return {
+            ok: false,
+            message:
+              'Your answer on the page has changed since you asked for an improvement, so ApplyKit left it as it is.',
+          };
+        }
+        const replaced = outcome === 'replaced';
+        dispatch({
+          type: 'resolved',
+          outcomes: [
+            {
+              ...checked.report,
+              status: replaced ? 'filled' : 'rejected',
+              value: replaced ? answer : null,
+              chosen: true,
+              note: replaced ? 'Improved with AI; replaced by you.' : null,
+              reason: replaced
+                ? null
+                : 'The page did not keep the improved answer.',
+            },
+          ],
+          notice: replaced
+            ? 'Replaced your answer. Nothing was submitted.'
+            : 'The page did not accept the improved answer. Nothing was submitted.',
+        });
+        return { ok: true, filled: replaced ? 1 : 0, total: 1 };
+      } catch {
+        return {
+          ok: false,
+          message: 'Something went wrong. Nothing was replaced.',
+        };
+      } finally {
+        filling.current = false;
+      }
+    },
+    [root],
+  );
+
   const goTo = useCallback(
     (element: FieldElement) =>
       goToField(element, new Set(state.fields.map((field) => field.element))),
@@ -493,6 +565,7 @@ export function usePanel(
     previewDraft: drafting.preview,
     draftAnswer: drafting.draft,
     insertDraft,
+    replaceAnswer,
     // An old panel left on the page after ApplyKit was reloaded can no
     // longer reach it; "Try again" cannot help, so say what will.
     problem:

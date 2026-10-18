@@ -29,6 +29,34 @@ export interface OpenQuestion {
   /** The question as the page words it. */
   question: string;
   limits: AnswerLimits;
+  /**
+   * The form says not to use AI for this answer, in the question, its
+   * own hints or its section: AI drafting is not offered.
+   */
+  aiProhibited: boolean;
+}
+
+/**
+ * A clear instruction not to use AI. "In your own words" or "answer
+ * honestly" alone is not one: those ask for the applicant's own answer,
+ * which a reviewed draft can still be.
+ */
+const AI =
+  '(?:artificial intelligence|generative ai|gen ?ai|chat ?gpt|large language models?|llms?|ai(?:[- ]powered)? tools?|ai)\\b';
+const AI_PROHIBITED = new RegExp(
+  [
+    `\\b(?:do not|don't|must not|should not|may not|cannot|never|please do not|refrain from|avoid)\\s+(?:use|using|rely on|relying on|submit|submitting)\\s+(?:any\\s+)?(?:content\\s+(?:generated|written)\\s+(?:by|with)\\s+)?${AI}`,
+    `\\b${AI}[- ](?:generated|written|assisted|produced)\\s+(?:answers?|responses?|content|text|applications?|submissions?)\\s+(?:are|is|will|may)\\s+(?:not\\s+(?:be\\s+)?(?:accepted|permitted|allowed|considered)|(?:be\\s+)?(?:unacceptable|prohibited|forbidden|rejected|disqualified))`,
+    `\\bwithout (?:the )?(?:use|help|assistance|aid) of ${AI}`,
+    `\\b(?:use of|using) ${AI} (?:is|are) (?:not permitted|not allowed|prohibited|forbidden)`,
+    `\\bno ${AI}[- ]?(?:generated|written|assisted)\\b`,
+  ].join('|'),
+  'i',
+);
+
+/** Whether `text` clearly forbids using AI for an answer. */
+export function prohibitsAi(text: string): boolean {
+  return AI_PROHIBITED.test(text.replace(/[’‘]/g, "'"));
 }
 
 /** Longer "questions" are instructions or whole sections, not a question. */

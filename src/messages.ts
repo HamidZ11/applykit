@@ -419,6 +419,8 @@ const STATUS_KEYS = [
   'dailyLimit',
   'requestsToday',
   'estimatedCostToday',
+  'writingSample',
+  'avoid',
 ];
 
 export function isAiStatus(value: unknown): value is AiStatus {
@@ -435,7 +437,9 @@ export function isAiStatus(value: unknown): value is AiStatus {
     isModelChoice(value.model) &&
     typeof value.dailyLimit === 'number' &&
     typeof value.requestsToday === 'number' &&
-    typeof value.estimatedCostToday === 'number'
+    typeof value.estimatedCostToday === 'number' &&
+    typeof value.writingSample === 'string' &&
+    typeof value.avoid === 'string'
   );
 }
 
@@ -469,7 +473,18 @@ export interface DraftContextRequest {
   /** Role and employer names, untrusted page text the user may edit. */
   role: string;
   employer: string;
+  /**
+   * `draft` writes an answer from shared facts; `improve` revises the
+   * applicant's own text (`original`), which the user approved sending.
+   */
+  mode: DraftMode;
+  /** The text to improve; empty when drafting. */
+  original: string;
 }
+
+export type DraftMode = 'draft' | 'improve';
+
+export const MAX_ORIGINAL_LENGTH = 4000;
 
 export interface AiPrepareMessage extends DraftContextRequest {
   type: typeof AI_PREPARE_TYPE;
@@ -552,7 +567,13 @@ function isContextRequest(value: Record<string, unknown>): boolean {
     typeof value.role === 'string' &&
     value.role.length <= MAX_ROLE_LENGTH &&
     typeof value.employer === 'string' &&
-    value.employer.length <= MAX_ROLE_LENGTH
+    value.employer.length <= MAX_ROLE_LENGTH &&
+    (value.mode === 'draft' || value.mode === 'improve') &&
+    typeof value.original === 'string' &&
+    value.original.length <= MAX_ORIGINAL_LENGTH &&
+    (value.mode === 'draft'
+      ? value.original === ''
+      : value.original.trim() !== '')
   );
 }
 
@@ -579,7 +600,7 @@ export function isAiDraftRequest(message: unknown): message is AiDraftRequest {
 const isSharedItem = (value: unknown) =>
   isRecord(value) &&
   typeof value.id === 'string' &&
-  oneOf(['skills', 'project', 'job', 'education'], value.group) &&
+  oneOf(['skills', 'project', 'job', 'education', 'style'], value.group) &&
   typeof value.title === 'string' &&
   typeof value.summary === 'string' &&
   typeof value.text === 'string';

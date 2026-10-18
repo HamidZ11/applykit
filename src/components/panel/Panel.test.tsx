@@ -1940,7 +1940,9 @@ describe('AI drafting', () => {
   ];
   const DRAFT = 'I write Python and TypeScript. I use PostgreSQL daily.';
 
-  function ready(approved = false): AiPrepareResponse {
+  function ready(
+    approved = false,
+  ): Extract<AiPrepareResponse, { status: 'ready' }> {
     return {
       status: 'ready',
       kind: 'skills',
@@ -1959,8 +1961,9 @@ describe('AI drafting', () => {
   };
   const openPage = vi.fn(() => Promise.resolve(true));
 
-  async function openWith(ai = true) {
+  async function openWith(ai = true, change?: () => void) {
     loadFixture('open-questions.html');
+    change?.();
     document.body.append(host);
     previewReply = ready();
     draftReply = { status: 'draft', text: DRAFT };
@@ -2049,6 +2052,8 @@ describe('AI drafting', () => {
       },
       role: '',
       employer: '',
+      mode: 'draft',
+      original: '',
     });
     expect(drafting.draft).not.toHaveBeenCalled();
     const boxes = [
@@ -2277,12 +2282,141 @@ describe('AI drafting', () => {
     expect(dialog().textContent).not.toContain('Anthropic');
   });
 
-  it('offers no draft for a question already answered', async () => {
+  it('offers to improve, not draft, a question already answered', async () => {
     await openWith();
 
     click(/^What motivates you to apply/);
 
     expect(findButton('Draft with AI')).toBeUndefined();
+    expect(findButton('Improve my answer')).toBeDefined();
+  });
+
+  describe('improving the applicant’s answer', () => {
+    const ORIGINAL =
+      'I enjoy turning messy data into something people can use.';
+    const IMPROVED =
+      'I enjoy turning messy data into something people can use and trust.';
+
+    async function improve() {
+      await openWith();
+      previewReply = { ...ready(), selected: [], approved: false };
+      draftReply = { status: 'draft', text: IMPROVED };
+      click(/^What motivates you to apply/);
+      click('Improve my answer');
+      await settle();
+    }
+
+    it('shows the answer it would send, and sends only on approval', async () => {
+      await improve();
+
+      expect(dialog().textContent).toContain(
+        'Your answer on the page, to improve',
+      );
+      expect(dialog().textContent).toContain(ORIGINAL);
+      expect(drafting.preview).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: 'improve', original: ORIGINAL }),
+      );
+      expect(drafting.draft).not.toHaveBeenCalled();
+
+      await send();
+
+      expect(drafting.draft.mock.calls[0]?.[0]).toMatchObject({
+        mode: 'improve',
+        original: ORIGINAL,
+        selected: [],
+        approve: true,
+      });
+    });
+
+    it('replaces the answer only after confirming, keeping the original visible', async () => {
+      await improve();
+      await send();
+
+      click('Replace your answer…');
+      expect(field('q-answered').value).toBe(ORIGINAL);
+      expect(dialog().textContent).toContain('Replace the text in this field');
+      click('Show your original');
+      expect(dialog().textContent).toContain(ORIGINAL);
+
+      click('Replace');
+      await settle();
+
+      expect(field('q-answered').value).toBe(IMPROVED);
+      expect(announcement()).toBe(
+        'Replaced your answer. Nothing was submitted.',
+      );
+    });
+
+    it('keeps the answer when the user chooses to', async () => {
+      await improve();
+      await send();
+
+      click('Replace your answer…');
+      click('Keep mine');
+
+      expect(field('q-answered').value).toBe(ORIGINAL);
+      expect(findButton('Replace your answer…')).toBeDefined();
+    });
+
+    it('never replaces an answer the user changed meanwhile', async () => {
+      await improve();
+      await send();
+      field('q-answered').value = 'My newer words.';
+
+      click('Replace your answer…');
+      click('Replace');
+      await settle();
+
+      expect(field('q-answered').value).toBe('My newer words.');
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+        'Your answer on the page has changed',
+      );
+    });
+  });
+
+  it('revises a draft that misses the limits only when asked, keeping the previous version', async () => {
+    await openWith();
+    draftReply = { status: 'draft', text: 'I write Python.' };
+    await startDraft();
+    await send();
+    expect(button('Insert answer').disabled).toBe(true);
+
+    draftReply = { status: 'draft', text: 'I write Python. I use SQL daily.' };
+    click('Revise to fit');
+    await settle();
+
+    expect(drafting.draft).toHaveBeenCalledTimes(2);
+    expect(drafting.draft.mock.calls[1]?.[0]).toMatchObject({
+      mode: 'improve',
+      original: 'I write Python.',
+      approve: true,
+    });
+    expect(draftBox().value).toBe('I write Python. I use SQL daily.');
+    click('Show the previous version');
+    expect(dialog().textContent).toContain('I write Python.');
+    // Still inserted, not replaced: the field was empty.
+    click('Insert answer');
+    await settle();
+    expect(field('q-skills').value).toBe('I write Python. I use SQL daily.');
+  });
+
+  it('offers no AI drafting where the form forbids AI', async () => {
+    await openWith(true, () => {
+      document
+        .getElementById('q-skills')
+        ?.insertAdjacentHTML(
+          'afterend',
+          '<p class="hint">Please do not use AI tools to write your answers.</p>',
+        );
+    });
+
+    click(/^Describe your programming skills/);
+
+    expect(findButton('Draft with AI')).toBeUndefined();
+    expect(dialog().textContent).toContain(
+      'This form asks for answers written without AI',
+    );
+    expect(drafting.preview).not.toHaveBeenCalled();
   });
 
   it('prefills role and employer for motivation questions', async () => {

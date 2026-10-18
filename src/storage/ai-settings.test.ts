@@ -16,20 +16,35 @@ beforeEach(() => {
 
 describe('AI settings', () => {
   it('defaults to the fast model and 50 requests a day', async () => {
-    expect(await settings.load()).toEqual({ model: 'fast', dailyLimit: 50 });
+    expect(await settings.load()).toEqual({
+      model: 'fast',
+      dailyLimit: 50,
+      writingSample: '',
+      avoid: '',
+    });
   });
 
   it('saves a model and a lower limit', async () => {
-    expect(await settings.save({ model: 'quality', dailyLimit: 10 })).toBe(
-      true,
-    );
+    expect(
+      await settings.save({
+        ...DEFAULT_AI_SETTINGS,
+        model: 'quality',
+        dailyLimit: 10,
+      }),
+    ).toBe(true);
 
-    expect(await settings.load()).toEqual({ model: 'quality', dailyLimit: 10 });
+    expect(await settings.load()).toEqual({
+      ...DEFAULT_AI_SETTINGS,
+      model: 'quality',
+      dailyLimit: 10,
+    });
   });
 
   it('never saves a limit above 50 or below 1', async () => {
     for (const dailyLimit of [0, 51, 2.5, Number.NaN]) {
-      expect(await settings.save({ model: 'fast', dailyLimit })).toBe(false);
+      expect(await settings.save({ ...DEFAULT_AI_SETTINGS, dailyLimit })).toBe(
+        false,
+      );
     }
   });
 
@@ -113,5 +128,27 @@ describe('daily usage, protected copy', () => {
 
     expect(await usage.reserve(2, NOW)).toBe(false);
     expect((await usage.today(NOW)).requests).toBe(2);
+  });
+});
+
+describe('writing preferences', () => {
+  it('saves a sample and words to avoid, within their limits', async () => {
+    expect(
+      await settings.save({
+        ...DEFAULT_AI_SETTINGS,
+        writingSample: 'I keep things short.',
+        avoid: 'exclamation marks',
+      }),
+    ).toBe(true);
+    expect(await settings.load()).toMatchObject({
+      writingSample: 'I keep things short.',
+      avoid: 'exclamation marks',
+    });
+    expect(
+      await settings.save({
+        ...DEFAULT_AI_SETTINGS,
+        writingSample: 'x'.repeat(601),
+      }),
+    ).toBe(false);
   });
 });

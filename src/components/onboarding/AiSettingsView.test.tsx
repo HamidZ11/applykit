@@ -17,6 +17,8 @@ const OFF: AiStatus = {
   dailyLimit: 50,
   requestsToday: 0,
   estimatedCostToday: 0,
+  writingSample: '',
+  avoid: '',
 };
 
 const ON: AiStatus = {
@@ -209,6 +211,8 @@ describe('AiSettingsView', () => {
     expect(client.saveSettings).toHaveBeenLastCalledWith({
       model: 'quality',
       dailyLimit: 50,
+      writingSample: '',
+      avoid: '',
     });
 
     const limit = host.querySelector<HTMLInputElement>('input[type="number"]');
@@ -223,6 +227,8 @@ describe('AiSettingsView', () => {
     expect(client.saveSettings).toHaveBeenLastCalledWith({
       model: 'quality',
       dailyLimit: 10,
+      writingSample: '',
+      avoid: '',
     });
   });
 

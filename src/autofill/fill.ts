@@ -160,3 +160,30 @@ export function setSelectValue(
   element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
 }
+
+export type ReplaceOutcome =
+  'replaced' | 'changed' | 'unavailable' | 'rejected';
+
+/**
+ * Replaces the applicant's own answer with an improved one they reviewed
+ * and confirmed (ADR 0019). Separate from `fillFields`, which never
+ * overwrites: this writes only when the field still holds exactly
+ * `expected`, the text the applicant chose to improve, so nothing typed
+ * since is lost. Never clicks, presses keys or submits.
+ */
+export async function replaceText(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  expected: string,
+  value: string,
+  settle: () => Promise<void> = afterPageScripts,
+): Promise<ReplaceOutcome> {
+  if (!element.isConnected || element.disabled || element.readOnly) {
+    return 'unavailable';
+  }
+  if (element.value !== expected) return 'changed';
+  setInputValue(element, value);
+  await settle();
+  // The page may have removed the field while it handled the input.
+  if (!element.ownerDocument.contains(element)) return 'unavailable';
+  return element.value === value ? 'replaced' : 'rejected';
+}

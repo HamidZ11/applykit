@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { flagDraft } from '@/ai/check';
+import { failureText } from '@/ai/failures';
 import {
   describeBound,
   describeViolation,
@@ -8,48 +9,76 @@ import {
   measure,
   type AnswerLimits,
 } from '@/autofill/answer-limits';
-import { failureText } from '@/ai/failures';
 import type { OpenQuestion } from '@/autofill/open-question';
 import { currentValue, type FieldReport } from '@/autofill/report';
-import type { AiPrepareResponse, SharedItem } from '@/messages';
+import type {
+  AiPrepareResponse,
+  DraftContextRequest,
+  DraftMode,
+  SharedItem,
+} from '@/messages';
 import { Icon } from '@/components/ui/icons';
 import {
   GhostButton,
   PrimaryButton,
   SecondaryButton,
 } from '@/components/ui/primitives';
-import type { PanelModel } from './usePanel';
+import type { ChoiceResult, PanelModel } from './usePanel';
 import { plural } from './vocabulary';
 
 /**
- * Optional AI drafting for one open question (ADR 0019). The user asks for
- * a draft, sees exactly what will be shared, approves it, reviews and
- * edits the draft, and inserts it. Nothing is sent without the user's
- * click, nothing is inserted without "Insert answer", and nothing is
- * submitted. The background re-checks every request; this card only
- * presents it.
+ * Optional AI drafting for one open question (ADR 0019). For an empty
+ * question the user asks for a draft; for one they have answered, they
+ * can ask to improve their own wording. Either way they see exactly what
+ * will be shared, approve it, review and edit the result, and insert it
+ * (or, when improving, confirm replacing their text). Nothing is sent
+ * without the user's click, nothing is written without their final
+ * action, and nothing is submitted. The background re-checks every
+ * request; this card only presents it.
  */
 
 type Preview = Extract<AiPrepareResponse, { status: 'ready' }>;
 
+/** What the card works on: a new answer, or the applicant's own text. */
+interface Job {
+  mode: DraftMode;
+  /** The answer on the page when improving it; empty for a new one. */
+  original: string;
+}
+
 type Stage =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'preview'; preview: Preview; full: boolean }
+  | { kind: 'preview'; preview: Preview; full: boolean; job: Job }
   | {
       kind: 'drafting';
       preview: Preview;
       controller: AbortController;
-      /** The question as it was asked; insertion checks it is unchanged. */
+      /** The question as it was asked; writing checks it is unchanged. */
       asked: OpenQuestion;
+      job: Job;
+      previous: string | null;
     }
-  | { kind: 'draft'; preview: Preview; text: string; asked: OpenQuestion }
+  | {
+      kind: 'draft';
+      preview: Preview;
+      text: string;
+      asked: OpenQuestion;
+      job: Job;
+      /** The version before a revision, so it is never lost. */
+      previous: string | null;
+    }
   | {
       kind: 'problem';
       message: string;
       link: 'skills' | 'ai' | null;
-      preview: Preview | null;
+      retry: Job | null;
     };
+
+const UNREACHABLE =
+  'ApplyKit could not reach its background. Close the panel and open it again.';
+const NOT_CONNECTED =
+  'AI drafting is not connected. Connect it in AI Assistant.';
 
 /** "Junior Data Engineer · Example Fernhill Analytics Careers" → names. */
 function namesFromPage(model: PanelModel): { role: string; employer: string } {
@@ -75,7 +104,7 @@ export function DraftAssistant({
   const [names, setNames] = useState(() => namesFromPage(model));
   const controller = stage.kind === 'drafting' ? stage.controller : null;
 
-  // Leaving the field (or the panel) cancels a draft in progress.
+  // Leaving the field (or the panel) cancels a request in progress.
   useEffect(
     () => () => {
       controller?.abort();
@@ -85,32 +114,33 @@ export function DraftAssistant({
 
   if (support.status !== 'open' || !model.ai) return null;
   const question: OpenQuestion = support.question;
+  if (question.aiProhibited) {
+    return (
+      <p className="basis-full text-ink-3">
+        This form asks for answers written without AI, so ApplyKit does not
+        offer AI drafting here.
+      </p>
+    );
+  }
   const motivation = question.kind === 'motivation';
-  const request = () => ({
+  const request = (job: Job): DraftContextRequest => ({
     question: question.question,
     limits: question.limits,
     role: motivation ? names.role.trim() : '',
     employer: motivation ? names.employer.trim() : '',
+    mode: job.mode,
+    original: job.original,
   });
 
-  const preview = (full: boolean) => {
+  const preview = (job: Job, full: boolean) => {
     setStage({ kind: 'loading' });
-    void model.previewDraft(request()).then((reply) => {
+    void model.previewDraft(request(job)).then((reply) => {
       if (!reply) {
-        setStage(
-          problem(
-            'ApplyKit could not reach its background. Close the panel and open it again.',
-          ),
-        );
+        setStage(problem(UNREACHABLE));
         return;
       }
       if (reply.status === 'unavailable') {
-        setStage(
-          problem(
-            'AI drafting is not connected. Connect it in AI Assistant.',
-            'ai',
-          ),
-        );
+        setStage(problem(NOT_CONNECTED, 'ai'));
         return;
       }
       if (reply.status === 'not-a-question') {
@@ -122,29 +152,47 @@ export function DraftAssistant({
         kind: 'preview',
         preview: reply,
         full: full || !reply.approved,
+        job,
       });
     });
   };
 
-  const send = (current: Preview, approve: boolean) => {
+  /**
+   * Sends one request. With `revise`, asks Claude to revise that text
+   * (the current draft, which misses the limits) instead of the job's
+   * own: always an explicitly approved request.
+   */
+  const send = (
+    current: Preview,
+    job: Job,
+    approve: boolean,
+    revise: string | null = null,
+  ) => {
     const abort = new AbortController();
     const asked = question;
-    setStage({ kind: 'drafting', preview: current, controller: abort, asked });
+    setStage({
+      kind: 'drafting',
+      preview: current,
+      controller: abort,
+      asked,
+      job,
+      previous: revise,
+    });
+    const asking: Job =
+      revise === null ? job : { mode: 'improve', original: revise };
     void model
       .draftAnswer(
-        { ...request(), selected: [...selected], approve },
+        {
+          ...request(asking),
+          selected: [...selected],
+          approve: approve || asking.mode === 'improve',
+        },
         abort.signal,
       )
       .then((reply) => {
         if (abort.signal.aborted) return;
         if (!reply) {
-          setStage(
-            problem(
-              'ApplyKit could not reach its background. Close the panel and open it again.',
-              null,
-              current,
-            ),
-          );
+          setStage(problem(UNREACHABLE, null, job));
           return;
         }
         switch (reply.status) {
@@ -154,18 +202,15 @@ export function DraftAssistant({
               preview: current,
               text: reply.text,
               asked,
+              job,
+              previous: revise,
             });
             return;
           case 'needs-approval':
-            setStage({ kind: 'preview', preview: current, full: true });
+            setStage({ kind: 'preview', preview: current, full: true, job });
             return;
           case 'unavailable':
-            setStage(
-              problem(
-                'AI drafting is not connected. Connect it in AI Assistant.',
-                'ai',
-              ),
-            );
+            setStage(problem(NOT_CONNECTED, 'ai'));
             return;
           case 'not-a-question':
             setStage(
@@ -181,7 +226,7 @@ export function DraftAssistant({
                   : reply.failure === 'daily-limit'
                     ? 'ai'
                     : null,
-                current,
+                job,
               ),
             );
         }
@@ -189,20 +234,27 @@ export function DraftAssistant({
   };
 
   switch (stage.kind) {
-    case 'idle':
-      // Only an empty question can take a draft.
-      if (currentValue(report.field) !== null) return null;
+    case 'idle': {
+      const answered = currentValue(report.field);
+      // An empty question can take a draft; an answered one, help with
+      // the applicant's own wording.
       return (
         <SecondaryButton
           size="sm"
           onClick={() => {
-            preview(false);
+            preview(
+              answered === null
+                ? { mode: 'draft', original: '' }
+                : { mode: 'improve', original: answered },
+              false,
+            );
           }}
         >
           <Icon icon={Sparkles} size={14} className="text-ink-3" />
-          Draft with AI
+          {answered === null ? 'Draft with AI' : 'Improve my answer'}
         </SecondaryButton>
       );
+    }
     case 'loading':
       return (
         <p role="status" className="basis-full text-ink-3">
@@ -213,7 +265,9 @@ export function DraftAssistant({
       return (
         <div className="flex basis-full items-center gap-2">
           <p role="status" className="text-ink-2">
-            Drafting with Claude…
+            {stage.job.mode === 'improve' || stage.previous !== null
+              ? 'Improving with Claude…'
+              : 'Drafting with Claude…'}
           </p>
           <GhostButton
             onClick={() => {
@@ -221,7 +275,8 @@ export function DraftAssistant({
               setStage({
                 kind: 'preview',
                 preview: stage.preview,
-                full: false,
+                full: stage.job.mode === 'improve',
+                job: stage.job,
               });
             }}
           >
@@ -246,11 +301,11 @@ export function DraftAssistant({
                 AI Assistant
               </SecondaryButton>
             )}
-            {stage.preview && (
+            {stage.retry && (
               <SecondaryButton
                 size="sm"
                 onClick={() => {
-                  preview(true);
+                  if (stage.retry) preview(stage.retry, true);
                 }}
               >
                 Try again
@@ -271,6 +326,7 @@ export function DraftAssistant({
         <SharePreview
           preview={stage.preview}
           full={stage.full}
+          job={stage.job}
           question={question}
           selected={selected}
           names={motivation ? names : null}
@@ -287,7 +343,7 @@ export function DraftAssistant({
             setStage({ ...stage, full: true });
           }}
           onSend={() => {
-            send(stage.preview, stage.full);
+            send(stage.preview, stage.job, stage.full);
           }}
           onCancel={() => {
             setStage({ kind: 'idle' });
@@ -300,10 +356,14 @@ export function DraftAssistant({
         <DraftReview
           text={stage.text}
           limits={stage.asked.limits}
+          job={stage.job}
+          previous={stage.previous}
           shared={[
             stage.asked.question,
             names.role,
             names.employer,
+            stage.job.original,
+            stage.previous ?? '',
             ...stage.preview.items
               .filter((item) => selected.has(item.id))
               .map((item) => item.text),
@@ -312,13 +372,25 @@ export function DraftAssistant({
             setStage({ ...stage, text });
           }}
           onRegenerate={() => {
-            send(stage.preview, false);
+            send(stage.preview, stage.job, false);
+          }}
+          onRevise={() => {
+            send(stage.preview, stage.job, true, stage.text);
           }}
           onCancel={() => {
             setStage({ kind: 'idle' });
           }}
-          onInsert={(text) => model.insertDraft(report, text, stage.asked)}
-          onInserted={() => {
+          onWrite={(text) =>
+            stage.job.mode === 'improve'
+              ? model.replaceAnswer(
+                  report,
+                  text,
+                  stage.asked,
+                  stage.job.original,
+                )
+              : model.insertDraft(report, text, stage.asked)
+          }
+          onWritten={() => {
             setStage({ kind: 'idle' });
           }}
         />
@@ -329,18 +401,20 @@ export function DraftAssistant({
 function problem(
   message: string,
   link: 'skills' | 'ai' | null = null,
-  preview: Preview | null = null,
+  retry: Job | null = null,
 ): Stage {
-  return { kind: 'problem', message, link, preview };
+  return { kind: 'problem', message, link, retry };
 }
 
 /**
- * Exactly what a request shares. In full the first time, and whenever
- * anything changes; afterwards a one-line summary the user can open.
+ * Exactly what a request shares. In full the first time, whenever
+ * anything changes, and always when improving the applicant's own text;
+ * otherwise a one-line summary the user can open.
  */
 function SharePreview({
   preview,
   full,
+  job,
   question,
   selected,
   names,
@@ -353,6 +427,7 @@ function SharePreview({
 }: {
   preview: Preview;
   full: boolean;
+  job: Job;
   question: OpenQuestion;
   selected: ReadonlySet<string>;
   names: { role: string; employer: string } | null;
@@ -366,8 +441,10 @@ function SharePreview({
   const roleId = useId();
   const employerId = useId();
   const chosen = preview.items.filter((item) => selected.has(item.id));
+  const improving = job.mode === 'improve';
+  const facts = chosen.filter((item) => item.group !== 'style');
 
-  if (preview.items.length === 0) {
+  if (!improving && preview.items.every((item) => item.group === 'style')) {
     return (
       <div className="basis-full space-y-1.5">
         <p className="text-ink-2">
@@ -384,7 +461,7 @@ function SharePreview({
     );
   }
 
-  if (!full) {
+  if (!full && !improving) {
     return (
       <div className="basis-full space-y-1.5">
         <p className="text-ink-2">
@@ -414,6 +491,16 @@ function SharePreview({
         <p className="text-2xs text-ink-3">To share with Anthropic</p>
         <p className="mt-0.5 text-2xs text-ink-3">Question</p>
         <p className="break-words text-ink">{question.question}</p>
+        {improving && (
+          <>
+            <p className="mt-2 text-2xs text-ink-3">
+              Your answer on the page, to improve
+            </p>
+            <p className="rounded-sm bg-sunken px-1.5 py-1 break-words whitespace-pre-wrap text-ink">
+              {job.original}
+            </p>
+          </>
+        )}
         {names && (
           <div className="mt-2 grid grid-cols-2 gap-1.5">
             <label htmlFor={roleId} className="text-2xs text-ink-3">
@@ -442,31 +529,37 @@ function SharePreview({
             </label>
           </div>
         )}
-        <fieldset className="mt-2">
-          <legend className="text-2xs text-ink-3">Your information</legend>
-          <ul className="mt-1 divide-y divide-line">
-            {preview.items.map((item: SharedItem) => (
-              <SharedItemRow
-                key={item.id}
-                item={item}
-                checked={selected.has(item.id)}
-                onToggle={() => {
-                  onToggle(item.id);
-                }}
-              />
-            ))}
-          </ul>
-        </fieldset>
+        {preview.items.length > 0 && (
+          <fieldset className="mt-2">
+            <legend className="text-2xs text-ink-3">
+              {improving
+                ? 'Your information (optional, to keep facts accurate)'
+                : 'Your information'}
+            </legend>
+            <ul className="mt-1 divide-y divide-line">
+              {preview.items.map((item) => (
+                <SharedItemRow
+                  key={item.id}
+                  item={item}
+                  checked={selected.has(item.id)}
+                  onToggle={() => {
+                    onToggle(item.id);
+                  }}
+                />
+              ))}
+            </ul>
+          </fieldset>
+        )}
         <p className="mt-2 text-2xs text-ink-3">
-          Only what is ticked is sent, with the question, to Anthropic using
-          your key ({preview.model}), exactly as each item&rsquo;s details show.
-          Contact details and diversity answers are never shared.
+          Only what is shown here and ticked is sent to Anthropic using your key
+          ({preview.model}), exactly as each item&rsquo;s details show. Contact
+          details and diversity answers are never shared.
         </p>
       </div>
       <div className="flex gap-1.5">
         <PrimaryButton
           className="h-7 px-2.5 text-xs"
-          disabled={chosen.length === 0}
+          disabled={!improving && facts.length === 0}
           onClick={onSend}
         >
           Send to Anthropic
@@ -477,37 +570,46 @@ function SharePreview({
   );
 }
 
-/** The draft, editable, with its length against the question's limits. */
+/**
+ * The draft, editable, with its length against the question's
+ * requirements. A draft that misses them cannot be written; the user can
+ * edit it or ask for a revision, which is a new, explicit request.
+ */
 function DraftReview({
   text,
   limits,
+  job,
+  previous,
   shared,
   onChange,
   onRegenerate,
+  onRevise,
   onCancel,
-  onInsert,
-  onInserted,
+  onWrite,
+  onWritten,
 }: {
   text: string;
   limits: AnswerLimits;
+  job: Job;
+  previous: string | null;
   shared: string[];
   onChange: (text: string) => void;
   onRegenerate: () => void;
+  onRevise: () => void;
   onCancel: () => void;
-  onInsert: (
-    text: string,
-  ) => Promise<
-    { ok: true; filled: number; total: number } | { ok: false; message: string }
-  >;
-  onInserted: () => void;
+  onWrite: (text: string) => Promise<ChoiceResult>;
+  onWritten: () => void;
 }) {
   const id = useId();
   const box = useRef<HTMLTextAreaElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [shown, setShown] = useState<'original' | 'previous' | null>(null);
   const size = measure(text);
   const violations = limitViolations(text, limits);
   const flags = flagDraft(text, shared);
+  const replacing = job.mode === 'improve';
 
   useEffect(() => {
     box.current?.focus({ preventScroll: true });
@@ -530,10 +632,29 @@ function DraftReview({
       required ? `${String(actual)} (${required})` : actual,
     );
 
+  const write = () => {
+    setBusy(true);
+    setError(null);
+    void onWrite(text).then((result) => {
+      setBusy(false);
+      setConfirming(false);
+      if (result.ok && result.filled > 0) onWritten();
+      else {
+        setError(
+          result.ok
+            ? 'The page did not accept the answer. Paste it in yourself.'
+            : result.message,
+        );
+      }
+    });
+  };
+
   return (
     <div className="basis-full space-y-1.5">
       <label htmlFor={id} className="block text-2xs text-ink-3">
-        Draft answer. Edit it before inserting.
+        {replacing
+          ? 'Improved answer. Edit it before replacing yours.'
+          : 'Draft answer. Edit it before inserting.'}
       </label>
       <textarea
         id={id}
@@ -542,6 +663,7 @@ function DraftReview({
         rows={5}
         onChange={(event) => {
           setError(null);
+          setConfirming(false);
           onChange(event.target.value);
         }}
         className="block w-full resize-y rounded-sm border border-line-strong bg-white px-2 py-1.5 text-xs leading-5 text-ink outline-none focus:border-accent"
@@ -551,7 +673,7 @@ function DraftReview({
         <p className="text-danger">
           Does not meet the question&rsquo;s requirements.{' '}
           {violations.map(describeViolation).join(' ')} Edit it, or ask Claude
-          to revise it, before inserting.
+          to revise it, before {replacing ? 'replacing' : 'inserting'}.
         </p>
       )}
       {flags.unstated.length > 0 && (
@@ -566,42 +688,106 @@ function DraftReview({
           {flags.formatting ? 'Contains list or markdown formatting.' : ''}
         </p>
       )}
+      {(replacing || previous !== null) && (
+        <div className="flex flex-wrap gap-x-3">
+          {replacing && (
+            <button
+              type="button"
+              aria-expanded={shown === 'original'}
+              onClick={() => {
+                setShown(shown === 'original' ? null : 'original');
+              }}
+              className="text-2xs font-medium text-accent hover:underline"
+            >
+              {shown === 'original'
+                ? 'Hide your original'
+                : 'Show your original'}
+            </button>
+          )}
+          {previous !== null && (
+            <button
+              type="button"
+              aria-expanded={shown === 'previous'}
+              onClick={() => {
+                setShown(shown === 'previous' ? null : 'previous');
+              }}
+              className="text-2xs font-medium text-accent hover:underline"
+            >
+              {shown === 'previous'
+                ? 'Hide the previous version'
+                : 'Show the previous version'}
+            </button>
+          )}
+        </div>
+      )}
+      {shown && (
+        <p className="rounded-sm bg-sunken px-1.5 py-1 break-words whitespace-pre-wrap text-ink-2 select-text">
+          {shown === 'original' ? job.original : previous}
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-danger">
           {error}
         </p>
       )}
-      <div className="flex flex-wrap gap-1.5">
-        <PrimaryButton
-          className="h-7 px-2.5 text-xs"
-          disabled={busy || violations.length > 0 || text.trim() === ''}
-          onClick={() => {
-            setBusy(true);
-            setError(null);
-            void onInsert(text).then((result) => {
-              setBusy(false);
-              if (result.ok && result.filled > 0) onInserted();
-              else {
-                setError(
-                  result.ok
-                    ? 'The page did not accept the answer. Paste it in yourself.'
-                    : result.message,
-                );
-              }
-            });
-          }}
-        >
-          {busy ? 'Inserting…' : 'Insert answer'}
-        </PrimaryButton>
-        <SecondaryButton size="sm" disabled={busy} onClick={onRegenerate}>
-          Regenerate
-        </SecondaryButton>
-        <GhostButton disabled={busy} onClick={onCancel}>
-          Cancel
-        </GhostButton>
-      </div>
+      {confirming ? (
+        <div className="space-y-1.5 rounded-md border border-line bg-white px-2.5 py-2">
+          <p className="text-ink">
+            Replace the text in this field with this version? Your original
+            stays here until you close this card.
+          </p>
+          <div className="flex gap-1.5">
+            <PrimaryButton
+              className="h-7 px-2.5 text-xs"
+              disabled={busy}
+              onClick={write}
+            >
+              {busy ? 'Replacing…' : 'Replace'}
+            </PrimaryButton>
+            <GhostButton
+              disabled={busy}
+              onClick={() => {
+                setConfirming(false);
+              }}
+            >
+              Keep mine
+            </GhostButton>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          <PrimaryButton
+            className="h-7 px-2.5 text-xs"
+            disabled={busy || violations.length > 0 || text.trim() === ''}
+            onClick={() => {
+              if (replacing) setConfirming(true);
+              else write();
+            }}
+          >
+            {busy
+              ? 'Inserting…'
+              : replacing
+                ? 'Replace your answer…'
+                : 'Insert answer'}
+          </PrimaryButton>
+          {violations.length > 0 && (
+            <SecondaryButton size="sm" disabled={busy} onClick={onRevise}>
+              Revise to fit
+            </SecondaryButton>
+          )}
+          <SecondaryButton size="sm" disabled={busy} onClick={onRegenerate}>
+            {replacing ? 'Try again' : 'Regenerate'}
+          </SecondaryButton>
+          <GhostButton disabled={busy} onClick={onCancel}>
+            Cancel
+          </GhostButton>
+        </div>
+      )}
       <p className="text-2xs text-ink-3">
-        Inserted only when you choose. ApplyKit never submits the form.
+        {violations.length > 0
+          ? 'Revise to fit sends this draft to Anthropic and counts as a request. '
+          : ''}
+        Written only when you choose. ApplyKit never submits the form.
       </p>
     </div>
   );
@@ -612,6 +798,7 @@ const GROUP_NAME: Record<SharedItem['group'], string> = {
   project: 'Project',
   job: 'Job',
   education: 'Education',
+  style: 'Writing style',
 };
 
 /**

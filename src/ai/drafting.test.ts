@@ -3,6 +3,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { browserCredentialStore } from '@/storage/ai-credential';
 import { browserApprovalStore } from '@/storage/ai-approvals';
 import {
+  DEFAULT_AI_SETTINGS,
   browserAiSettingsStore,
   browserAiUsageStore,
 } from '@/storage/ai-settings';
@@ -29,6 +30,8 @@ const QUESTION: DraftContextRequest = {
   limits: { ...NO_LIMITS, sentences: { min: 2, max: 2 } },
   role: '',
   employer: '',
+  mode: 'draft',
+  original: '',
 };
 
 const granted: HostAccess = {
@@ -134,7 +137,11 @@ describe('prepare', () => {
     expect(
       await prepare(deps(), { ...QUESTION, question: `${QUESTION.question} ` }),
     ).toMatchObject({ approved: false });
-    await browserAiSettingsStore.save({ model: 'quality', dailyLimit: 50 });
+    await browserAiSettingsStore.save({
+      ...DEFAULT_AI_SETTINGS,
+      model: 'quality',
+      dailyLimit: 50,
+    });
     expect(await prepare(deps(), QUESTION)).toMatchObject({
       approved: false,
       model: 'Higher quality',
@@ -323,7 +330,11 @@ describe('draft', () => {
 
   it('stops at the daily limit, before sending', async () => {
     const fetch = answers();
-    await browserAiSettingsStore.save({ model: 'fast', dailyLimit: 1 });
+    await browserAiSettingsStore.save({
+      ...DEFAULT_AI_SETTINGS,
+      model: 'fast',
+      dailyLimit: 1,
+    });
 
     await draft(deps({ fetch }), ASK);
     expect(await draft(deps({ fetch }), ASK)).toEqual({
@@ -415,7 +426,11 @@ describe('draft', () => {
 
   it('uses the chosen model', async () => {
     const fetch = answers();
-    await browserAiSettingsStore.save({ model: 'quality', dailyLimit: 50 });
+    await browserAiSettingsStore.save({
+      ...DEFAULT_AI_SETTINGS,
+      model: 'quality',
+      dailyLimit: 50,
+    });
 
     await draft(deps({ fetch }), ASK);
 
@@ -423,5 +438,97 @@ describe('draft', () => {
       model: 'claude-sonnet-5-5',
       max_tokens: 512,
     });
+  });
+});
+
+describe('improving the applicant’s own answer', () => {
+  const IMPROVE = {
+    ...QUESTION,
+    mode: 'improve' as const,
+    original: 'i write python and typescript alot.',
+    selected: [],
+    approve: true,
+  };
+
+  it('sends the applicant’s text with no facts unless chosen', async () => {
+    const fetch = answers('I write Python and TypeScript a lot.');
+
+    expect(await draft(deps({ fetch }), IMPROVE)).toEqual({
+      status: 'draft',
+      text: 'I write Python and TypeScript a lot.',
+    });
+    const body = sentBody(fetch);
+    expect(body.messages[0]?.content).toContain(
+      '<applicant_draft>"i write python and typescript alot."</applicant_draft>',
+    );
+    expect(body.messages[0]?.content).toContain('<applicant_facts>\n[]');
+    expect(body.messages[0]?.content).toContain(
+      'It does not meet the limits: Has 1 sentence',
+    );
+  });
+
+  it('needs approval every time, and never remembers it', async () => {
+    const fetch = answers();
+
+    expect(
+      await draft(deps({ fetch }), { ...IMPROVE, approve: false }),
+    ).toEqual({ status: 'needs-approval' });
+    await draft(deps({ fetch }), IMPROVE);
+    expect(
+      await draft(deps({ fetch }), { ...IMPROVE, approve: false }),
+    ).toEqual({ status: 'needs-approval' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no facts by default, and is never shown as approved', async () => {
+    expect(
+      await prepare(deps(), { ...QUESTION, mode: 'improve', original: 'x' }),
+    ).toMatchObject({ status: 'ready', selected: [], approved: false });
+  });
+});
+
+describe('writing preferences', () => {
+  beforeEach(async () => {
+    await browserAiSettingsStore.save({
+      ...DEFAULT_AI_SETTINGS,
+      writingSample: 'I keep sentences short.',
+      avoid: 'exclamation marks',
+    });
+  });
+
+  it('are offered as an item of their own, ticked by default', async () => {
+    const result = await prepare(deps(), QUESTION);
+
+    expect(result).toMatchObject({ status: 'ready' });
+    if (result.status !== 'ready') return;
+    expect(result.selected).toContain('style');
+    expect(result.items.find((i) => i.id === 'style')).toEqual({
+      id: 'style',
+      group: 'style',
+      title: 'Writing preferences',
+      summary: 'Writing sample · Avoid: exclamation marks',
+      text: 'Writing sample: I keep sentences short.\nAvoid: exclamation marks',
+    });
+  });
+
+  it('go to the model as style, not facts, and only when ticked', async () => {
+    const fetch = answers();
+
+    await draft(deps({ fetch }), { ...ASK, selected: ['skills', 'style'] });
+    const content = sentBody(fetch).messages[0]?.content ?? '';
+    expect(content).toContain('<writing_preferences>');
+    expect(content).not.toMatch(/applicant_facts>\n\[[^\]]*Writing sample/);
+
+    const without = answers();
+    await draft(deps({ fetch: without }), { ...ASK, selected: ['skills'] });
+    expect(sentBody(without).messages[0]?.content).not.toContain(
+      'I keep sentences short.',
+    );
+  });
+
+  it('cannot be the only thing shared for a new draft', async () => {
+    expect(
+      await draft(deps({ fetch: answers() }), { ...ASK, selected: ['style'] }),
+    ).toMatchObject({ status: 'failed', failure: 'no-context' });
   });
 });

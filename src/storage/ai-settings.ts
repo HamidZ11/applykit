@@ -17,16 +17,31 @@ import { withLock } from './lock';
 
 export const MAX_DAILY_LIMIT = 50;
 
+export const MAX_WRITING_SAMPLE = 600;
+export const MAX_AVOID = 300;
+
 export interface AiSettings {
   model: ModelChoice;
   /** Requests allowed per day, 1 to 50. */
   dailyLimit: number;
+  /**
+   * Optional: a short sample of the applicant's own writing, so drafts
+   * sound like them. Shared only when ticked in a request's preview.
+   */
+  writingSample: string;
+  /** Optional: words or styles the applicant does not want used. */
+  avoid: string;
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   model: 'fast',
   dailyLimit: MAX_DAILY_LIMIT,
+  writingSample: '',
+  avoid: '',
 };
+
+const text = (value: unknown, max: number): string =>
+  typeof value === 'string' ? value.slice(0, max) : '';
 
 export function isDailyLimit(value: unknown): value is number {
   return (
@@ -50,12 +65,17 @@ export const browserAiSettingsStore: AiSettingsStore = {
       if (typeof value !== 'object' || value === null) {
         return DEFAULT_AI_SETTINGS;
       }
-      const { model, dailyLimit } = value as Record<string, unknown>;
+      const { model, dailyLimit, writingSample, avoid } = value as Record<
+        string,
+        unknown
+      >;
       return {
         model: isModelChoice(model) ? model : DEFAULT_AI_SETTINGS.model,
         dailyLimit: isDailyLimit(dailyLimit)
           ? dailyLimit
           : DEFAULT_AI_SETTINGS.dailyLimit,
+        writingSample: text(writingSample, MAX_WRITING_SAMPLE),
+        avoid: text(avoid, MAX_AVOID),
       };
     } catch {
       return DEFAULT_AI_SETTINGS;
@@ -63,13 +83,20 @@ export const browserAiSettingsStore: AiSettingsStore = {
   },
 
   async save(settings) {
-    if (!isModelChoice(settings.model) || !isDailyLimit(settings.dailyLimit)) {
+    if (
+      !isModelChoice(settings.model) ||
+      !isDailyLimit(settings.dailyLimit) ||
+      settings.writingSample.length > MAX_WRITING_SAMPLE ||
+      settings.avoid.length > MAX_AVOID
+    ) {
       return false;
     }
     try {
       await storage.setItem(AI_SETTINGS_KEY, {
         model: settings.model,
         dailyLimit: settings.dailyLimit,
+        writingSample: settings.writingSample,
+        avoid: settings.avoid,
       });
       return true;
     } catch {

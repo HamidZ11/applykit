@@ -33,6 +33,9 @@ export interface AiStatus {
   dailyLimit: number;
   requestsToday: number;
   estimatedCostToday: number;
+  /** The user's own writing preferences, shown back on their page. */
+  writingSample: string;
+  avoid: string;
 }
 
 export type ConnectFailure =
@@ -54,6 +57,8 @@ export async function aiStatus(deps: ConnectionDeps): Promise<AiStatus> {
     dailyLimit: settings.dailyLimit,
     requestsToday: today.requests,
     estimatedCostToday: today.estimatedCost,
+    writingSample: settings.writingSample,
+    avoid: settings.avoid,
   };
 }
 

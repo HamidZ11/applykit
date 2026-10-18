@@ -9,6 +9,7 @@ import {
   detectControl,
   duringScan,
   fieldHints,
+  SECTIONS,
   formOf,
   nameOf,
   placeholderOf,
@@ -21,6 +22,7 @@ import { readLimits } from './answer-limits';
 import {
   MAX_QUESTION_LENGTH,
   openQuestionKind,
+  prohibitsAi,
   type OpenQuestion,
 } from './open-question';
 
@@ -593,10 +595,16 @@ function openQuestionOf(
   ) {
     return null;
   }
+  // A prohibition counts only when it sits with this question: in its
+  // label, its own hints or its section, never elsewhere on the page.
+  const section = element.closest(SECTIONS)?.textContent ?? '';
   return {
     kind,
     question: label.trim().slice(0, MAX_QUESTION_LENGTH),
     limits,
+    aiProhibited: prohibitsAi(
+      `${label} | ${hints} | ${placeholder} | ${section.slice(0, 4000)}`,
+    ),
   };
 }
 
