@@ -22,7 +22,14 @@ export interface OpenProfileMessage {
   section?: ProfileSection;
 }
 
-export type ProfileSection = 'answers' | 'diversity';
+export const PROFILE_SECTIONS = [
+  'answers',
+  'skills',
+  'diversity',
+  'ai',
+] as const;
+
+export type ProfileSection = (typeof PROFILE_SECTIONS)[number];
 
 export const OPEN_PROFILE: OpenProfileMessage = {
   type: 'applykit:open-profile',
@@ -106,9 +113,7 @@ export function isOpenProfileMessage(
 ): message is OpenProfileMessage {
   if (!hasType(message, OPEN_PROFILE.type)) return false;
   const { section } = message as { section?: unknown };
-  return (
-    section === undefined || section === 'answers' || section === 'diversity'
-  );
+  return section === undefined || oneOf(PROFILE_SECTIONS, section);
 }
 
 export function isGetAutofillValuesMessage(

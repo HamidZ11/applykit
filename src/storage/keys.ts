@@ -47,3 +47,9 @@ export const AI_SETTINGS_KEY = 'local:aiSettings';
 
 /** Today's AI request count and reported token usage, for the daily limit. */
 export const AI_USAGE_KEY = 'local:aiUsage';
+
+/** Technical skills and project summaries, apart from the profile. */
+export const SKILLS_KEY = 'local:skillsProjects';
+
+/** Every unreadable copy of the skills and projects, oldest first. */
+export const SKILLS_BACKUP_KEY = 'local:skillsProjectsBackup';

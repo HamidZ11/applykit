@@ -15,6 +15,7 @@ import {
   isGetPanelSettingsMessage,
   isOpenProfileMessage,
   isResolveDiversityMessage,
+  type ProfileSection,
 } from '@/messages';
 import {
   browserCredentialStore,
@@ -30,6 +31,14 @@ import { browserAnswersStore } from '@/storage/answers-store';
 import { loadAutofillValues } from '@/storage/autofill-source';
 import { browserProfileStore } from '@/storage/profile-store';
 import { browserSettingsStore } from '@/storage/settings-store';
+
+/** Fixed addresses: the panel names a section, never a URL. */
+const SECTION_HASH: Record<ProfileSection, string> = {
+  answers: 'answers',
+  skills: 'skills',
+  diversity: 'diversity',
+  ai: 'ai',
+};
 
 export default defineBackground(() => {
   // The profile is only read here and by the profile page. Content scripts
@@ -99,7 +108,7 @@ export default defineBackground(() => {
         // Each section is a fixed address; a page cannot choose it.
         const opened = message.section
           ? browser.tabs.create({
-              url: `${browser.runtime.getURL('/options.html')}#${message.section === 'answers' ? 'answers' : 'diversity'}`,
+              url: `${browser.runtime.getURL('/options.html')}#${SECTION_HASH[message.section]}`,
             })
           : browser.runtime.openOptionsPage();
         opened.then(

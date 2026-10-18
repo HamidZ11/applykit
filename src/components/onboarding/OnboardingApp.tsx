@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Sparkles,
   UsersRound,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -37,6 +38,9 @@ import type { SettingsStore } from '@/storage/settings-store';
 import type { AiSettingsClient } from '@/ai/settings-client';
 import { AiSettingsView } from './AiSettingsView';
 import { AnswersView, type AnswerDrafts } from './AnswersView';
+import { SkillsProjectsView } from './SkillsProjectsView';
+import type { SkillsProjects } from '@/domain/skills-projects';
+import type { SkillsStore } from '@/storage/skills-store';
 import { CvImport } from './CvImport';
 import { DiagnosticsSetting } from './DiagnosticsSetting';
 import { DiversityView } from './DiversityView';
@@ -102,7 +106,7 @@ const systemClock = () => new Date();
  * Sections of the page saved apart from the profile, each with its own
  * address so the panel can link straight to it.
  */
-type Section = 'answers' | 'diversity' | 'ai';
+type Section = 'answers' | 'skills' | 'diversity' | 'ai';
 
 const SECTIONS: readonly {
   section: Section;
@@ -115,6 +119,12 @@ const SECTIONS: readonly {
     label: 'Application answers',
     short: 'Answers',
     icon: MessageSquareText,
+  },
+  {
+    section: 'skills',
+    label: 'Skills & projects',
+    short: 'Skills',
+    icon: Wrench,
   },
   {
     section: 'diversity',
@@ -136,6 +146,8 @@ interface OnboardingAppProps {
   settingsStore?: SettingsStore;
   /** Saved diversity preferences; injectable for tests. */
   diversityStore?: DiversityStore;
+  /** Saved skills and projects; injectable for tests. */
+  skillsStore?: SkillsStore;
   /** The AI settings' connection to the background; injectable for tests. */
   aiClient?: AiSettingsClient;
   /** Reads a CV file; injectable for tests. */
@@ -157,6 +169,7 @@ export function OnboardingApp({
   answersStore = browserAnswersStore,
   settingsStore,
   diversityStore,
+  skillsStore,
   aiClient,
   readCvFile = readCv,
   now = systemClock,
@@ -182,10 +195,14 @@ export function OnboardingApp({
   const [diversityDraft, setDiversityDraft] = useState<DiversityAnswers | null>(
     null,
   );
+  /** Unsaved skills and projects, kept while the user moves around the page. */
+  const [skillsDraft, setSkillsDraft] = useState<SkillsProjects | null>(null);
   /** Unsaved answer edits, kept while the user moves around the page. */
   const [answerDrafts, setAnswerDrafts] = useState<AnswerDrafts>({});
   const answersDirty =
-    Object.keys(answerDrafts).length > 0 || diversityDraft !== null;
+    Object.keys(answerDrafts).length > 0 ||
+    diversityDraft !== null ||
+    skillsDraft !== null;
   useEffect(() => {
     if (!answersDirty) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -399,6 +416,23 @@ export function OnboardingApp({
           <AiSettingsView
             {...(aiClient ? { client: aiClient } : {})}
             heading={heading}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  if (section === 'skills') {
+    return (
+      <div className="min-h-screen bg-canvas text-ink md:grid md:grid-cols-[248px_minmax(0,1fr)]">
+        {rail}
+        <main ref={main} className="flex min-h-screen flex-col">
+          <SkillsProjectsView
+            {...(skillsStore ? { store: skillsStore } : {})}
+            now={now}
+            heading={heading}
+            draft={skillsDraft}
+            onDraftChange={setSkillsDraft}
           />
         </main>
       </div>
