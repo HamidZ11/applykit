@@ -5,17 +5,13 @@ import {
   isEducationField,
   type AutofillValues,
   type CountryValue,
+  type EducationValue,
   type PhoneParts,
 } from './fields';
 import { comparable, isPlaceholderOption, usableOptions } from './options';
 import { suggestionFor, type Suggestion } from './suggestion';
-import {
-  chooseRecords,
-  planEducation,
-  type Planned,
-  type RecordChoice,
-  type SectionChoices,
-} from './plan-education';
+import { chooseRecords, planEducation } from './plan-education';
+import type { Planned, RecordChoice, SectionChoices } from './records';
 import {
   isControlField,
   isFormControl,
@@ -129,7 +125,7 @@ interface FormContext {
    */
   splitPhone: boolean;
   /** The saved record each education field would be filled from. */
-  education: Map<ScannedField, RecordChoice>;
+  education: Map<ScannedField, RecordChoice<EducationValue>>;
   now: Date;
 }
 

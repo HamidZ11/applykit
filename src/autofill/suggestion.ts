@@ -7,7 +7,7 @@ import {
   type EducationField,
   type EducationValue,
 } from './fields';
-import type { RecordChoice } from './plan-education';
+import type { RecordChoice } from './records';
 import type { ScannedField } from './scan';
 
 /**
@@ -22,18 +22,6 @@ export type Suggestion =
   /** Several saved values could apply; the user decides. */
   | { kind: 'ambiguous'; reason: string };
 
-/** The education field a field asks for, matched or custom. */
-export function educationTargetOf(field: ScannedField): EducationField | null {
-  const { support } = field;
-  const target =
-    support.status === 'match'
-      ? support.field
-      : support.status === 'unsupported'
-        ? (support.custom?.field ?? null)
-        : null;
-  return target && isEducationField(target) ? target : null;
-}
-
 /**
  * The saved value for `target`, by the same rules as autofill: the
  * preferred name only if saved or chosen, the phone's parts only when it
@@ -43,7 +31,7 @@ export function suggestionFor(
   field: ScannedField,
   target: AutofillField,
   values: AutofillValues,
-  education: RecordChoice | undefined,
+  education: RecordChoice<EducationValue> | undefined,
   now: Date,
 ): Suggestion {
   if (isEducationField(target)) {

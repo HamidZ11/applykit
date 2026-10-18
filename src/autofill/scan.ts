@@ -78,6 +78,17 @@ export function isControlField(field: ScannedField): field is ControlField {
   return isFormControl(field.element);
 }
 
+/**
+ * The profile field a field asks for: matched for filling, or seen on a
+ * control ApplyKit only guides (a custom dropdown, a checkbox).
+ */
+export function fieldTarget(field: ScannedField): AutofillField | null {
+  const { support } = field;
+  if (support.status === 'match') return support.field;
+  if (support.status === 'unsupported') return support.custom?.field ?? null;
+  return null;
+}
+
 export interface ScannedField {
   element: FieldElement;
   /** Human-readable question, taken from the page's own labels. */

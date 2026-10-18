@@ -1,11 +1,4 @@
-import {
-  currentMonthIndex,
-  dateFormatOf,
-  formatYearMonth,
-  isMonthOption,
-  monthIndex,
-  parseYearMonth,
-} from './dates';
+import { currentMonthIndex, monthIndex, parseYearMonth } from './dates';
 import { normalise } from './detect';
 import {
   gradeType,
@@ -14,10 +7,20 @@ import {
   requestedLevel,
   type EducationLevel,
 } from './education';
-import { type EducationField, type EducationValue } from './fields';
-import { comparable, exactOptions, usableOptions } from './options';
-import type { ControlField, ScannedField } from './scan';
-import { educationTargetOf } from './suggestion';
+import {
+  isEducationField,
+  type EducationField,
+  type EducationValue,
+} from './fields';
+import {
+  assignRecords,
+  planChoice,
+  planYearMonth,
+  type Planned,
+  type RecordChoice,
+  type SectionChoices,
+} from './records';
+import { fieldTarget, type ControlField, type ScannedField } from './scan';
 
 /**
  * Education planning: which saved record a form's education fields are
@@ -29,31 +32,6 @@ import { educationTargetOf } from './suggestion';
  * fitting record is used; with several, the fields are left for the user
  * to review. Nothing is chosen by recency or by "highest" qualification.
  */
-
-export type Planned =
-  | { display: string; fillValue: string; note?: string; chosen?: boolean }
-  | {
-      status: 'no-value' | 'no-option' | 'unusable' | 'ambiguous' | 'manual';
-      reason: string;
-      /** For `ambiguous`: the ids of the records that could fit. */
-      candidates?: string[];
-    };
-
-export type RecordChoice =
-  | {
-      record: EducationValue;
-      note: string | null;
-      /** The user chose this record for the field's section. */
-      chosen: boolean;
-    }
-  | { status: 'no-value'; reason: string }
-  | { status: 'ambiguous'; reason: string; candidates: string[] };
-
-/**
- * Records the user explicitly chose, by section (`ScannedField.group`).
- * Only for this page and this panel: never saved to the profile.
- */
-export type SectionChoices = ReadonlyMap<Element | null, string>;
 
 /**
  * The record each education field of the form would be filled from.
@@ -67,7 +45,7 @@ export function chooseRecords(
   fields: readonly ScannedField[],
   records: readonly EducationValue[],
   sectionChoices: SectionChoices = new Map(),
-): Map<ScannedField, RecordChoice> {
+): Map<ScannedField, RecordChoice<EducationValue>> {
   // Custom dropdowns count too: they shape what a section asks about, and
   // their guidance comes from the same record.
   const education = fields.filter((field) => educationTargetOf(field) !== null);
@@ -84,51 +62,37 @@ export function chooseRecords(
     sectionLevels.set(field.group, levels);
   }
 
-  const choices = new Map<ScannedField, RecordChoice>();
-  // The section each record first fills. One saved degree is not also the
-  // answer to "Education 2" just because it is the only one that fits.
-  const usedIn = new Map<string, Element | null>();
-  for (const field of education) {
-    const section = [...(sectionLevels.get(field.group) ?? [])];
-    const level =
-      requestedLevel(normalise(field.label)) ??
-      (section.length === 1 ? (section[0] ?? null) : null);
-    const choice = choose(records, level);
-    const chosenId = sectionChoices.get(field.group);
-    const chosen =
-      'candidates' in choice && chosenId !== undefined
-        ? records.find(
-            (r) => r.id === chosenId && choice.candidates.includes(r.id),
-          )
-        : undefined;
-    const resolved: RecordChoice = chosen
-      ? {
-          record: chosen,
-          note: `From ${chosen.qualification} at ${chosen.institution}, which you chose for this section.`,
-          chosen: true,
-        }
-      : choice;
-    if ('record' in resolved) {
-      const firstSection = usedIn.get(resolved.record.id);
-      if (firstSection === undefined) {
-        usedIn.set(resolved.record.id, field.group);
-      } else if (firstSection !== field.group && !resolved.chosen) {
-        choices.set(field, {
-          status: 'no-value',
-          reason: `Your saved ${resolved.record.qualification} at ${resolved.record.institution} already fills an earlier education section of this form, so ApplyKit does not repeat it here.`,
-        });
-        continue;
-      }
-    }
-    choices.set(field, resolved);
-  }
-  return choices;
+  return assignRecords(
+    education,
+    records,
+    sectionChoices,
+    EDUCATION_TOPIC,
+    (field) => {
+      const section = [...(sectionLevels.get(field.group) ?? [])];
+      const level =
+        requestedLevel(normalise(field.label)) ??
+        (section.length === 1 ? (section[0] ?? null) : null);
+      return choose(records, level);
+    },
+  );
+}
+
+const EDUCATION_TOPIC = {
+  name: 'education',
+  describe: (record: EducationValue) =>
+    `${record.qualification} at ${record.institution}`,
+};
+
+/** The education field a field asks for, matched or custom. */
+export function educationTargetOf(field: ScannedField): EducationField | null {
+  const target = fieldTarget(field);
+  return target && isEducationField(target) ? target : null;
 }
 
 function choose(
   records: readonly EducationValue[],
   level: EducationLevel | null,
-): RecordChoice {
+): RecordChoice<EducationValue> {
   if (records.length === 0) {
     return {
       status: 'no-value',
@@ -188,44 +152,6 @@ export function planEducation(
     case 'educationEnd':
       return planDate(field, record.endDate, endKind(field.label), now);
   }
-}
-
-/**
- * Text fields get the saved text. Selects get the one option with exactly
- * that text, or else the one option `equivalent` accepts (e.g. "Bachelor's
- * degree" for "BSc"). Never the nearest-looking option.
- */
-function planChoice(
-  field: ControlField,
-  value: string,
-  equivalent: ((optionText: string) => boolean) | null,
-): Planned {
-  const saved = value.trim();
-  if (saved === '') {
-    return {
-      status: 'no-value',
-      reason: 'Your saved record has no value for this.',
-    };
-  }
-  const { element } = field;
-  if (!(element instanceof HTMLSelectElement)) {
-    return { display: saved, fillValue: saved };
-  }
-  let matching = exactOptions(element, saved);
-  if (matching.length === 0 && equivalent) {
-    matching = usableOptions(element).filter((o) => equivalent(o.text));
-  }
-  const [only] = matching;
-  if (matching.length === 1 && only) {
-    return { display: only.text.trim(), fillValue: only.value };
-  }
-  return {
-    status: 'no-option',
-    reason:
-      matching.length === 0
-        ? `None of the options matches “${saved}”.`
-        : `Several options could mean “${saved}”, so ApplyKit leaves it to you.`,
-  };
 }
 
 function planGrade(
@@ -293,52 +219,5 @@ function planDate(
   const note =
     future && kind !== 'start' ? 'Your expected graduation date.' : undefined;
 
-  const { element } = field;
-  const format = dateFormatOf(element, field.label);
-  switch (format.kind) {
-    case 'needs-day':
-      return {
-        status: 'unusable',
-        reason:
-          'This asks for a full date, but your profile saves only the month and year. ApplyKit does not invent a day.',
-      };
-    case 'unknown':
-      return {
-        status: 'unusable',
-        reason: 'ApplyKit cannot tell which date format this field expects.',
-      };
-    case 'month':
-    case 'year': {
-      if (!(element instanceof HTMLSelectElement)) {
-        const text = format.kind === 'year' ? value.year : value.month;
-        return { display: text, fillValue: text, ...(note ? { note } : {}) };
-      }
-      const matching = usableOptions(element).filter((option) =>
-        format.kind === 'year'
-          ? comparable(option.text) === value.year ||
-            comparable(option.value) === value.year
-          : isMonthOption(option.text, value.month) ||
-            isMonthOption(option.value, value.month),
-      );
-      const [only] = matching;
-      if (matching.length === 1 && only) {
-        return {
-          display: only.text.trim(),
-          fillValue: only.value,
-          ...(note ? { note } : {}),
-        };
-      }
-      return {
-        status: 'no-option',
-        reason: `None of the options is exactly ${
-          format.kind === 'year' ? value.year : 'your month'
-        }.`,
-      };
-    }
-    case 'iso-month':
-    case 'text': {
-      const text = formatYearMonth(value, format);
-      return { display: text, fillValue: text, ...(note ? { note } : {}) };
-    }
-  }
+  return planYearMonth(field, value, note);
 }
