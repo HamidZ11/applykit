@@ -28,6 +28,13 @@ only in composition and interaction.
   the current selection/locator. Muted green for filled, amber for "not
   recognised", neutral for the user's own entries and unsupported fields.
   Every status has a label, never colour alone.
+- Actions, three levels (added after manual testing showed text-only
+  actions were missed): primary, filled cobalt, commits something ("Fill 5
+  fields", Autofill); secondary, a white button with a hairline border,
+  starts something ("Choose a saved record", "Go to field", "Edit your
+  profile", rescan), compact (28 px) inside a field's detail; tertiary,
+  plain text, dismisses ("Cancel"). Explanations and statuses are never
+  styled as actions.
 - Status glyphs: filled ✓, will fill ●, your entry ✎, not recognised ?,
   not supported yet ○ (an empty ring: not an error, just not done).
 - Motion: 180 ms entrance, 120 ms exit, fades for state changes, a brief
