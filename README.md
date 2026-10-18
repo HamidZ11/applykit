@@ -268,8 +268,9 @@ Limitations:
   Answers saved by a
   newer version of ApplyKit are kept but can only be edited there.
 - Diversity answers fill only native lists: radio buttons, multiple
-  selects and custom dropdowns are left to you, and Male/Female lists are
-  never used for gender identity. Recognition is English-only and limited
+  selects and custom dropdowns are left to you. A gender list with Male
+  and Female fits a saved Man or Woman only, and never when the question
+  or its options mention sex, birth or legal records. Recognition is English-only and limited
   to exact UK wordings; age, caring responsibilities and socio-economic
   background are not covered.
 - Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday

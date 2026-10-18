@@ -663,7 +663,11 @@ export function detectControl(control: DetectableControl): Detection {
   // section that is not a declaration or about someone else, is matched so
   // that a user who turned on reuse can have it filled (ADR 0018). Every
   // other sensitive question stays the user's alone.
-  const monitoring = monitoringQuestion(questions, `${context} ${heading}`);
+  const monitoring = monitoringQuestion(
+    questions,
+    `${context} ${heading}`,
+    () => genderContext(control, heading),
+  );
   if (monitoring) {
     return {
       kind: 'match',
@@ -920,17 +924,28 @@ function matchEducation(text: string, inEducation: boolean): EducationField[] {
 const SOMEONE_ELSE =
   /\b(?:references?|referees?|emergency|next of kin|guardian|parents?|spouse|partner|children|child|dependants?|dependents?|family|relatives?|contact person)\b/;
 
+const MONITORING_HINT =
+  /\(\s*(?:optional|required|(?:please )?(?:select|choose|tick) (?:one|all that apply)|as defined (?:by|in|under) the equality act(?: 2010)?)\s*\)/gi;
+
+/**
+ * Wording that makes a gender question about sex or official records
+ * ("Sex and gender", "as shown on your passport"): the user answers it.
+ * Narrow phrases only, as general monitoring notices ("kept separately
+ * from your records", "we are legally required to ask") are common.
+ */
+const SEX_QUALIFIER =
+  /\b(?:sex|sexes|legal (?:sex|gender|status)|legally (?:recorded|registered)|birth|born|assigned|registered|biological|passport|certificate|official (?:documents?|records?|identification)|as (?:shown|stated|recorded|it appears) (?:on|in))\b/;
+
 /**
  * The one supported monitoring question the control's question asks, if
  * its whole wording is one, from a label or legend (never a placeholder or
  * a technical name), outside declarations and other people's sections.
+ * A gender question is not one if `genderContext` qualifies it.
  */
-const MONITORING_HINT =
-  /\(\s*(?:optional|required|(?:please )?(?:select|choose|tick) (?:one|all that apply)|as defined (?:by|in|under) the equality act(?: 2010)?)\s*\)/gi;
-
 function monitoringQuestion(
   questions: { signal: Signal; raw: string; core: string }[],
   surroundings: string,
+  genderContext: () => string,
 ): { category: DiversityCategory; signal: Signal; raw: string } | null {
   if (CONSENT.test(surroundings) || SOMEONE_ELSE.test(surroundings)) {
     return null;
@@ -945,9 +960,58 @@ function monitoringQuestion(
       return category ? [{ category, signal: q.signal, raw: q.raw }] : [];
     });
   const [first] = found;
-  return first && found.every((f) => f.category === first.category)
-    ? first
-    : null;
+  if (!first || !found.every((f) => f.category === first.category)) {
+    return null;
+  }
+  return first.category === 'gender' && SEX_QUALIFIER.test(genderContext())
+    ? null
+    : first;
+}
+
+const CONTROLS = 'input:not([type="hidden"]), select, textarea';
+
+/**
+ * Everything near a gender question that could say it asks about sex:
+ * its own group and heading, its description (`aria-describedby`,
+ * `aria-description`, `title`), the text around it that belongs to no
+ * other field, and every option, including a list's placeholder ("Please
+ * select your legal sex").
+ */
+function genderContext(control: DetectableControl, heading: string): string {
+  const root = control.getRootNode();
+  const byId = (id: string) =>
+    root instanceof Document || root instanceof ShadowRoot
+      ? root.getElementById(id)
+      : control.ownerDocument.getElementById(id);
+  const described = (control.getAttribute('aria-describedby') ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((id) => byId(id)?.textContent ?? '');
+  // The largest wrapper holding no other field: its hints are this one's.
+  let wrapper: Element = control;
+  for (
+    let node = control.parentElement;
+    node && !node.matches(`form, ${SECTIONS}`);
+    node = node.parentElement
+  ) {
+    if (node.querySelectorAll(CONTROLS).length > 1) break;
+    wrapper = node;
+  }
+  const options =
+    control instanceof HTMLSelectElement
+      ? [...control.options].map((o) => o.text)
+      : [];
+  return normalise(
+    [
+      groupName(control.closest(SECTIONS)),
+      heading,
+      ...described,
+      control.getAttribute('aria-description') ?? '',
+      control.getAttribute('title') ?? '',
+      wrapper === control ? '' : wrapper.textContent,
+      ...options,
+    ].join(' | '),
+  );
 }
 
 /**

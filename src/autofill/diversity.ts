@@ -63,7 +63,7 @@ const PNTS = [
 
 /** What each saved choice may be called on a form, compared as plain words. */
 const NAMES: Record<string, readonly string[]> = {
-  // Gender identity. Male and Female describe sex, a different question.
+  // Gender identity; Male and Female only through `PLAIN_SEX_NAME`.
   woman: ['woman', 'woman including trans woman'],
   man: ['man', 'man including trans man'],
   'non-binary': ['non binary', 'nonbinary'],
@@ -130,6 +130,16 @@ const NAMES: Record<string, readonly string[]> = {
   'other-ethnic': ['any other ethnic group'],
 };
 
+/**
+ * Many forms ask "What is your gender?" with Male and Female. For a user
+ * who saved Man or Woman these say the same, so they match, but only in
+ * a list that says nothing about sex (no "Intersex", "Sex assigned at
+ * birth" options): the question itself was already checked to be about
+ * gender alone. Never for any other saved answer.
+ */
+const PLAIN_SEX_NAME: Record<string, string> = { man: 'male', woman: 'female' };
+const SEX_OPTION = /\b(?:intersex|sex|birth|born|assigned|legal|biological)\b/;
+
 /** What each broad ethnic group may be called on a form. */
 const GROUP_NAMES: Record<string, readonly string[]> = {
   asian: ['asian or asian british', 'asian british', 'asian'],
@@ -188,6 +198,14 @@ export function matchDiversityOption(
   options: readonly OptionChoice[],
 ): OptionMatch {
   const names = new Set(namesFor(category, saved));
+  const plain = PLAIN_SEX_NAME[saved];
+  if (
+    category === 'gender' &&
+    plain &&
+    !options.some((o) => SEX_OPTION.test(comparable(o.text)))
+  ) {
+    names.add(plain);
+  }
   const exact = options.filter((o) => names.has(comparable(o.text)));
   const [only] = exact;
   if (exact.length === 1 && only) return { value: only.value };

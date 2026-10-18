@@ -37,6 +37,10 @@ describe('diversityQuestion', () => {
 
   it.each([
     'What is your sex?',
+    'What is your legal sex?',
+    'Sex assigned at birth',
+    'Sex as shown on your birth certificate',
+    'Gender and sex',
     'Is the gender you identify with the same as your sex registered at birth?',
     'Do you consider yourself to have a disability or long-term health condition?',
     'Do you require any reasonable adjustments?',
@@ -83,12 +87,44 @@ describe('matchDiversityOption', () => {
     ).toEqual({ value: 'v2' });
   });
 
-  it('never treats gender identity as sex', () => {
+  it('takes Male and Female for a saved Man and Woman in a plain list', () => {
+    const offered = options('Select…', 'Male', 'Female');
+    expect(matchDiversityOption('gender', 'man', offered)).toEqual({
+      value: 'v1',
+    });
+    expect(matchDiversityOption('gender', 'woman', offered)).toEqual({
+      value: 'v2',
+    });
+  });
+
+  it('never takes Male or Female for any other answer or category', () => {
+    const offered = options('Male', 'Female', 'Other', 'Prefer not to say');
+    expect(matchDiversityOption('gender', 'non-binary', offered)).toEqual({
+      reason: 'no-option',
+    });
+    expect(matchDiversityOption('sexualOrientation', 'other', offered)).toEqual(
+      { reason: 'no-option' },
+    );
+  });
+
+  it('leaves Male and Female next to options about sex', () => {
+    for (const offered of [
+      options('Male', 'Female', 'Intersex'),
+      options('Male (assigned at birth)', 'Female (assigned at birth)'),
+      options('Male', 'Female', 'Prefer not to state my legal sex'),
+    ]) {
+      expect(matchDiversityOption('gender', 'man', offered)).toEqual({
+        reason: 'no-option',
+      });
+    }
+  });
+
+  it('never chooses when both Man and Male are offered', () => {
     expect(
       matchDiversityOption(
         'gender',
-        'woman',
-        options('Female', 'Male', 'Prefer not to say'),
+        'man',
+        options('Man', 'Male', 'Woman', 'Female'),
       ),
     ).toEqual({ reason: 'no-option' });
   });
@@ -320,7 +356,7 @@ describe('monitoring questions on a form', () => {
       status: 'filled',
       value: null,
     });
-    // Male and Female describe sex, not the saved gender identity.
+    // Male and Female do not say the saved Non-binary.
     expect(select('gender').value).toBe('');
     expect(byId(outcomes, 'gender')).toMatchObject({
       status: 'no-option',
@@ -534,6 +570,162 @@ describe('monitoring questions on a form', () => {
       <option>No</option><option>Prefer not to say</option></select></form>`;
 
     expect(byId(plan(), 'q').target).toBe(target);
+  });
+
+  describe('Male and Female for a saved Man or Woman', () => {
+    const LIST = `<option value="">Select…</option>
+      <option value="m">Male</option><option value="f">Female</option>`;
+
+    function form(question: string, extra = '') {
+      document.body.innerHTML = `<form>${extra}<label for="g">${question}</label>
+        <select id="g">${LIST}</select></form>`;
+    }
+
+    async function autofillAs(gender: string, preferences = savedDiversity()) {
+      const saved = {
+        ...preferences,
+        answers: { ...preferences.answers, gender },
+      };
+      const status = { reuse: saved.reuse, saved: saved.reuse ? [...ALL] : [] };
+      return fillFields(
+        await withDiversityChoices(
+          plan(status),
+          resolver(saved).request,
+          listed(),
+        ),
+      );
+    }
+
+    it('fills Male for Man and Female for Woman', async () => {
+      form('What is your gender?');
+      expect(byId(await autofillAs('man'), 'g').status).toBe('filled');
+      expect(select('g').value).toBe('m');
+
+      form('What is your gender?');
+      await autofillAs('woman');
+      expect(select('g').value).toBe('f');
+    });
+
+    it('leaves the list for Non-binary', async () => {
+      form('What is your gender?');
+      expect(byId(await autofillAs('non-binary'), 'g').status).toBe(
+        'no-option',
+      );
+      expect(select('g').value).toBe('');
+    });
+
+    it('fills nothing with reuse off', async () => {
+      form('What is your gender?');
+      const outcomes = await autofillAs('man', {
+        ...savedDiversity(),
+        reuse: false,
+      });
+      expect(byId(outcomes, 'g').status).toBe('manual');
+      expect(select('g').value).toBe('');
+    });
+
+    it('keeps a choice already made', async () => {
+      form('What is your gender?');
+      select('g').value = 'f';
+      const outcomes = await autofillAs('man');
+      expect(byId(outcomes, 'g').status).toBe('keep');
+      expect(select('g').value).toBe('f');
+    });
+
+    it.each([
+      ['What is your legal sex?', ''],
+      ['Sex assigned at birth', ''],
+      ['Gender (as on your birth certificate)', ''],
+      ['Gender', '<legend>Sex and gender</legend>'],
+      ['Gender', '<legend>As shown on your passport</legend>'],
+    ])('never answers “%s” %s', async (question, legend) => {
+      document.body.innerHTML = `<form><fieldset>${legend}
+        <label for="g">${question}</label><select id="g">${LIST}</select>
+        </fieldset></form>`;
+
+      const outcomes = await autofillAs('man');
+
+      expect(byId(outcomes, 'g').target).toBeNull();
+      expect(select('g').value).toBe('');
+    });
+
+    it('never answers a gender question described as legal sex', async () => {
+      form(
+        'What is your gender?',
+        '<p id="hint">Enter your legal sex as on your passport.</p>',
+      );
+      select('g').setAttribute('aria-describedby', 'hint');
+
+      const outcomes = await autofillAs('man');
+
+      expect(byId(outcomes, 'g').target).toBeNull();
+      expect(select('g').value).toBe('');
+    });
+
+    it.each([
+      [
+        'a placeholder option',
+        `<label for="g">Gender</label><select id="g">
+          <option value="">Please select your legal sex</option>
+          <option value="m">Male</option><option value="f">Female</option></select>`,
+      ],
+      [
+        'a choose-style placeholder',
+        `<label for="g">Gender</label><select id="g">
+          <option value="">Select sex assigned at birth</option>
+          <option value="m">Male</option><option value="f">Female</option></select>`,
+      ],
+      [
+        'a title',
+        `<label for="g">Gender</label>
+          <select id="g" title="Legal sex as on your passport">${LIST}</select>`,
+      ],
+      [
+        'an aria-description',
+        `<label for="g">Gender</label>
+          <select id="g" aria-description="As recorded on your birth certificate">${LIST}</select>`,
+      ],
+      [
+        'a hint beside the field',
+        `<div><label for="g">Gender</label><select id="g">${LIST}</select>
+          <p class="hint">This must match your birth certificate.</p></div>
+          <div><label for="e">Email</label><input id="e" type="email"></div>`,
+      ],
+    ])('never answers a gender question qualified by %s', async (_, html) => {
+      document.body.innerHTML = `<form>${html}</form>`;
+
+      const outcomes = await autofillAs('man');
+
+      expect(byId(outcomes, 'g').target).toBeNull();
+      expect(select('g').value).toBe('');
+    });
+
+    it('fills despite common monitoring notices', async () => {
+      document.body.innerHTML = `<form>
+        <h2>Equal opportunities</h2>
+        <p>We are legally required to ask. Your answers are kept separately from your records.</p>
+        <fieldset><legend>About you</legend>
+          <div><label for="g">What is your gender?</label>
+            <select id="g">${LIST}<option value="p">Prefer not to say</option></select>
+            <p class="hint">Optional. Kept separately from your application records.</p></div>
+          <div><label for="e">Ethnicity</label><select id="e"></select></div>
+        </fieldset></form>`;
+
+      await autofillAs('woman');
+
+      expect(select('g').value).toBe('f');
+    });
+
+    it('leaves an ambiguous list unanswered', async () => {
+      document.body.innerHTML = `<form><label for="g">What is your gender?</label>
+        <select id="g">${LIST}<option value="i">Intersex</option></select></form>`;
+      expect(byId(await autofillAs('man'), 'g').status).toBe('no-option');
+
+      document.body.innerHTML = `<form><label for="g">What is your gender?</label>
+        <select id="g">${LIST}<option value="x">Man</option></select></form>`;
+      expect(byId(await autofillAs('man'), 'g').status).toBe('no-option');
+      expect(select('g').value).toBe('');
+    });
   });
 
   it('shows no saved answer in evidence', () => {

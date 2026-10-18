@@ -44,7 +44,8 @@ test('fills matching monitoring lists with reuse on', async ({
   await expect(page.locator('#first')).toHaveValue('Alex');
   await expect(page.locator('#ethnicity')).toHaveValue('e12');
   await expect(page.locator('#orientation')).toHaveValue('p');
-  // Male and Female describe sex; a choice already made is kept.
+  // Male and Female do not say the saved Non-binary; a choice already
+  // made is kept.
   await expect(page.locator('#gender')).toHaveValue('');
   await expect(page.locator('#religion')).toHaveValue('Prefer not to say');
   await expect(page.locator('input[name="disability"]:checked')).toHaveCount(0);

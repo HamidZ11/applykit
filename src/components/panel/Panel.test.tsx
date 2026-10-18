@@ -1824,7 +1824,7 @@ describe('diversity questions', () => {
     expect(chooseDiversity).toHaveBeenCalledTimes(1);
     expect(select('ethnicity').value).toBe('e12');
     expect(select('orientation').value).toBe('p');
-    // Male and Female describe sex, not the saved gender identity.
+    // Male and Female do not say the saved Non-binary.
     expect(select('gender').value).toBe('');
     // A choice already made on the page is kept.
     expect(select('religion').value).toBe('Prefer not to say');

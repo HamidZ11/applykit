@@ -59,8 +59,15 @@ than a few saved clicks. Some users want to answer them once.
   birth") stay sensitive and are skipped, as are questions about someone
   else or next to consent wording.
 - **Matching is exact.** One option must say exactly the saved answer
-  (known spellings and ONS group prefixes, compared as plain words). Male
-  and Female are never used for gender identity. "Other" means the
+  (known spellings and ONS group prefixes, compared as plain words).
+  "What is your gender?" lists often offer Male and Female: these match a
+  saved Man or Woman (never Non-binary or any other answer), only when no
+  option mentions sex, birth, legal or biological terms or intersex, and
+  only for a gender question whose own group, heading, description
+  (`aria-describedby`, `aria-description`, `title`), nearby hint text
+  belonging to no other field, and options (placeholder included) say
+  nothing about sex, birth, legal sex or official documents. A hint
+  shared with other fields and not linked to this one is not seen. "Other" means the
   category's own other. For ethnicity, a form listing only broad groups
   gets the saved category's group, since each category belongs to
   exactly one. Zero or several matches leave the field with "The choices
