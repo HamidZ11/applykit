@@ -7,7 +7,9 @@ import {
   Info,
   MessageSquareText,
   ShieldCheck,
+  Sparkles,
   UsersRound,
+  type LucideIcon,
 } from 'lucide-react';
 import {
   savedProfileIssues,
@@ -32,6 +34,8 @@ import {
 } from '@/components/ui/primitives';
 import { readCv, type CvFile, type CvReadResult } from '@/cv/read';
 import type { SettingsStore } from '@/storage/settings-store';
+import type { AiSettingsClient } from '@/ai/settings-client';
+import { AiSettingsView } from './AiSettingsView';
 import { AnswersView, type AnswerDrafts } from './AnswersView';
 import { CvImport } from './CvImport';
 import { DiagnosticsSetting } from './DiagnosticsSetting';
@@ -94,6 +98,37 @@ const STEP_COPY: Record<Step, { label: string; title: string; intro: string }> =
 
 const systemClock = () => new Date();
 
+/**
+ * Sections of the page saved apart from the profile, each with its own
+ * address so the panel can link straight to it.
+ */
+type Section = 'answers' | 'diversity' | 'ai';
+
+const SECTIONS: readonly {
+  section: Section;
+  label: string;
+  short: string;
+  icon: LucideIcon;
+}[] = [
+  {
+    section: 'answers',
+    label: 'Application answers',
+    short: 'Answers',
+    icon: MessageSquareText,
+  },
+  {
+    section: 'diversity',
+    label: 'Diversity & Inclusion',
+    short: 'Diversity',
+    icon: UsersRound,
+  },
+  { section: 'ai', label: 'AI Assistant', short: 'AI', icon: Sparkles },
+];
+
+function sectionFromHash(hash: string): Section | null {
+  return SECTIONS.find((s) => `#${s.section}` === hash)?.section ?? null;
+}
+
 interface OnboardingAppProps {
   store?: ProfileStore;
   answersStore?: AnswersStore;
@@ -101,6 +136,8 @@ interface OnboardingAppProps {
   settingsStore?: SettingsStore;
   /** Saved diversity preferences; injectable for tests. */
   diversityStore?: DiversityStore;
+  /** The AI settings' connection to the background; injectable for tests. */
+  aiClient?: AiSettingsClient;
   /** Reads a CV file; injectable for tests. */
   readCvFile?: (file: CvFile) => Promise<CvReadResult>;
   /** Clock for save timestamps; injectable for tests. */
@@ -120,6 +157,7 @@ export function OnboardingApp({
   answersStore = browserAnswersStore,
   settingsStore,
   diversityStore,
+  aiClient,
   readCvFile = readCv,
   now = systemClock,
 }: OnboardingAppProps) {
@@ -134,15 +172,11 @@ export function OnboardingApp({
   /** Showing the CV import screen instead of a step. */
   const [importing, setImporting] = useState(false);
   /**
-   * Showing the saved application answers instead of the profile; the
-   * panel links straight to them with "#answers".
+   * Showing a section saved apart from the profile instead of the profile;
+   * the panel links straight to one with its address ("#answers").
    */
-  const [answering, setAnswering] = useState(
-    () => window.location.hash === '#answers',
-  );
-  /** Showing the diversity preferences instead of the profile. */
-  const [diversifying, setDiversifying] = useState(
-    () => window.location.hash === '#diversity',
+  const [section, setSection] = useState<Section | null>(() =>
+    sectionFromHash(window.location.hash),
   );
   /** Unsaved diversity answers, kept while the user moves around the page. */
   const [diversityDraft, setDiversityDraft] = useState<DiversityAnswers | null>(
@@ -243,8 +277,7 @@ export function OnboardingApp({
   const go = (step: Step) => {
     pendingFocus.current = 'heading';
     setImporting(false);
-    setAnswering(false);
-    setDiversifying(false);
+    setSection(null);
     setImported(null);
     dispatch({ type: 'go', step });
   };
@@ -335,41 +368,44 @@ export function OnboardingApp({
     );
   }
 
-  const showAnswers = () => {
+  const showSection = (next: Section) => {
     pendingFocus.current = 'heading';
     setImporting(false);
     setImported(null);
-    setDiversifying(false);
-    setAnswering(true);
-  };
-  const showDiversity = () => {
-    pendingFocus.current = 'heading';
-    setImporting(false);
-    setImported(null);
-    setAnswering(false);
-    setDiversifying(true);
+    setSection(next);
   };
   const rail = (
     <StepRail
       state={state}
       editing={editing}
       importing={importing}
-      answering={answering}
-      diversifying={diversifying}
+      section={section}
       settingsStore={settingsStore}
       onGo={go}
       onImport={() => {
         setImported(null);
-        setAnswering(false);
-        setDiversifying(false);
+        setSection(null);
         setImporting(true);
       }}
-      onAnswers={showAnswers}
-      onDiversity={showDiversity}
+      onSection={showSection}
     />
   );
 
-  if (diversifying) {
+  if (section === 'ai') {
+    return (
+      <div className="min-h-screen bg-canvas text-ink md:grid md:grid-cols-[248px_minmax(0,1fr)]">
+        {rail}
+        <main ref={main} className="flex min-h-screen flex-col">
+          <AiSettingsView
+            {...(aiClient ? { client: aiClient } : {})}
+            heading={heading}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  if (section === 'diversity') {
     return (
       <div className="min-h-screen bg-canvas text-ink md:grid md:grid-cols-[248px_minmax(0,1fr)]">
         {rail}
@@ -388,7 +424,7 @@ export function OnboardingApp({
 
   // Answers are saved apart from the profile, so they can be edited
   // before a profile exists.
-  if (answering) {
+  if (section === 'answers') {
     return (
       <div className="min-h-screen bg-canvas text-ink md:grid md:grid-cols-[248px_minmax(0,1fr)]">
         {rail}
@@ -674,24 +710,20 @@ function StepRail({
   state,
   editing,
   importing,
-  answering,
-  diversifying,
+  section,
   settingsStore,
   onGo,
   onImport,
-  onAnswers,
-  onDiversity,
+  onSection,
 }: {
   state: OnboardingState;
   editing: boolean;
   importing: boolean;
-  answering: boolean;
-  diversifying: boolean;
+  section: Section | null;
   settingsStore: SettingsStore | undefined;
   onGo: (step: Step) => void;
   onImport: () => void;
-  onAnswers: () => void;
-  onDiversity: () => void;
+  onSection: (section: Section) => void;
 }) {
   const sectionsWithErrors = new Set(
     Object.keys(state.errors).map((key) => key.split('.')[0]),
@@ -719,10 +751,11 @@ function StepRail({
         <ol className="space-y-0.5">
           {STEPS.map((step, i) => {
             const current =
-              !importing && !answering && !diversifying && step === state.step;
+              !importing && section === null && step === state.step;
             const reachable = canVisit(state, step);
-            const section = step === 'review' ? null : STEP_SECTION[step];
-            const invalid = section !== null && sectionsWithErrors.has(section);
+            const errorKey = step === 'review' ? null : STEP_SECTION[step];
+            const invalid =
+              errorKey !== null && sectionsWithErrors.has(errorKey);
             const complete =
               !current && (editing || i < state.furthest) && step !== 'review';
             return (
@@ -773,44 +806,34 @@ function StepRail({
           <Icon icon={FileUp} size={14} className="shrink-0" />
           Import from CV
         </button>
-        <button
-          type="button"
-          onClick={onAnswers}
-          aria-current={answering ? 'page' : undefined}
-          className={`mt-0.5 flex h-8 w-full items-center gap-2.5 rounded-sm px-2 text-left transition-colors duration-100 ${
-            answering
-              ? 'bg-hover font-medium text-ink'
-              : 'text-ink-2 hover:bg-hover/70 hover:text-ink'
-          }`}
-        >
-          <Icon icon={MessageSquareText} size={14} className="shrink-0" />
-          Application answers
-        </button>
-        <button
-          type="button"
-          onClick={onDiversity}
-          aria-current={diversifying ? 'page' : undefined}
-          className={`mt-0.5 flex h-8 w-full items-center gap-2.5 rounded-sm px-2 text-left transition-colors duration-100 ${
-            diversifying
-              ? 'bg-hover font-medium text-ink'
-              : 'text-ink-2 hover:bg-hover/70 hover:text-ink'
-          }`}
-        >
-          <Icon icon={UsersRound} size={14} className="shrink-0" />
-          Diversity &amp; Inclusion
-        </button>
+        {SECTIONS.map((link) => (
+          <button
+            key={link.section}
+            type="button"
+            onClick={() => {
+              onSection(link.section);
+            }}
+            aria-current={section === link.section ? 'page' : undefined}
+            className={`mt-0.5 flex h-8 w-full items-center gap-2.5 rounded-sm px-2 text-left transition-colors duration-100 ${
+              section === link.section
+                ? 'bg-hover font-medium text-ink'
+                : 'text-ink-2 hover:bg-hover/70 hover:text-ink'
+            }`}
+          >
+            <Icon icon={link.icon} size={14} className="shrink-0" />
+            {link.label}
+          </button>
+        ))}
       </div>
 
       <p className="ml-auto text-xs text-ink-3 md:hidden">
-        {diversifying
-          ? 'Diversity & Inclusion'
-          : answering
-            ? 'Application answers'
-            : importing
-              ? 'Import from CV'
-              : STEP_COPY[state.step].label}
+        {section
+          ? SECTIONS.find((link) => link.section === section)?.label
+          : importing
+            ? 'Import from CV'
+            : STEP_COPY[state.step].label}
       </p>
-      {!importing && !answering && (
+      {!importing && section === null && (
         <button
           type="button"
           onClick={onImport}
@@ -819,24 +842,18 @@ function StepRail({
           Import CV
         </button>
       )}
-      {!answering && (
+      {SECTIONS.filter((link) => link.section !== section).map((link) => (
         <button
+          key={link.section}
           type="button"
-          onClick={onAnswers}
+          onClick={() => {
+            onSection(link.section);
+          }}
           className="text-xs font-medium text-accent md:hidden"
         >
-          Answers
+          {link.short}
         </button>
-      )}
-      {!diversifying && (
-        <button
-          type="button"
-          onClick={onDiversity}
-          className="text-xs font-medium text-accent md:hidden"
-        >
-          Diversity
-        </button>
-      )}
+      ))}
 
       <div className="hidden md:mt-auto md:block md:space-y-4">
         <DiagnosticsSetting
@@ -844,7 +861,8 @@ function StepRail({
         />
         <p className="flex items-start gap-2 px-2 text-xs text-ink-3">
           <Icon icon={ShieldCheck} size={14} className="mt-px shrink-0" />
-          Stored only in this browser. ApplyKit never uploads your profile.
+          Stored only in this browser. Nothing is sent anywhere unless you
+          choose to draft with AI.
         </p>
       </div>
     </aside>

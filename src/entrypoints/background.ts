@@ -1,11 +1,29 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
 import {
+  aiStatus,
+  connect,
+  disconnect,
+  type ConnectionDeps,
+} from '@/ai/connection';
+import { browserHostAccess } from '@/ai/host-access';
+import {
+  isAiConnectMessage,
+  isAiDisconnectMessage,
+  isAiStatusMessage,
   isGetAutofillValuesMessage,
   isGetPanelSettingsMessage,
   isOpenProfileMessage,
   isResolveDiversityMessage,
 } from '@/messages';
+import {
+  browserCredentialStore,
+  restrictSessionStorage,
+} from '@/storage/ai-credential';
+import {
+  browserAiSettingsStore,
+  browserAiUsageStore,
+} from '@/storage/ai-settings';
 import { resolveDiversity } from '@/storage/diversity-source';
 import { browserDiversityStore } from '@/storage/diversity-store';
 import { browserAnswersStore } from '@/storage/answers-store';
@@ -23,6 +41,26 @@ export default defineBackground(() => {
   void Promise.resolve()
     .then(() => local.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' }))
     .catch(() => undefined);
+  // The AI key is kept in session storage (ADR 0019).
+  void restrictSessionStorage(
+    (
+      browser.storage as {
+        session?: Parameters<typeof restrictSessionStorage>[0];
+      }
+    ).session,
+  );
+
+  const ai: ConnectionDeps = {
+    credentials: browserCredentialStore,
+    host: browserHostAccess,
+    settings: browserAiSettingsStore,
+    usage: browserAiUsageStore,
+    now: () => new Date(),
+  };
+  // Pages of ApplyKit itself, such as the profile page, as opposed to the
+  // panel's content script, whose sender URL is the web page's.
+  const extensionPage = (url: string | undefined) =>
+    url?.startsWith(browser.runtime.getURL('/')) ?? false;
 
   // Clicking the toolbar button grants temporary access to the current tab
   // (activeTab), which is the only way the panel is ever injected.
@@ -99,6 +137,24 @@ export default defineBackground(() => {
               results: message.requests.map(() => ({ reason: 'reuse-off' })),
             });
           });
+        return true; // The response is sent asynchronously.
+      }
+
+      // AI settings: only from ApplyKit's own pages, never the panel.
+      if (
+        isAiStatusMessage(message) ||
+        isAiConnectMessage(message) ||
+        isAiDisconnectMessage(message)
+      ) {
+        if (!extensionPage(sender.url)) return undefined;
+        const reply: Promise<unknown> = isAiConnectMessage(message)
+          ? connect(ai, message.key, message.remember)
+          : isAiDisconnectMessage(message)
+            ? disconnect(ai).then((ok) => ({ ok }))
+            : aiStatus(ai);
+        reply.then(sendResponse, () => {
+          sendResponse(null);
+        });
         return true; // The response is sent asynchronously.
       }
 

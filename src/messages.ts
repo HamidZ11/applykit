@@ -1,3 +1,5 @@
+import type { AiStatus, ConnectFailure } from '@/ai/connection';
+import { isModelChoice } from '@/ai/models';
 import { TEXT_FIELDS, type AutofillValues } from '@/autofill/fields';
 import {
   DIVERSITY_CATEGORIES,
@@ -352,4 +354,83 @@ export function isResolveDiversityResponse(
           oneOf(['reuse-off', 'not-saved', 'no-option'], r.reason)),
     )
   );
+}
+
+/*
+ * AI drafting settings (ADR 0019). Sent only by the profile page; the
+ * background ignores them from content scripts. The key travels once, to
+ * connect, and is never sent back.
+ */
+
+export const AI_STATUS_TYPE = 'applykit:ai-status';
+export const AI_CONNECT_TYPE = 'applykit:ai-connect';
+export const AI_DISCONNECT_TYPE = 'applykit:ai-disconnect';
+
+export interface AiConnectMessage {
+  type: typeof AI_CONNECT_TYPE;
+  key: string;
+  remember: boolean;
+}
+
+const MAX_KEY = 500;
+
+export function isAiStatusMessage(message: unknown): boolean {
+  return hasType(message, AI_STATUS_TYPE);
+}
+
+export function isAiDisconnectMessage(message: unknown): boolean {
+  return hasType(message, AI_DISCONNECT_TYPE);
+}
+
+export function isAiConnectMessage(
+  message: unknown,
+): message is AiConnectMessage {
+  if (!hasType(message, AI_CONNECT_TYPE)) return false;
+  const { key, remember } = message as { key?: unknown; remember?: unknown };
+  return (
+    typeof key === 'string' &&
+    key.length <= MAX_KEY &&
+    typeof remember === 'boolean'
+  );
+}
+
+const STATUS_KEYS = [
+  'connected',
+  'remembered',
+  'keyHint',
+  'permission',
+  'model',
+  'dailyLimit',
+  'requestsToday',
+  'estimatedCostToday',
+];
+
+export function isAiStatus(value: unknown): value is AiStatus {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.length === STATUS_KEYS.length &&
+    STATUS_KEYS.every((k) => keys.includes(k)) &&
+    typeof value.connected === 'boolean' &&
+    typeof value.remembered === 'boolean' &&
+    (value.keyHint === null ||
+      (typeof value.keyHint === 'string' && value.keyHint.length === 4)) &&
+    typeof value.permission === 'boolean' &&
+    isModelChoice(value.model) &&
+    typeof value.dailyLimit === 'number' &&
+    typeof value.requestsToday === 'number' &&
+    typeof value.estimatedCostToday === 'number'
+  );
+}
+
+export type AiConnectResponse =
+  { ok: true; status: AiStatus } | { ok: false; failure: ConnectFailure };
+
+export function isAiConnectResponse(
+  value: unknown,
+): value is AiConnectResponse {
+  if (!isRecord(value)) return false;
+  return value.ok === true
+    ? isAiStatus(value.status)
+    : value.ok === false && typeof value.failure === 'string';
 }

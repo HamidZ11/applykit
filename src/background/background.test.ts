@@ -25,7 +25,7 @@ beforeEach(() => {
 /** Only the parts of a sender the background reads. */
 function sender(
   id: string,
-  frame: { tab?: { id: number }; frameId?: number },
+  frame: { tab?: { id: number }; frameId?: number; url?: string },
 ): Browser.runtime.MessageSender {
   return { id, ...frame } as Browser.runtime.MessageSender;
 }
@@ -34,7 +34,7 @@ function sender(
 async function send(
   message: unknown,
   senderId = fakeBrowser.runtime.id,
-  frame: { tab?: { id: number }; frameId?: number } = {
+  frame: { tab?: { id: number }; frameId?: number; url?: string } = {
     tab: { id: 7 },
     frameId: 0,
   },
@@ -222,5 +222,54 @@ describe('background messages', () => {
 
   it('ignores unknown messages', async () => {
     expect(await send({ type: 'applykit:unknown' })).toBeUndefined();
+  });
+});
+
+describe('AI settings messages', () => {
+  const page = {
+    tab: { id: 3 },
+    frameId: 0,
+    url: fakeBrowser.runtime.getURL('/options.html'),
+  };
+  const panel = {
+    tab: { id: 7 },
+    frameId: 0,
+    url: 'https://jobs.example.com/apply',
+  };
+
+  it('answers the profile page with the status, never a key', async () => {
+    await fakeBrowser.storage.session.set({
+      aiCredential: 'sk-ant-test-not-a-real-key-0000000000',
+    });
+    Reflect.set(fakeBrowser.permissions, 'contains', () =>
+      Promise.resolve(true),
+    );
+
+    const reply = await send(
+      { type: 'applykit:ai-status' },
+      fakeBrowser.runtime.id,
+      page,
+    );
+
+    expect(reply).toMatchObject({ connected: true, keyHint: '0000' });
+    expect(JSON.stringify(reply)).not.toContain('sk-ant-');
+  });
+
+  it('ignores AI settings messages from the panel or other extensions', async () => {
+    const disconnect = { type: 'applykit:ai-disconnect' };
+    await fakeBrowser.storage.session.set({
+      aiCredential: 'sk-ant-test-not-a-real-key-0000000000',
+    });
+
+    expect(
+      await send({ type: 'applykit:ai-status' }, fakeBrowser.runtime.id, panel),
+    ).toBeUndefined();
+    expect(
+      await send(disconnect, fakeBrowser.runtime.id, panel),
+    ).toBeUndefined();
+    expect(await send(disconnect, 'another-extension', page)).toBeUndefined();
+    expect(
+      (await fakeBrowser.storage.session.get('aiCredential')).aiCredential,
+    ).toBe('sk-ant-test-not-a-real-key-0000000000');
   });
 });

@@ -1,5 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Check, CircleAlert, Info } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   CATEGORY_TITLE,
   CHOICES,
@@ -14,9 +13,9 @@ import {
   type DiversityLoadResult,
   type DiversityStore,
 } from '@/storage/diversity-store';
-import { Icon } from '@/components/ui/icons';
 import { GhostButton, PrimaryButton } from '@/components/ui/primitives';
 import { CONTROL, CONTROL_STATE, FieldGrid } from './fields';
+import { Banner, Notice, Problem, SectionShell } from './page-parts';
 
 /**
  * Optional answers to common equal-opportunities monitoring questions
@@ -27,6 +26,9 @@ import { CONTROL, CONTROL_STATE, FieldGrid } from './fields';
 
 const NEWER =
   'Your diversity preferences were saved by a newer version of ApplyKit, so this version cannot show or change them. They are kept exactly as they are. Update ApplyKit to edit them.';
+
+const INTRO =
+  'Save optional responses to common diversity questions so you don’t have to enter them repeatedly. Every answer is optional and stays in this browser. Employers offer different choices, so some questions will still need you.';
 
 const systemClock = () => new Date();
 
@@ -96,21 +98,38 @@ export function DiversityView({
     />
   );
 
-  if (load === null) return <Shell heading={headingRef}>{null}</Shell>;
+  if (load === null)
+    return (
+      <SectionShell
+        heading={headingRef}
+        title="Diversity & Inclusion"
+        intro={INTRO}
+      >
+        {null}
+      </SectionShell>
+    );
   if (load.status === 'unsupported') {
     // Unreadable here, but still the user's to delete.
     return (
-      <Shell heading={headingRef}>
+      <SectionShell
+        heading={headingRef}
+        title="Diversity & Inclusion"
+        intro={INTRO}
+      >
         <Banner tone="warning">{NEWER}</Banner>
         <div className="mt-6 flex justify-end">{clearControl}</div>
         {problem && <Problem>{problem}</Problem>}
         <Notice>{notice}</Notice>
-      </Shell>
+      </SectionShell>
     );
   }
   if (load.status === 'error') {
     return (
-      <Shell heading={headingRef}>
+      <SectionShell
+        heading={headingRef}
+        title="Diversity & Inclusion"
+        intro={INTRO}
+      >
         <Banner tone="danger">
           ApplyKit could not read your diversity preferences from this browser.
           Nothing was changed.{' '}
@@ -125,7 +144,7 @@ export function DiversityView({
             Try again
           </button>
         </Banner>
-      </Shell>
+      </SectionShell>
     );
   }
 
@@ -224,7 +243,11 @@ export function DiversityView({
   };
 
   return (
-    <Shell heading={headingRef}>
+    <SectionShell
+      heading={headingRef}
+      title="Diversity & Inclusion"
+      intro={INTRO}
+    >
       {damaged === 'all' && (
         <Banner tone="warning">
           Your saved preferences could not be read and are shown as not saved. A
@@ -319,7 +342,7 @@ export function DiversityView({
         </div>
         <Notice>{notice}</Notice>
       </form>
-    </Shell>
+    </SectionShell>
   );
 }
 
@@ -415,83 +438,5 @@ function ClearAll({
     >
       Clear all diversity preferences
     </GhostButton>
-  );
-}
-
-function Problem({ children }: { children: ReactNode }) {
-  return (
-    <p
-      role="alert"
-      className="mt-4 flex items-start gap-1.5 text-xs text-danger"
-    >
-      <Icon icon={CircleAlert} size={13} className="mt-px shrink-0" />
-      {children}
-    </p>
-  );
-}
-
-function Notice({ children }: { children: string }) {
-  return (
-    <p role="status" className="mt-3 min-h-5 text-xs text-ink-2">
-      {children && (
-        <span className="flex items-center gap-1.5">
-          <Icon icon={Check} size={14} className="text-success" />
-          {children}
-        </span>
-      )}
-    </p>
-  );
-}
-
-function Shell({
-  heading,
-  children,
-}: {
-  heading: React.RefObject<HTMLHeadingElement | null>;
-  children: ReactNode;
-}) {
-  return (
-    <div className="mx-auto w-full max-w-[640px] flex-1 px-5 pt-8 pb-16 md:px-10 md:pt-[clamp(32px,6vh,56px)]">
-      <h1
-        ref={heading}
-        tabIndex={-1}
-        className="text-xl font-medium tracking-[-0.01em] outline-none"
-      >
-        Diversity &amp; Inclusion
-      </h1>
-      <p className="mt-1 max-w-[56ch] text-ink-2">
-        Save optional responses to common diversity questions so you don’t have
-        to enter them repeatedly. Every answer is optional and stays in this
-        browser. Employers offer different choices, so some questions will still
-        need you.
-      </p>
-      {children}
-    </div>
-  );
-}
-
-function Banner({
-  tone,
-  children,
-}: {
-  tone: 'warning' | 'danger';
-  children: ReactNode;
-}) {
-  return (
-    <div
-      role="alert"
-      className={`mt-6 flex items-start gap-2.5 rounded-md px-3.5 py-3 text-sm ${
-        tone === 'danger'
-          ? 'bg-danger-soft text-danger'
-          : 'bg-warning-soft text-warning'
-      }`}
-    >
-      <Icon
-        icon={tone === 'danger' ? CircleAlert : Info}
-        size={16}
-        className="mt-px shrink-0"
-      />
-      <p>{children}</p>
-    </div>
   );
 }

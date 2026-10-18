@@ -41,3 +41,9 @@ export const AI_SESSION_KEY = 'session:aiCredential';
  * unencrypted. Never both at once.
  */
 export const AI_REMEMBERED_KEY = 'local:aiCredential';
+
+/** AI drafting preferences: model choice and daily request limit. */
+export const AI_SETTINGS_KEY = 'local:aiSettings';
+
+/** Today's AI request count and reported token usage, for the daily limit. */
+export const AI_USAGE_KEY = 'local:aiUsage';
