@@ -66,6 +66,13 @@ export interface PanelModel extends PanelState {
   autofill: () => void;
   rescan: () => void;
   expand: (filter?: FieldFilter) => void;
+  /**
+   * Opens the full list with the saved answers the user can use at the
+   * top, and focus on the first. Writes nothing.
+   */
+  reviewAnswers: () => void;
+  /** True once after `reviewAnswers`, for the list to move focus. */
+  takeAnswerFocus: () => boolean;
   collapse: () => void;
   setFilter: (filter: FieldFilter) => void;
   /** Selects a field, or clears the selection when it is already selected. */
@@ -294,6 +301,16 @@ export function usePanel(
   const expand = useCallback((filter?: FieldFilter) => {
     dispatch(filter ? { type: 'expand', filter } : { type: 'expand' });
   }, []);
+  const answerFocus = useRef(false);
+  const reviewAnswers = useCallback(() => {
+    answerFocus.current = true;
+    dispatch({ type: 'expand', filter: 'you' });
+  }, []);
+  const takeAnswerFocus = useCallback(() => {
+    const pending = answerFocus.current;
+    answerFocus.current = false;
+    return pending;
+  }, []);
   const collapse = useCallback(() => {
     dispatch({ type: 'collapse' });
   }, []);
@@ -333,6 +350,8 @@ export function usePanel(
     autofill,
     rescan,
     expand,
+    reviewAnswers,
+    takeAnswerFocus,
     collapse,
     setFilter,
     toggleSelect,

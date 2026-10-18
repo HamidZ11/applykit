@@ -22,6 +22,7 @@ import {
   gcseRecord,
   sampleValues,
 } from '@/test/autofill-fixtures';
+import { emptyAnswers } from '@/domain/application-answers';
 import { savedAnswers } from '@/test/answer-fixtures';
 import { loadFixture } from '@/test/load-fixture';
 import { Panel } from './Panel';
@@ -1083,6 +1084,21 @@ describe('saved application answers', () => {
     return element as HTMLInputElement;
   }
 
+  function useButtons(): HTMLButtonElement[] {
+    return [...host.querySelectorAll('button')].filter(
+      (b) => b.textContent.trim() === 'Use this answer',
+    );
+  }
+
+  /** The "Use this answer" button in the row whose button matches `row`. */
+  function useIn(row: RegExp): HTMLButtonElement | undefined {
+    return useButtons().find((b) =>
+      row.test(
+        b.closest('li')?.querySelector(':scope > button')?.textContent ?? '',
+      ),
+    );
+  }
+
   it('lists answer questions under Application questions, unfilled', () => {
     expect(dialog().textContent).toContain('Application questions');
     expect(button(/^Notice period in weeks/).textContent).toContain('4');
@@ -1114,9 +1130,11 @@ describe('saved application answers', () => {
   });
 
   it('fills one question after the user confirms it', async () => {
-    click(/^Notice period in weeks/);
+    expect(useButtons()).toHaveLength(4);
 
-    click('Use this answer');
+    act(() => {
+      useIn(/^Notice period in weeks/)?.click();
+    });
     await settle();
 
     expect(field('notice-weeks').value).toBe('4');
@@ -1127,9 +1145,13 @@ describe('saved application answers', () => {
     expect(announcement()).toBe(
       'Filled your saved answer. Nothing was submitted.',
     );
+    // One answer at a time: the others still wait for the user, and focus
+    // moves on to the next.
+    expect(useButtons()).toHaveLength(3);
+    expect(useIn(/^Notice period in weeks/)).toBeUndefined();
+    expect(document.activeElement).toBe(useIn(/^Earliest available start/));
+    click(/^Notice period in weeks/);
     expect(dialog().textContent).toContain('Filled · your choice');
-    expect(document.activeElement).toBe(button(/^Notice period in weeks/));
-    expect(findButton('Use this answer')).toBeUndefined();
   });
 
   it('writes nothing when the saved answer changed meanwhile', async () => {
@@ -1168,7 +1190,7 @@ describe('saved application answers', () => {
     expect(dialog().textContent).toContain(
       'Your saved salary is a yearly amount, but this asks for an hourly rate.',
     );
-    expect(findButton('Use this answer')).toBeUndefined();
+    expect(useIn(/^Expected hourly rate/)).toBeUndefined();
   });
 
   it('links questions without a saved answer to the answers editor', async () => {
@@ -1204,7 +1226,9 @@ describe('saved application answers', () => {
       'ApplyKit never chooses between radio buttons',
     );
     expect(dialog().textContent).toContain('From your saved answers');
-    expect(findButton('Use this answer')).toBeUndefined();
+    expect(
+      useIn(/^Would you consider relocating outside the UK/),
+    ).toBeUndefined();
   });
 
   it('keeps the compact mode free of answer actions', () => {
@@ -1212,6 +1236,116 @@ describe('saved application answers', () => {
 
     expect(findButton('Use this answer')).toBeUndefined();
     expect(dialog().textContent).not.toContain('£32,000');
+  });
+});
+
+describe('suggested answers in the compact panel', () => {
+  async function openWith(answers = savedAnswers()) {
+    loadFixture('reusable-answers.html');
+    document.body.append(host);
+    await open(ready(autofillValuesFrom(fullProfile(), answers)));
+  }
+
+  function line(): HTMLElement | null {
+    return host.querySelector('section[aria-label="Suggested answers"]');
+  }
+
+  function focusedUse(): string {
+    const focused = document.activeElement;
+    return focused?.textContent.trim() === 'Use this answer'
+      ? (focused.closest('li')?.querySelector(':scope > button')?.textContent ??
+          '')
+      : '';
+  }
+
+  it('counts only answers that fit a field that can take them', async () => {
+    await openWith();
+
+    // Four fit; ranges, other units, "after an offer", the entry already
+    // typed, radio buttons, custom dropdowns, the hourly rate and every
+    // sensitive or consent question are not counted.
+    expect(line()?.textContent).toBe(
+      'Suggested answers · 4 availableReview answers',
+    );
+  });
+
+  it('counts a single answer', async () => {
+    await openWith({
+      ...emptyAnswers(),
+      noticePeriod: { amount: 4, unit: 'weeks' },
+    });
+
+    expect(line()?.textContent).toContain('1 available');
+  });
+
+  it('shows nothing when no saved answer fits', async () => {
+    await openWith({
+      ...emptyAnswers(),
+      salary: { amount: 15, currency: 'EUR', period: 'hour' },
+    });
+
+    expect(line()).toBeNull();
+    expect(findButton('Review answers')).toBeUndefined();
+  });
+
+  it('opens the suggested answers, focused, without writing anything', async () => {
+    await openWith();
+
+    click('Review answers');
+    await settle();
+
+    expect(dialog().dataset.mode).toBe('expanded');
+    const sections = [...host.querySelectorAll('section[aria-label]')].map(
+      (section) => section.getAttribute('aria-label'),
+    );
+    expect(sections[0]).toBe('Suggested answers');
+    expect(focusedUse()).toMatch(/^Notice period in weeks/);
+    expect(fillFields).not.toHaveBeenCalled();
+    for (const id of ['notice-weeks', 'start-date', 'relocate-uk']) {
+      expect((document.getElementById(id) as HTMLInputElement).value).toBe('');
+    }
+  });
+
+  it('stays available after autofill, with the same count', async () => {
+    await openWith();
+
+    await autofill();
+
+    expect((document.getElementById('first') as HTMLInputElement).value).toBe(
+      'Alex',
+    );
+    expect(line()?.textContent).toContain('4 available');
+    click('Review answers');
+    await settle();
+    expect(focusedUse()).toMatch(/^Notice period in weeks/);
+  });
+
+  it('updates the count after an answer is used and after a rescan', async () => {
+    await openWith();
+    click('Review answers');
+    await settle();
+
+    act(() => {
+      (document.activeElement as HTMLButtonElement).click();
+    });
+    await settle();
+    click('Show summary');
+    expect(line()?.textContent).toContain('3 available');
+
+    (document.getElementById('salary-annual') as HTMLInputElement).value =
+      'Typed';
+    click('Rescan the page');
+    await settle();
+    // The filled answer and the typed one are no longer suggestions.
+    expect(line()?.textContent).toContain('2 available');
+  });
+
+  it('is a button the keyboard reaches, with a clear name', async () => {
+    await openWith();
+
+    const review = button('Review answers');
+    expect(review.type).toBe('button');
+    expect(review.disabled).toBe(false);
   });
 });
 

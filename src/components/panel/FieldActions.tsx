@@ -161,20 +161,27 @@ function UseAnswerButton({
   return (
     <>
       <PrimaryButton
+        data-use-answer
         disabled={busy}
         className="h-7 px-2.5 text-xs"
         onClick={(event) => {
-          // The field's row button, where focus returns once it is filled.
-          const row =
-            event.currentTarget
-              .closest('li')
-              ?.querySelector<HTMLButtonElement>(':scope > button') ?? null;
+          const list = event.currentTarget.closest('[role="region"]');
+          const key = String(fieldKey(report.field.element));
           setBusy(true);
           setError(null);
           void model.applyAnswer(report).then((result) => {
             setBusy(false);
             if (result.ok && result.filled > 0) {
-              row?.focus({ preventScroll: true });
+              // The filled row leaves the suggested answers: continue with
+              // the next one, or stay with this field in its new place.
+              setTimeout(() => {
+                (
+                  list?.querySelector<HTMLElement>('[data-use-answer]') ??
+                  list?.querySelector<HTMLElement>(
+                    `li[data-field="${key}"] > button`,
+                  )
+                )?.focus({ preventScroll: true });
+              }, 0);
             } else {
               setError(
                 result.ok

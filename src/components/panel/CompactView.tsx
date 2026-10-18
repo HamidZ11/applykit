@@ -3,6 +3,7 @@ import { ChevronRight, CircleDashed, ShieldCheck } from 'lucide-react';
 import { isAnswerField } from '@/autofill/fields';
 import { FieldRow, fieldKey } from './FieldRow';
 import { Icon } from '@/components/ui/icons';
+import { SecondaryButton } from '@/components/ui/primitives';
 import { StatusGlyph } from './icons';
 import type { FieldFilter } from './panel-state';
 import type { PanelModel } from './usePanel';
@@ -28,7 +29,10 @@ function ReadyBody({ model }: { model: PanelModel }) {
     <div className="px-3.5 pt-3 pb-3">
       <PageIdentity model={model} />
       {model.values.status === 'ready' ? (
-        <Plan model={model} />
+        <>
+          <Plan model={model} />
+          <SuggestedAnswers model={model} />
+        </>
       ) : (
         <ProfileNotice model={model} />
       )}
@@ -122,6 +126,31 @@ function ProfileNotice({ model }: { model: PanelModel }) {
   );
 }
 
+/**
+ * Saved answers the user can use on this form, one click from the list
+ * that shows them. Counts only answers that fit a field that can take
+ * them; reviewing them writes nothing.
+ */
+function SuggestedAnswers({ model }: { model: PanelModel }) {
+  const count = model.reports.filter((r) => r.status === 'suggest').length;
+  if (count === 0) return null;
+  return (
+    <section
+      aria-label="Suggested answers"
+      className="mt-2.5 flex items-center gap-2.5 rounded-sm border border-line bg-white py-1.5 pr-1.5 pl-2.5"
+    >
+      <StatusGlyph status="suggest" />
+      <p className="min-w-0 flex-1 truncate">
+        Suggested answers
+        <span className="text-ink-3"> · {count} available</span>
+      </p>
+      <SecondaryButton size="sm" onClick={model.reviewAnswers}>
+        Review answers
+      </SecondaryButton>
+    </section>
+  );
+}
+
 /** One line of the plan; opens the full list on the matching filter. */
 function PlanLine({
   glyph,
@@ -195,6 +224,7 @@ function ResultsBody({ model }: { model: PanelModel }) {
             .filter(Boolean)
             .join(' · ')}
         </p>
+        <SuggestedAnswers model={model} />
       </div>
 
       {queue.length > 0 && (

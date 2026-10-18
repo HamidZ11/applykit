@@ -22,6 +22,8 @@ interface FieldRowProps {
   onSelect: () => void;
   /** Expanded mode: what the user can do about the field, under its explanation. */
   actions?: ReactNode;
+  /** Expanded mode: show the explanation and actions without selecting. */
+  open?: boolean;
 }
 
 /**
@@ -36,11 +38,13 @@ export function FieldRow({
   onFlashEnd,
   onSelect,
   actions,
+  open = false,
 }: FieldRowProps) {
   const { field, status } = report;
   const value = detailed ? report.value : null;
   const row = useRef<HTMLLIElement>(null);
-  const detail = detailed && selected ? detectionDetail(report) : null;
+  const expanded = detailed && (selected || open);
+  const detail = expanded ? detectionDetail(report) : null;
 
   useEffect(() => {
     if (selected) row.current?.scrollIntoView({ block: 'nearest' });
@@ -49,6 +53,7 @@ export function FieldRow({
   return (
     <li
       ref={row}
+      data-field={fieldKey(field.element)}
       onAnimationEnd={(event) => {
         if (event.animationName === 'ak-changed') onFlashEnd?.();
       }}
@@ -60,7 +65,7 @@ export function FieldRow({
         type="button"
         onClick={onSelect}
         aria-pressed={selected}
-        {...(detailed ? { 'aria-expanded': selected } : {})}
+        {...(detailed ? { 'aria-expanded': expanded } : {})}
         className={`grid h-8 w-full grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-sm px-2 text-left ${
           selected ? '' : 'hover:bg-hover'
         }`}
@@ -85,7 +90,7 @@ export function FieldRow({
               : STATUS_LABEL[status])}
         </span>
       </button>
-      {detailed && selected && (
+      {expanded && (
         <div className="animate-[ak-fade-in_140ms_var(--ease-out)] pr-2 pb-2.5 pl-[32px] text-xs">
           <p className="text-ink-2">{explain(report)}</p>
           {actions}
