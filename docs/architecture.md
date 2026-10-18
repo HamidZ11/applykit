@@ -238,7 +238,8 @@ profile", "Open your profile" or "Try again" instead of Autofill.
 
 ## Autofill rules
 
-Details and reasoning are in ADR 0010, ADR 0011, ADR 0015 and ADR 0016.
+Details and reasoning are in ADR 0010, ADR 0011, ADR 0015, ADR 0016 and
+ADR 0017.
 
 - Fields: full, first, last and preferred name; email; phone, or its
   calling code and national number separately; address lines 1 and 2, town
@@ -249,7 +250,9 @@ Details and reasoning are in ADR 0010, ADR 0011, ADR 0015 and ADR 0016.
   from one saved job. Notice period, relocation, working arrangement,
   earliest start date and salary expectation from the saved application
   answers, only ever suggested (`suggest`) and written one field at a
-  time when the user chooses "Use this answer" (ADR 0016).
+  time when the user chooses "Use this answer" (ADR 0016). Graduation
+  timing worked out from the one saved degree a question can be about,
+  suggested the same way (ADR 0017).
 - Modules in `src/autofill`: `detect` (what a control asks), `scan` (every
   control, with support and section), `report`, `plan-education` and
   `plan-employment` (the plan: value or reason per field), `records` (what
@@ -257,7 +260,8 @@ Details and reasoning are in ADR 0010, ADR 0011, ADR 0015 and ADR 0016.
   text, options and month-year dates), `resolve` (preview and confirm a
   record the user chose for a section, and a saved answer the user chose
   to use), `answers` (what a saved answer gives one question, or why
-  not), `suggestion` (saved values shown
+  not), `graduation` (what a saved degree's expected graduation says about
+  a graduation question), `suggestion` (saved values shown
   as guidance for fields ApplyKit cannot fill), `fill` (write and verify),
   plus pure rules in `education`, `dates`, `options` and `categories`.
   `src/page/navigate.ts` takes the user to a field ("Go to field"): it

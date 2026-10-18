@@ -112,6 +112,8 @@ Limitations:
    where you choose which saved record to use; `employment-application.html`
    has a current job, a previous job and numbered job sections next to
    employer contacts, a reference and an emergency contact;
+   `graduation-application.html` asks when you will graduate in several
+   ways next to a ceremony, eligibility and declaration questions;
    `reusable-answers.html` asks notice period, start date, relocation,
    working arrangement and salary questions next to eligibility, equal
    opportunities and declaration questions;
@@ -199,6 +201,11 @@ Limitations:
   and **Review answers** lists them with **Use this answer**; Autofill
   never fills them, and each is filled only when you choose it. Units, pay periods and currencies are never converted: a
   question that asks differently says why your answer does not fit.
+- Graduation questions ("Will you graduate before October 2027?",
+  "What year do you expect to graduate?") are answered from your saved
+  degree's expected graduation date and suggested the same way, with the
+  date they rest on. Only an end date still to come counts; ApplyKit never
+  assumes a past end date means you graduated.
 - Fields your profile has no value for link to your profile page.
 - Custom dropdowns are counted as fields and, when ApplyKit recognises
   them, show "From your saved profile" with the value to choose, plus
@@ -242,7 +249,12 @@ Limitations:
   questions in other units, periods or currencies, relocation questions
   that do not say where (unless both of your answers agree), text date
   fields without a stated format and past start dates are left to you.
-  Recognition is English-only and pattern-based. Answers saved by a
+  Recognition is English-only and pattern-based. Graduation questions
+  need a degree with an end date still to come, exactly one degree that
+  fits, and a deadline with a year; questions about a particular day of
+  your graduation month, "Have you already graduated?" once your end date
+  has passed, and Yes/No questions asked as text fields are left to you.
+  Answers saved by a
   newer version of ApplyKit are kept but can only be edited there.
 - Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
   and similar platforms) are listed and never filled: the full list shows

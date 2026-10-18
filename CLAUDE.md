@@ -14,8 +14,10 @@ codes and preferred names (ADR 0010, ADR 0011), and user-confirmed choice
 of the saved record for ambiguous education sections (ADR 0012),
 listing of custom dropdowns with saved-value guidance (ADR 0013),
 employment autofill with the same per-section record choice (ADR 0015),
-and saved application answers, suggested and filled only when the user
-confirms each one (ADR 0016).
+saved application answers, suggested and filled only when the user
+confirms each one (ADR 0016), and graduation answers worked out from the
+saved degree's expected graduation date, suggested the same way
+(ADR 0017).
 
 Still to come (build only when asked, one at a time): custom dropdown
 widgets; review
