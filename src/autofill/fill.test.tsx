@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   educationRecords,
+  employmentRecords,
   fullProfile,
   sampleValues,
 } from '@/test/autofill-fixtures';
@@ -267,6 +268,107 @@ describe('fillFields', () => {
     );
   });
 
+  describe('employment', () => {
+    function jobsPlan(root: ParentNode = document): FieldReport[] {
+      const profile = fullProfile();
+      profile.employment = employmentRecords();
+      return planFill(
+        scanFields(root, { isVisible: (e) => !e.closest('[hidden]') }),
+        autofillValuesFrom(profile),
+        new Date('2026-10-17T12:00:00Z'),
+      );
+    }
+
+    it('fills the jobs the form clearly asks about and confirms them', async () => {
+      loadFixture('employment-application.html');
+
+      const outcomes = await fillFields(jobsPlan());
+
+      expect(control('cur-employer').value).toBe('Example Testing Services');
+      expect(control('cur-type').value).toBe('pt');
+      expect(control('cur-start-month').value).toBe('2');
+      expect(control('cur-start-year').value).toBe('2025');
+      expect(
+        document.querySelector<HTMLTextAreaElement>('#cur-duties')?.value,
+      ).toContain('invigilated');
+      expect(control('prev-employer').value).toBe('Example Logistics');
+      expect(control('prev-end').value).toBe('01/2025');
+      expect(
+        outcomes.filter((r) => r.status === 'filled').map((r) => r.target),
+      ).toEqual([
+        'firstName',
+        'lastName',
+        'employer',
+        'jobTitle',
+        'employmentType',
+        'employmentStart',
+        'employmentStart',
+        'jobDescription',
+        'employer',
+        'jobTitle',
+        'employmentStart',
+        'employmentEnd',
+      ]);
+    });
+
+    it('leaves boxes, other people, open questions and ambiguous jobs alone', async () => {
+      const document = loadFixture('employment-application.html');
+      const untouched = [
+        'cur-contact',
+        'cur-rep',
+        'prev-manager',
+        'prev-reason',
+        'j1-company',
+        'j1-title',
+        'j1-from',
+        'j1-duties',
+        'j2-employer',
+        'j2-type',
+        'ref-name',
+        'ref-title',
+        'ref-employer',
+        'ref-email',
+        'ec-name',
+        'ec-employer',
+        'ec-phone',
+        'motivation',
+        'gaps',
+        'signature',
+        'hp',
+      ];
+      const changed = vi.fn();
+      document.addEventListener('input', (event) => {
+        const target = event.target as HTMLElement;
+        if (untouched.includes(target.id)) changed(target.id);
+      });
+      const onSubmit = vi.fn((event: Event) => {
+        event.preventDefault();
+      });
+      const onClick = vi.fn();
+      document
+        .getElementById('application')
+        ?.addEventListener('submit', onSubmit);
+      document.addEventListener('click', onClick, true);
+
+      await fillFields(jobsPlan());
+
+      for (const id of untouched) {
+        const element = document.getElementById(id) as HTMLInputElement;
+        expect(element.value, id).toBe('');
+      }
+      expect(control('cur-payroll').value).toBe('Assigned after hiring');
+      expect(control('j2-title').value).toBe('Retail Assistant');
+      expect(
+        [
+          ...document.querySelectorAll<HTMLInputElement>('[type="checkbox"]'),
+        ].some((box) => box.checked),
+      ).toBe(false);
+      expect(changed).not.toHaveBeenCalled();
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(onClick).not.toHaveBeenCalled();
+    });
+  });
+
   it('never submits the form or clicks anything', async () => {
     const document = loadFixture('full-application.html');
     const form = document.getElementById('application') as HTMLFormElement;
@@ -389,6 +491,54 @@ describe('React-controlled inputs', () => {
 
     expect(container.querySelector('output')?.textContent).toBe('ex');
     expect(outcomes[0]?.status).toBe('filled');
+    unmount();
+  });
+
+  it('updates a controlled duties box, and never its current-role box', async () => {
+    function JobForm() {
+      const [duties, setDuties] = useState('');
+      const [current, setCurrent] = useState(false);
+      return (
+        <fieldset>
+          <legend>Current employment</legend>
+          <label>
+            Main duties
+            <textarea
+              value={duties}
+              onChange={(event) => {
+                setDuties(event.target.value);
+              }}
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={current}
+              onChange={(event) => {
+                setCurrent(event.target.checked);
+              }}
+            />
+            I currently work here
+          </label>
+          <output>{`${duties}|${String(current)}`}</output>
+        </fieldset>
+      );
+    }
+    const { container, unmount } = render(<JobForm />);
+    const profile = fullProfile();
+    profile.employment = employmentRecords();
+
+    let outcomes: FieldReport[] = [];
+    await act(async () => {
+      outcomes = await fillFields(
+        planFill(scanFields(container), autofillValuesFrom(profile)),
+      );
+    });
+
+    expect(container.querySelector('output')?.textContent).toBe(
+      `${employmentRecords()[0]?.description ?? ''}|false`,
+    );
+    expect(outcomes.map((r) => r.status)).toEqual(['filled', 'unsupported']);
     unmount();
   });
 

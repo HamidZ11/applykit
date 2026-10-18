@@ -37,12 +37,26 @@ export const EDUCATION_FIELDS = [
 
 export type EducationField = (typeof EDUCATION_FIELDS)[number];
 
+/** Fields filled from one of the saved employment records. */
+export const EMPLOYMENT_FIELDS = [
+  'employer',
+  'jobTitle',
+  'employmentType',
+  'employmentStart',
+  'employmentEnd',
+  'currentlyEmployed',
+  'jobDescription',
+] as const;
+
+export type EmploymentField = (typeof EMPLOYMENT_FIELDS)[number];
+
 export const AUTOFILL_FIELDS = [
   ...TEXT_FIELDS,
   'country',
   'phoneCountryCode',
   'phoneNational',
   ...EDUCATION_FIELDS,
+  ...EMPLOYMENT_FIELDS,
 ] as const;
 
 export type AutofillField = (typeof AUTOFILL_FIELDS)[number];
@@ -71,12 +85,32 @@ export const AUTOFILL_FIELD_LABEL: Record<AutofillField, string> = {
   educationStart: 'Education start date',
   educationEnd: 'Graduation or end date',
   grade: 'Grade',
+  employer: 'Employer',
+  jobTitle: 'Job title',
+  employmentType: 'Employment type',
+  employmentStart: 'Employment start date',
+  employmentEnd: 'Employment end date',
+  currentlyEmployed: 'Current role',
+  jobDescription: 'Role description',
 };
 
 export function isEducationField(
   field: AutofillField,
 ): field is EducationField {
   return (EDUCATION_FIELDS as readonly string[]).includes(field);
+}
+
+export function isEmploymentField(
+  field: AutofillField,
+): field is EmploymentField {
+  return (EMPLOYMENT_FIELDS as readonly string[]).includes(field);
+}
+
+/** Fields answered from one saved record, chosen per section of a form. */
+export function isRecordField(
+  field: AutofillField,
+): field is EducationField | EmploymentField {
+  return isEducationField(field) || isEmploymentField(field);
 }
 
 /** One saved education record, as autofill uses it. */
@@ -94,6 +128,24 @@ export interface EducationValue {
   grade: string;
   /** University-level or school, from the qualification; null if unclear. */
   level: EducationLevel | null;
+}
+
+/** One saved job, as autofill uses it. */
+export interface EmploymentValue {
+  /** The saved record's id, so the user can choose it for a section. */
+  id: string;
+  employer: string;
+  title: string;
+  /** One of the profile's employment types, or empty when not saved. */
+  employmentType: string;
+  /** "YYYY-MM". */
+  startDate: string;
+  /** "YYYY-MM", or empty while `current` is true. */
+  endDate: string;
+  /** The user marked this as their current role. */
+  current: boolean;
+  /** Optional: empty when not saved. */
+  description: string;
 }
 
 /** The saved country, with every representation a form might expect. */
@@ -144,4 +196,6 @@ export interface AutofillValues {
   phone: PhoneParts | null;
   /** Saved education records, in the order the user saved them. */
   education: EducationValue[];
+  /** Saved jobs, in the order the user saved them. */
+  employment: EmploymentValue[];
 }

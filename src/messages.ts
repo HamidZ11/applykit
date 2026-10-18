@@ -93,15 +93,18 @@ export function isAutofillValuesResponse(
   ) {
     return false;
   }
-  const { phone, education } = values as {
+  const { phone, education, employment } = values as {
     phone?: unknown;
     education?: unknown;
+    employment?: unknown;
   };
   return (
     isCountry(country) &&
     isPhone(phone) &&
     Array.isArray(education) &&
-    education.every(isEducation)
+    education.every(isEducation) &&
+    Array.isArray(employment) &&
+    employment.every(isEmployment)
   );
 }
 
@@ -121,6 +124,25 @@ function isEducation(record: unknown): boolean {
   return (
     EDUCATION_TEXT.every((key) => typeof r[key] === 'string') &&
     (r.level === null || r.level === 'higher' || r.level === 'school')
+  );
+}
+
+const EMPLOYMENT_TEXT = [
+  'id',
+  'employer',
+  'title',
+  'employmentType',
+  'startDate',
+  'endDate',
+  'description',
+] as const;
+
+function isEmployment(record: unknown): boolean {
+  if (typeof record !== 'object' || record === null) return false;
+  const r = record as Record<string, unknown>;
+  return (
+    EMPLOYMENT_TEXT.every((key) => typeof r[key] === 'string') &&
+    typeof r.current === 'boolean'
   );
 }
 

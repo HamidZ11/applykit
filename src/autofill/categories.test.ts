@@ -74,6 +74,26 @@ describe('categoryOf', () => {
     });
   });
 
+  it('groups jobs, questions about them and other people apart', () => {
+    loadFixture('employment-application.html');
+
+    expect(categories()).toMatchObject({
+      'cur-employer': 'employment',
+      'cur-type': 'employment',
+      'cur-current': 'employment',
+      'cur-duties': 'employment',
+      'cur-contact': 'employment',
+      'prev-reason': 'employment',
+      'j1-from': 'employment',
+      'j2-type': 'employment',
+      gaps: 'employment',
+      'ref-title': 'references',
+      'ref-employer': 'references',
+      'ec-employer': 'references',
+      signature: 'questions',
+    });
+  });
+
   it('treats social-mobility questions as sensitive disclosures', () => {
     loadHtml(
       '<label>Were you eligible for free school meals? <select><option>Yes</option></select></label>',

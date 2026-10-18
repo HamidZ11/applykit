@@ -1,6 +1,6 @@
 import { normalise } from './detect';
 import type { AutofillField } from './fields';
-import type { ScannedField } from './scan';
+import { fieldTarget, type ScannedField } from './scan';
 
 /**
  * Groups for the expanded field list, so long forms read by topic rather
@@ -67,6 +67,13 @@ const BY_TARGET: Record<AutofillField, FieldCategory> = {
   educationStart: 'education',
   educationEnd: 'education',
   grade: 'education',
+  employer: 'employment',
+  jobTitle: 'employment',
+  employmentType: 'employment',
+  employmentStart: 'employment',
+  employmentEnd: 'employment',
+  currentlyEmployed: 'employment',
+  jobDescription: 'employment',
 };
 
 /** Equality, diversity and social-mobility questions. */
@@ -108,23 +115,23 @@ const QUESTION =
 export function categoryOf(field: ScannedField): FieldCategory {
   const { support } = field;
   const target =
-    support.status === 'match' || support.status === 'duplicate'
-      ? support.field
-      : support.status === 'unsupported'
-        ? (support.custom?.field ?? null)
-        : null;
+    support.status === 'duplicate' ? support.field : fieldTarget(field);
   if (target) return BY_TARGET[target];
 
   const label = normalise(field.label);
   const surroundings = `${label} ${field.context}`;
   if (DISCLOSURE.test(surroundings)) return 'sensitive';
   if (support.status === 'manual') {
+    // Reasons for leaving, gaps in employment, disciplinary records.
+    if (support.reason === 'answer') return 'employment';
     return support.reason === 'verification' ? 'other' : 'questions';
   }
   if (support.status === 'other-person') {
     if (OTHER_PEOPLE.test(surroundings)) return 'references';
     return TOPICS[0]?.[1].test(surroundings) ? 'employment' : 'references';
   }
+  // "Referee job title" in a reference section is about the referee.
+  if (OTHER_PEOPLE.test(field.context)) return 'references';
 
   for (const text of [label, field.context]) {
     for (const [category, words] of TOPICS) {

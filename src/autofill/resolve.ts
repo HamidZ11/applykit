@@ -1,16 +1,21 @@
-import type { AutofillValues, EducationValue } from './fields';
-import { isEducationField } from './fields';
-import { planFill, type FieldReport } from './report';
+import {
+  isEducationField,
+  isEmploymentField,
+  type AutofillValues,
+  type EducationValue,
+  type EmploymentValue,
+} from './fields';
+import { needsYou, planFill, type FieldReport } from './report';
 import type { ScannedField } from './scan';
 
 /**
- * User-approved education choices. When several saved records fit a
- * section, the user picks one; this module previews what that would fill
- * and checks, just before filling, that the page still matches what the
- * user saw. Writing is left to `fillFields`, as for any other plan.
+ * User-approved record choices. When several saved education records or
+ * jobs fit a section, the user picks one; this module previews what that
+ * would fill and checks, just before filling, that the page still matches
+ * what the user saw. Writing is left to `fillFields`, as for any other plan.
  */
 
-/** A saved record the user picked for one education section. */
+/** A saved record the user picked for one section. */
 export interface SectionChoice {
   /** The section, as `ScannedField.group`. */
   group: Element | null;
@@ -18,12 +23,41 @@ export interface SectionChoice {
 }
 
 export interface ChoicePreview {
-  record: EducationValue;
+  record: EducationValue | EmploymentValue;
   /**
    * The section's fields the choice applies to, planned with the chosen
-   * record (`fill` or why not), then those that already have a value.
+   * record (`fill` or why not), then those on the same topic that stay with
+   * the user (a custom dropdown, "Reason for leaving"), then those that
+   * already have a value.
    */
   reports: FieldReport[];
+}
+
+/** The saved record with this id, and its topic. */
+function findRecord(
+  values: AutofillValues,
+  id: string,
+): {
+  record: EducationValue | EmploymentValue;
+  topic: 'education' | 'employment';
+} | null {
+  const education = values.education.find((r) => r.id === id);
+  if (education) return { record: education, topic: 'education' };
+  const job = values.employment.find((r) => r.id === id);
+  return job ? { record: job, topic: 'employment' } : null;
+}
+
+/** Whether a field of the section is about the chosen record's topic. */
+function onTopic(
+  report: FieldReport,
+  topic: 'education' | 'employment',
+): boolean {
+  const { target } = report;
+  if (topic === 'education') return target !== null && isEducationField(target);
+  if (target !== null) return isEmploymentField(target);
+  // "Reason for leaving" and the like: about the job, never saved.
+  const { support } = report.field;
+  return support.status === 'manual' && support.reason === 'answer';
 }
 
 /**
@@ -36,13 +70,12 @@ export function previewChoice(
   choice: SectionChoice,
   now: Date = new Date(),
 ): ChoicePreview | null {
-  const record = values.education.find((r) => r.id === choice.recordId);
-  if (!record) return null;
+  const found = findRecord(values, choice.recordId);
+  if (!found) return null;
+  const { record, topic } = found;
 
   const inSection = (report: FieldReport) =>
-    report.field.group === choice.group &&
-    report.target !== null &&
-    isEducationField(report.target);
+    report.field.group === choice.group && onTopic(report, topic);
   const before = planFill(fields, values, now).filter(inSection);
   const applies = new Set(
     before
@@ -63,6 +96,14 @@ export function previewChoice(
     record,
     reports: [
       ...after.filter((r) => applies.has(r.field.element)),
+      // Shown so the user knows what stays with them.
+      ...after.filter(
+        (r) =>
+          inSection(r) &&
+          !applies.has(r.field.element) &&
+          r.status !== 'keep' &&
+          needsYou(r),
+      ),
       // Shown so the user knows they are kept, never written.
       ...before.filter((r) => r.status === 'keep'),
     ],
@@ -85,7 +126,7 @@ export function confirmChoice(
   previewed: readonly FieldReport[],
   now: Date = new Date(),
 ): ChoiceCheck {
-  if (!values.education.some((r) => r.id === choice.recordId)) {
+  if (!findRecord(values, choice.recordId)) {
     return {
       ok: false,
       message: 'That record is no longer in your saved profile. Choose again.',

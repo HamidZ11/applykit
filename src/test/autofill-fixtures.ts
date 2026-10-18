@@ -1,5 +1,5 @@
 import type { AutofillValues } from '@/autofill/fields';
-import type { EducationRecord } from '@/domain/user-profile';
+import type { EducationRecord, EmploymentRecord } from '@/domain/user-profile';
 import { autofillValuesFrom } from '@/autofill/profile-values';
 import { profileFromDraft, type UserProfile } from '@/domain/user-profile';
 import { validDraft } from './profile-fixtures';
@@ -59,6 +59,37 @@ export function gcseRecord(): EducationRecord {
     endDate: '2022-06',
     grade: '',
   };
+}
+
+/**
+ * Fictional jobs: a current part-time role and the full-time job before
+ * it. Every employer is invented.
+ */
+export function employmentRecords(): EmploymentRecord[] {
+  return [
+    {
+      id: 'testing',
+      employer: 'Example Testing Services',
+      title: 'Test Centre Associate',
+      employmentType: 'part-time',
+      startDate: '2025-02',
+      endDate: '',
+      current: true,
+      description:
+        'Welcomed candidates, checked identification and invigilated computer-based exams.',
+    },
+    {
+      id: 'logistics',
+      employer: 'Example Logistics',
+      title: 'Warehouse Operative',
+      employmentType: 'full-time',
+      startDate: '2024-01',
+      endDate: '2025-01',
+      current: false,
+      description:
+        'Picked and packed orders, ran stock counts and kept the loading bay safe.',
+    },
+  ];
 }
 
 /** The values autofill receives for `fullProfile()`. */

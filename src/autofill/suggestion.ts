@@ -2,11 +2,15 @@ import { parseYearMonth, currentMonthIndex, monthIndex } from './dates';
 import { PREDICTED } from './education';
 import {
   isEducationField,
+  isEmploymentField,
   type AutofillField,
   type AutofillValues,
   type EducationField,
   type EducationValue,
+  type EmploymentField,
+  type EmploymentValue,
 } from './fields';
+import { asksExpectedEnd, employmentTypeLabel } from './plan-employment';
 import type { RecordChoice } from './records';
 import type { ScannedField } from './scan';
 
@@ -20,20 +24,43 @@ export type Suggestion =
   | { kind: 'value'; value: string; note: string | null }
   | { kind: 'missing'; reason: string }
   /** Several saved values could apply; the user decides. */
-  | { kind: 'ambiguous'; reason: string };
+  | { kind: 'ambiguous'; reason: string }
+  /** The saved profile has the detail, but not as this field asks for it. */
+  | { kind: 'unsuitable'; reason: string };
+
+/** What a suggestion is worked out from: the same as for autofill. */
+export interface SuggestionContext {
+  values: AutofillValues;
+  /** The record chosen for the field's section, by topic. */
+  education: RecordChoice<EducationValue> | undefined;
+  employment: RecordChoice<EmploymentValue> | undefined;
+  now: Date;
+}
 
 /**
  * The saved value for `target`, by the same rules as autofill: the
  * preferred name only if saved or chosen, the phone's parts only when it
- * can be split, education from the one record that fits the section.
+ * can be split, education and jobs from the one record that fits the
+ * section, never an arbitrary one of several.
  */
 export function suggestionFor(
   field: ScannedField,
   target: AutofillField,
-  values: AutofillValues,
-  education: RecordChoice<EducationValue> | undefined,
-  now: Date,
+  { values, education, employment, now }: SuggestionContext,
 ): Suggestion {
+  if (isEmploymentField(target)) {
+    if (!employment) return missing('Your profile has no jobs saved.');
+    if ('status' in employment) {
+      return employment.status === 'ambiguous'
+        ? {
+            kind: 'ambiguous',
+            reason:
+              'Several of your saved jobs could fit, so ApplyKit does not suggest one. Check which job this asks about.',
+          }
+        : missing(employment.reason);
+    }
+    return fromJob(field, target, employment.record, employment.note, now);
+  }
   if (isEducationField(target)) {
     if (!education) return missing('Your profile has no education saved.');
     if ('status' in education) {
@@ -106,15 +133,11 @@ function fromRecord(
       break;
     case 'educationStart':
     case 'educationEnd': {
-      const date = parseYearMonth(
+      text = dateText(
+        field,
         target === 'educationStart' ? record.startDate : record.endDate,
       );
-      if (!date) return missing('Your saved record has no date for this.');
-      const asksYearOnly =
-        /\byears?\b/i.test(field.label) && !/\bmonths?\b/i.test(field.label);
-      text = asksYearOnly
-        ? date.year
-        : `${MONTHS[Number(date.month) - 1] ?? ''} ${date.year}`.trim();
+      if (!text) return missing('Your saved record has no date for this.');
       if (target === 'educationEnd' && unfinished(record, now)) {
         notes.push('Your expected graduation date.');
       }
@@ -125,6 +148,79 @@ function fromRecord(
     return missing('Your saved record has no value for this.');
   if (recordNote) notes.push(recordNote);
   return value(text.trim(), notes.join(' ') || null);
+}
+
+function fromJob(
+  field: ScannedField,
+  target: EmploymentField,
+  record: EmploymentValue,
+  recordNote: string | null,
+  now: Date,
+): Suggestion {
+  const withNote = (text: string, note: string | null = null) =>
+    text.trim() === ''
+      ? missing('Your saved job has no value for this.')
+      : value(
+          text.trim(),
+          [note, recordNote].filter(Boolean).join(' ') || null,
+        );
+  switch (target) {
+    case 'employer':
+      return withNote(record.employer);
+    case 'jobTitle':
+      return withNote(record.title);
+    case 'employmentType':
+      return withNote(employmentTypeLabel(record.employmentType));
+    case 'jobDescription':
+      return withNote(record.description);
+    case 'currentlyEmployed':
+      return record.current
+        ? withNote(
+            'Tick it',
+            `Your saved role at ${record.employer} is current.`,
+          )
+        : withNote(
+            'Leave it unticked',
+            `Your saved role at ${record.employer} has ended.`,
+          );
+    case 'employmentStart':
+      return withNote(dateText(field, record.startDate));
+    case 'employmentEnd': {
+      if (asksExpectedEnd(field.label)) {
+        return {
+          kind: 'unsuitable',
+          reason:
+            'This asks when you expect to leave. Your profile saves only when a job ended.',
+        };
+      }
+      if (record.current) {
+        return withNote(
+          'No end date',
+          'Your saved role is current. Choose “Present”, or leave it empty, as the form allows.',
+        );
+      }
+      const end = parseYearMonth(record.endDate);
+      if (end && monthIndex(end) > currentMonthIndex(now)) {
+        return {
+          kind: 'unsuitable',
+          reason:
+            'Your saved end date for this job is still to come, so it is not the date you left.',
+        };
+      }
+      return withNote(dateText(field, record.endDate));
+    }
+  }
+}
+
+/** "September 2024", or "2024" where the field asks for a year only. */
+function dateText(field: ScannedField, saved: string): string {
+  const date = parseYearMonth(saved);
+  if (!date) return '';
+  const asksYearOnly =
+    /\byears?\b/i.test(field.label) && !/\bmonths?\b/i.test(field.label);
+  return asksYearOnly
+    ? date.year
+    : `${MONTHS[Number(date.month) - 1] ?? ''} ${date.year}`.trim();
 }
 
 const MONTHS = [

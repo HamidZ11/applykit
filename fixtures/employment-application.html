@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Store Supervisor · Example Harbour Stores Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional application for employment-history autofill. A current job
+      (separate month and year selects, a native employment-type select, an
+      "I currently work here" box and a duties box with a length limit), a
+      previous job with a reason for leaving, and two numbered sections that
+      do not say which job they mean, one with a custom dropdown, date inputs
+      and an entry already typed. Also: employer contacts, a company
+      representative, a reference, an emergency contact, a declaration, a
+      disabled field and a hidden honeypot. Every name is invented. Used by
+      unit tests and manual testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #1d4f91;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 19px;
+        margin: 32px 0 0;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+      }
+      h3 {
+        font-size: 15px;
+        margin: 20px 0 0;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      section {
+        margin-top: 8px;
+        padding: 4px 16px 16px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 16px;
+      }
+      label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      .req {
+        color: #cf222e;
+      }
+      input:not([type='checkbox'], [type='radio']),
+      select,
+      textarea,
+      .combo {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      input:disabled {
+        background: #f6f8fa;
+        color: var(--muted);
+      }
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+      .choice {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 400;
+        margin-top: 10px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 4px 0 0;
+      }
+      [role='listbox'] {
+        margin: 4px 0 0;
+        padding: 4px 0;
+        list-style: none;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      [role='option'] {
+        padding: 4px 10px;
+      }
+      button {
+        margin-top: 28px;
+        padding: 10px 18px;
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--brand);
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      output {
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar"><span class="logo"></span>Example Harbour Stores</div>
+    </header>
+    <main>
+      <h1>Store Supervisor</h1>
+      <p class="meta">Bristol · Part-time, 24 hours a week</p>
+
+      <form id="application" action="/submitted" method="post">
+        <h2>Your details</h2>
+        <div class="row">
+          <div>
+            <label for="first">First name <span class="req">*</span></label>
+            <input id="first" name="firstName" required />
+          </div>
+          <div>
+            <label for="last">Last name <span class="req">*</span></label>
+            <input id="last" name="lastName" required />
+          </div>
+        </div>
+        <label for="email">Email address</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          value="already.typed@example.org"
+        />
+
+        <fieldset>
+          <legend>Current employment</legend>
+          <label for="cur-employer"
+            >Employer name <span class="req">*</span></label
+          >
+          <input id="cur-employer" name="current[employer]" required />
+          <label for="cur-title">Job title <span class="req">*</span></label>
+          <input id="cur-title" name="current[title]" required />
+          <label for="cur-type">Employment type</label>
+          <select id="cur-type" name="current[type]">
+            <option value="">Select…</option>
+            <option value="ft">Full-time</option>
+            <option value="pt">Part-time</option>
+            <option value="ct">Contract</option>
+            <option value="ts">Temporary or seasonal</option>
+            <option value="zh">Zero hours</option>
+          </select>
+          <div class="row">
+            <div>
+              <label for="cur-start-month">Start month</label>
+              <select id="cur-start-month" name="current[startMonth]">
+                <option value="">Month</option>
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
+                <option value="7">July</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+              </select>
+            </div>
+            <div>
+              <label for="cur-start-year">Start year</label>
+              <select id="cur-start-year" name="current[startYear]">
+                <option value="">Year</option>
+                <option>2026</option>
+                <option>2025</option>
+                <option>2024</option>
+                <option>2023</option>
+                <option>2022</option>
+                <option>2021</option>
+              </select>
+            </div>
+          </div>
+          <label class="choice" for="cur-current"
+            ><input
+              id="cur-current"
+              name="current[isCurrent]"
+              type="checkbox"
+            />
+            I currently work here</label
+          >
+          <label for="cur-duties">Main duties and responsibilities</label>
+          <textarea
+            id="cur-duties"
+            name="current[duties]"
+            maxlength="600"
+          ></textarea>
+          <p class="hint">Up to 600 characters.</p>
+          <label for="cur-contact">Employer contact email</label>
+          <input id="cur-contact" name="current[contactEmail]" type="email" />
+          <label for="cur-rep">Company representative</label>
+          <input id="cur-rep" name="current[representative]" />
+          <label for="cur-payroll">Payroll number</label>
+          <input
+            id="cur-payroll"
+            name="current[payroll]"
+            disabled
+            value="Assigned after hiring"
+          />
+        </fieldset>
+
+        <fieldset>
+          <legend>Previous employment</legend>
+          <label for="prev-employer">Previous employer</label>
+          <input id="prev-employer" name="previous[employer]" />
+          <label for="prev-title">Job title</label>
+          <input id="prev-title" name="previous[title]" />
+          <div class="row">
+            <div>
+              <label for="prev-start">Start date</label>
+              <input
+                id="prev-start"
+                name="previous[start]"
+                placeholder="MM/YYYY"
+              />
+            </div>
+            <div>
+              <label for="prev-end">End date</label>
+              <input id="prev-end" name="previous[end]" placeholder="MM/YYYY" />
+            </div>
+          </div>
+          <label for="prev-reason">Reason for leaving</label>
+          <textarea id="prev-reason" name="previous[reason]"></textarea>
+          <label for="prev-manager">Line manager’s email</label>
+          <input id="prev-manager" name="previous[managerEmail]" type="email" />
+        </fieldset>
+
+        <h2>Other employment</h2>
+        <p class="hint">
+          Tell us about any other jobs from the last five years.
+        </p>
+        <div id="employment-list">
+          <section aria-labelledby="job-1">
+            <h3 id="job-1">Employment 1</h3>
+            <label for="j1-company">Company name</label>
+            <input id="j1-company" name="jobs[0][company]" />
+            <label for="j1-title">Position held</label>
+            <input id="j1-title" name="jobs[0][title]" />
+            <div class="row">
+              <div>
+                <label for="j1-from">From</label>
+                <input id="j1-from" name="jobs[0][from]" type="month" />
+              </div>
+              <div>
+                <label for="j1-to">To</label>
+                <input id="j1-to" name="jobs[0][to]" type="month" />
+              </div>
+            </div>
+            <label for="j1-duties">Responsibilities</label>
+            <textarea id="j1-duties" name="jobs[0][duties]"></textarea>
+          </section>
+          <section aria-labelledby="job-2">
+            <h3 id="job-2">Employment 2</h3>
+            <label for="j2-employer">Employer</label>
+            <input id="j2-employer" name="jobs[1][employer]" />
+            <label for="j2-title">Job title</label>
+            <input
+              id="j2-title"
+              name="jobs[1][title]"
+              value="Retail Assistant"
+            />
+            <label for="j2-type" id="j2-type-label">Employment type</label>
+            <input
+              id="j2-type"
+              class="combo"
+              name="jobs[1][type]"
+              role="combobox"
+              aria-controls="j2-type-options"
+              aria-expanded="false"
+              aria-autocomplete="list"
+              placeholder="Start typing…"
+            />
+            <ul
+              id="j2-type-options"
+              role="listbox"
+              aria-labelledby="j2-type-label"
+              hidden
+            >
+              <li role="option" id="j2-ft">Full-time</li>
+              <li role="option" id="j2-pt">Part-time</li>
+              <li role="option" id="j2-ct">Contract</li>
+            </ul>
+            <div class="row">
+              <div>
+                <label for="j2-start">Start date</label>
+                <input id="j2-start" name="jobs[1][start]" type="date" />
+              </div>
+              <div>
+                <label for="j2-end">End date</label>
+                <input id="j2-end" name="jobs[1][end]" type="date" />
+              </div>
+            </div>
+          </section>
+        </div>
+        <button type="button" id="add-job">Add another job</button>
+
+        <fieldset>
+          <legend>Reference</legend>
+          <label for="ref-name">Referee name</label>
+          <input id="ref-name" name="reference[name]" />
+          <label for="ref-title">Referee job title</label>
+          <input id="ref-title" name="reference[title]" />
+          <label for="ref-employer">Reference employer</label>
+          <input id="ref-employer" name="reference[employer]" />
+          <label for="ref-email">Email address</label>
+          <input id="ref-email" name="reference[email]" type="email" />
+        </fieldset>
+
+        <h2>Emergency contact</h2>
+        <label for="ec-name">Name</label>
+        <input id="ec-name" name="emergency[name]" />
+        <label for="ec-employer">Employer</label>
+        <input id="ec-employer" name="emergency[employer]" />
+        <label for="ec-phone">Phone number</label>
+        <input id="ec-phone" name="emergency[phone]" type="tel" />
+
+        <h2>Further questions</h2>
+        <label for="motivation"
+          >Why do you want to work at Example Harbour Stores?</label
+        >
+        <textarea id="motivation" name="motivation"></textarea>
+        <label for="gaps">Please explain any gaps in your employment</label>
+        <textarea id="gaps" name="employmentGaps"></textarea>
+
+        <h2>Declaration</h2>
+        <label for="signature">Type your full name as your signature</label>
+        <input id="signature" name="signature" />
+        <label class="choice"
+          ><input type="checkbox" name="declaration" required /> I declare that
+          the information I have given is true and complete.</label
+        >
+
+        <div hidden style="display: none">
+          <label for="hp">Company website</label>
+          <input id="hp" name="company_website" tabindex="-1" />
+        </div>
+
+        <button type="submit">Submit application</button>
+      </form>
+
+      <output id="status">Fixture · submitted: no · input events: 0</output>
+    </main>
+
+    <script>
+      // Lets reviewers confirm what the page observed.
+      const form = document.getElementById('application');
+      const status = document.getElementById('status');
+      let submitted = false;
+      let inputEvents = 0;
+      const render = () => {
+        status.textContent = `Fixture · submitted: ${submitted ? 'YES' : 'no'} · input events: ${inputEvents}`;
+      };
+      form.addEventListener('input', () => {
+        inputEvents += 1;
+        render();
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitted = true;
+        render();
+      });
+
+      // Adds a third employment section, as many forms do on request.
+      document.getElementById('add-job').addEventListener('click', () => {
+        const list = document.getElementById('employment-list');
+        const n = list.children.length + 1;
+        const section = document.createElement('section');
+        section.setAttribute('aria-labelledby', `job-${n}`);
+        section.innerHTML = `
+          <h3 id="job-${n}">Employment ${n}</h3>
+          <label for="j${n}-employer">Employer</label>
+          <input id="j${n}-employer" name="jobs[${n - 1}][employer]" />`;
+        list.append(section);
+      });
+    </script>
+  </body>
+</html>

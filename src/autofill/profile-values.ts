@@ -60,6 +60,16 @@ export function autofillValuesFrom(profile: UserProfile): AutofillValues {
       grade: record.grade,
       level: recordLevel(record.institution, record.qualification),
     })),
+    employment: profile.employment.map((record) => ({
+      id: record.id,
+      employer: record.employer,
+      title: record.title,
+      employmentType: record.employmentType,
+      startDate: record.startDate,
+      endDate: record.endDate,
+      current: record.current,
+      description: record.description,
+    })),
   };
 }
 

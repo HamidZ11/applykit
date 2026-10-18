@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { LocateFixed, UserRound } from 'lucide-react';
-import type { EducationValue } from '@/autofill/fields';
+import type { AutofillValues } from '@/autofill/fields';
 import { needsYou, type FieldReport } from '@/autofill/report';
 import type { FieldElement } from '@/autofill/scan';
 import type { Suggestion } from '@/autofill/suggestion';
@@ -27,7 +27,7 @@ export function FieldActions({
   const { values } = model;
   const records =
     status === 'ambiguous' && values.status === 'ready'
-      ? values.values.education.filter((r) => report.candidates.includes(r.id))
+      ? recordOptions(report.candidates, values.values)
       : [];
   const profileLacksIt =
     status === 'no-value' ||
@@ -122,9 +122,48 @@ function GoToButton({
   );
 }
 
+/** A saved record as the chooser shows it: enough to tell records apart. */
+interface RecordOption {
+  id: string;
+  /** The institution or employer. */
+  name: string;
+  /** The qualification or job title, and the years. */
+  detail: string;
+}
+
 /**
- * Lets the user pick which saved record an education section is about,
- * previews what that fills, and fills only after they confirm.
+ * The records a field could be filled from, in the order they are saved.
+ * Only what tells them apart is shown; descriptions and grades are not.
+ */
+function recordOptions(
+  candidates: readonly string[],
+  values: AutofillValues,
+): RecordOption[] {
+  const education = values.education
+    .filter((r) => candidates.includes(r.id))
+    .map((r) => ({
+      id: r.id,
+      name: r.institution,
+      detail: [r.qualification, years(r.startDate, r.endDate)]
+        .filter(Boolean)
+        .join(' · '),
+    }));
+  const jobs = values.employment
+    .filter((r) => candidates.includes(r.id))
+    .map((r) => ({
+      id: r.id,
+      name: r.employer,
+      detail: [r.title, years(r.startDate, r.current ? 'Present' : r.endDate)]
+        .filter(Boolean)
+        .join(' · '),
+    }));
+  return [...education, ...jobs];
+}
+
+/**
+ * Lets the user pick which saved record a section is about (a
+ * qualification or a job), previews what that fills, and fills only after
+ * they confirm.
  */
 function RecordChooser({
   report,
@@ -132,7 +171,7 @@ function RecordChooser({
   model,
 }: {
   report: FieldReport;
-  records: EducationValue[];
+  records: RecordOption[];
   model: PanelModel;
 }) {
   const [open, setOpen] = useState(false);
@@ -235,12 +274,10 @@ function RecordChooser({
             />
             <span className="min-w-0">
               <span className="block truncate font-medium text-ink">
-                {record.institution}
+                {record.name}
               </span>
               <span className="block truncate text-2xs text-ink-3">
-                {[record.qualification, years(record)]
-                  .filter(Boolean)
-                  .join(' · ')}
+                {record.detail}
               </span>
             </span>
           </label>
@@ -294,11 +331,12 @@ function RecordChooser({
   );
 }
 
-/** "2022–2024": years only, enough to tell records apart. */
-function years(record: EducationValue): string {
-  const start = record.startDate.slice(0, 4);
-  const end = record.endDate.slice(0, 4);
-  if (!start && !end) return '';
+/** "2022–2024", "2025–Present": years only, enough to tell records apart. */
+function years(startDate: string, endDate: string): string {
+  const start = startDate.slice(0, 4);
+  const end = endDate === 'Present' ? endDate : endDate.slice(0, 4);
+  // A missing year is left out rather than shown as an open range.
+  if (!start || !end) return start || end;
   return start === end ? start : `${start}–${end}`;
 }
 
@@ -314,7 +352,13 @@ function outcomeOf(report: FieldReport): string {
     case 'no-option':
       return 'No matching option';
     case 'unusable':
-      return 'Format not supported';
+      return 'Saved value does not fit';
+    case 'manual':
+      return 'Answer yourself';
+    case 'unsupported':
+      return report.field.kind === 'checkbox'
+        ? 'Tick it yourself'
+        : 'Choose on the page';
     default:
       return 'Left to you';
   }

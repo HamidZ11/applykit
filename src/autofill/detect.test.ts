@@ -365,7 +365,7 @@ describe('education fields', () => {
     );
     expect(
       matched(`<h2>Work experience</h2><label>${label} <input></label>`),
-    ).toBeNull();
+    ).not.toBe(field);
   });
 
   it.each([
@@ -438,5 +438,207 @@ describe('technical names versus wording', () => {
     '<fieldset><legend>Equal opportunities</legend><label>Country <select></select></label></fieldset>',
   ])('keeps %s protected', (html) => {
     expect(detect(html)).toEqual({ kind: 'manual', reason: 'sensitive' });
+  });
+});
+
+describe('employment fields', () => {
+  const inSection = (legend: string, label: string, control = '<input>') =>
+    `<fieldset><legend>${legend}</legend><label>${label} ${control}</label></fieldset>`;
+
+  it.each([
+    ['Previous employer', 'employer'],
+    ['Current employer', 'employer'],
+    ['Name of your most recent employer', 'employer'],
+    ['Current job title', 'jobTitle'],
+    ['Previous position', 'jobTitle'],
+    ['Employment start date', 'employmentStart'],
+    ['Job end date', 'employmentEnd'],
+  ])('recognises %s anywhere', (label, field) => {
+    expect(matched(`<label>${label} <input></label>`)).toBe(field);
+  });
+
+  it.each([
+    ['Employer name', 'employer'],
+    ['Company name', 'employer'],
+    ['Organisation', 'employer'],
+    ['Job title', 'jobTitle'],
+    ['Position held', 'jobTitle'],
+    ['Role', 'jobTitle'],
+    ['Start month', 'employmentStart'],
+    ['From', 'employmentStart'],
+    ['End date (leave blank if current)', 'employmentEnd'],
+    ['To', 'employmentEnd'],
+    ['Employment type', 'employmentType'],
+    ['Main duties and responsibilities', 'jobDescription'],
+    ['Responsibilities', 'jobDescription'],
+  ])('recognises %s only in a work-history section', (label, field) => {
+    expect(matched(`<label>${label} <input></label>`)).toBeNull();
+    expect(matched(inSection('Employment history', label))).toBe(field);
+    expect(
+      matched(`<h2>Work experience</h2><label>${label} <input></label>`),
+    ).toBe(field);
+    // "Experience" alone is not enough: forms use it for CVs and links.
+    expect(matched(inSection('Experience', label))).toBeNull();
+  });
+
+  it('recognises numbered and current or previous job sections', () => {
+    for (const legend of [
+      'Employment 2',
+      'Previous employment',
+      'Current employer',
+      'Employer 2',
+    ]) {
+      expect(matched(inSection(legend, 'Company name')), legend).toBe(
+        'employer',
+      );
+    }
+  });
+
+  it('never takes the company applied to for the applicant’s employer', () => {
+    // A bare "Company name" on an application may be the hiring company.
+    expect(matched('<label>Company name <input></label>')).toBeNull();
+    expect(matched(inSection('About the role', 'Company name'))).toBeNull();
+    expect(
+      matched(
+        inSection('Employment history', 'Job title you are applying for'),
+      ),
+    ).toBeNull();
+    expect(
+      matched(inSection('Employment history', 'Desired job title')),
+    ).toBeNull();
+    expect(
+      matched(inSection('Employment history', 'Earliest start date')),
+    ).toBeNull();
+  });
+
+  it.each([
+    inSection('Employment history', "Hiring manager's employer"),
+    inSection('Employment history', 'Employer contact'),
+    inSection('Employment history', 'Company representative'),
+    inSection('Employment history', 'Reference employer'),
+    inSection('Emergency contact', 'Employer'),
+    inSection('Emergency contact', 'Current employer'),
+    inSection('Reference 1', 'Current employer'),
+    inSection('Reference 1', 'Job title'),
+    inSection('Employer contact', 'Employer name'),
+    '<h2>Referees</h2><label>Previous employer <input></label>',
+    '<h2>Hiring manager</h2><label>Current job title <input></label>',
+    inSection('Recruitment agency', 'Company name'),
+  ])('never treats someone else’s employer as the applicant’s: %s', (html) => {
+    expect(detect(html).kind).not.toBe('match');
+  });
+
+  it('reads names, phones and addresses in a job section as the employer’s', () => {
+    for (const [label, control] of [
+      ['Name', '<input>'],
+      ['Telephone', '<input type="tel">'],
+      ['Email', '<input type="email">'],
+      ['Address line 1', '<input>'],
+      ['Country', '<input>'],
+    ] as const) {
+      expect(
+        detect(inSection('Current employment', label, control)).kind,
+        label,
+      ).toBe('other-person');
+    }
+    // Explicit autocomplete semantics still say whose detail it is.
+    expect(
+      matched(
+        inSection('Employment', 'Your email', '<input autocomplete="email">'),
+      ),
+    ).toBe('email');
+  });
+
+  it('leaves links in an "Experience" section to the existing rules', () => {
+    expect(matched(inSection('Experience', 'Portfolio URL'))).toBe('portfolio');
+    expect(matched(inSection('Experience', 'LinkedIn profile'))).toBe(
+      'linkedin',
+    );
+  });
+
+  it('recognises "I currently work here" only on a checkbox', () => {
+    expect(
+      matched('<label><input type="checkbox"> I currently work here</label>'),
+    ).toBe('currentlyEmployed');
+    expect(
+      matched(inSection('Employment 1', 'Current', '<input type="checkbox">')),
+    ).toBe('currentlyEmployed');
+    expect(matched('<label>I currently work here <input></label>')).toBeNull();
+    // A question about employment status is not this box.
+    expect(
+      matched(
+        '<label><input type="checkbox"> Are you currently employed?</label>',
+      ),
+    ).toBeNull();
+    // Nothing else is ever matched on a checkbox.
+    expect(
+      matched(
+        inSection('Employment 1', 'Job title', '<input type="checkbox">'),
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    'Reason for leaving',
+    'Why did you leave?',
+    'Please explain any gaps in your employment',
+    'Have you ever been subject to disciplinary action?',
+  ])('leaves %s for the applicant to answer', (label) => {
+    expect(
+      detect(inSection('Previous employment', label, '<textarea></textarea>')),
+    ).toEqual({ kind: 'manual', reason: 'answer' });
+  });
+
+  it.each([
+    'Why do you want this job?',
+    'Key achievements',
+    'Describe a time you led a team',
+    'Salary',
+  ])('never takes %s for a job description', (label) => {
+    expect(
+      matched(inSection('Employment 1', label, '<textarea></textarea>')),
+    ).not.toBe('jobDescription');
+  });
+
+  it('keeps declarations and signatures in a job section protected', () => {
+    expect(detect(inSection('Employment history', 'Signature')).kind).toBe(
+      'manual',
+    );
+    expect(
+      detect('<h2>Declaration</h2><label>Current employer <input></label>'),
+    ).toEqual({ kind: 'manual', reason: 'consent' });
+    expect(detect(inSection('Employment history', 'Salary'))).toEqual({
+      kind: 'manual',
+      reason: 'sensitive',
+    });
+  });
+});
+
+describe('employment boundaries found in review', () => {
+  it.each([
+    '<h1>Application for Employment</h1><label>Full name <input></label>',
+    '<form><h2>Employment application</h2><label>First name <input></label></form>',
+    '<h1>Employment Application Form</h1><label>Email <input type="email"></label>',
+  ])('still fills the applicant’s details under a form title: %s', (html) => {
+    expect(detect(html).kind).toBe('match');
+  });
+
+  it.each([
+    '<h2>Apply for one of our current jobs</h2><label>Job title <select><option value="">Choose</option><option>Driver</option></select></label>',
+    '<fieldset><legend>Which roles are you applying for?</legend><fieldset><legend>Role 1</legend><label>Job title <input></label></fieldset></fieldset>',
+    '<h2>Position 1</h2><label>Position <input></label>',
+    '<h2>Position 1</h2><label>Start date <input type="month"></label>',
+    '<h2>Employment details</h2><label>Company <input></label>',
+    '<h2>Our vacancies</h2><label>Current job title <input></label>',
+  ])('never takes the job applied for as history: %s', (html) => {
+    expect(detect(html).kind).not.toBe('match');
+  });
+
+  it.each([
+    '<fieldset><legend>Employment 1</legend><h3>Agency details</h3><label>Company name <input></label></fieldset>',
+    '<fieldset><legend>Employment 1</legend><h3>End client</h3><label>Job title <input></label></fieldset>',
+    '<fieldset><legend>Previous employment</legend><fieldset><legend>Person to speak to</legend><label>Company <input></label></fieldset></fieldset>',
+  ])('never fills an agency, client or contact person: %s', (html) => {
+    expect(detect(html).kind).not.toBe('match');
   });
 });

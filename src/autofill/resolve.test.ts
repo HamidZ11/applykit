@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { EmploymentRecord } from '@/domain/user-profile';
 import {
   educationRecords,
+  employmentRecords,
   fullProfile,
   gcseRecord,
 } from '@/test/autofill-fixtures';
@@ -114,7 +116,9 @@ describe('previewChoice', () => {
       NOW,
     );
 
-    expect(preview?.record.institution).toBe('Example Sixth Form College');
+    expect(preview?.record).toMatchObject({
+      institution: 'Example Sixth Form College',
+    });
     expect(byElement(preview?.reports ?? [])).toEqual({
       'sec-school': ['fill', 'Example Sixth Form College'],
       'sec-qual': ['fill', 'al'],
@@ -432,5 +436,245 @@ describe('confirmChoice and filling', () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onClick).not.toHaveBeenCalled();
+  });
+});
+
+describe('choosing a saved job', () => {
+  /** The employment fixture's two jobs, as the background would send them. */
+  function jobs(records: EmploymentRecord[] = employmentRecords()) {
+    const profile = fullProfile();
+    profile.employment = records;
+    return autofillValuesFrom(profile);
+  }
+
+  const visible = { isVisible: (e: Element) => !e.closest('[hidden]') };
+  const scan = () => scanFields(document, visible);
+
+  it('previews what the chosen job fills in its section only', () => {
+    loadFixture('employment-application.html');
+    const fields = scan();
+
+    const preview = previewChoice(
+      fields,
+      jobs(),
+      choiceFor(fields, 'j1-company', 'logistics'),
+      NOW,
+    );
+
+    expect(preview?.record).toMatchObject({ employer: 'Example Logistics' });
+    expect(byElement(preview?.reports ?? [])).toEqual({
+      'j1-company': ['fill', 'Example Logistics'],
+      'j1-title': ['fill', 'Warehouse Operative'],
+      'j1-from': ['fill', '2024-01'],
+      'j1-to': ['fill', '2025-01'],
+      'j1-duties': [
+        'fill',
+        'Picked and packed orders, ran stock counts and kept the loading bay safe.',
+      ],
+    });
+    expect(preview?.reports.every((r) => r.chosen)).toBe(true);
+  });
+
+  it('says what the chosen job leaves to the user, and why', () => {
+    loadFixture('employment-application.html');
+    const fields = scan();
+
+    const preview = previewChoice(
+      fields,
+      jobs(),
+      choiceFor(fields, 'j2-employer', 'testing'),
+      NOW,
+    );
+
+    expect(byElement(preview?.reports ?? [])).toEqual({
+      'j2-employer': ['fill', 'Example Testing Services'],
+      // Date inputs need a day the profile does not have.
+      'j2-start': ['unusable', null],
+      // A current role has no end date.
+      'j2-end': ['manual', null],
+      // A custom dropdown is guided, now from the chosen job.
+      'j2-type': ['unsupported', null],
+      // The user's own entry is kept.
+      'j2-title': ['keep', null],
+    });
+    expect(
+      preview?.reports.find((r) => r.field.element.id === 'j2-type')
+        ?.suggestion,
+    ).toMatchObject({ kind: 'value', value: 'Part-time' });
+  });
+
+  it('lists the section’s own questions as left to the user', () => {
+    loadHtml(`<form>
+      <fieldset><legend>Employment 1</legend>
+        <label>Employer <input id="employer"></label>
+        <label>Reason for leaving <textarea id="reason"></textarea></label>
+      </fieldset></form>`);
+    const fields = scanFields(document);
+
+    const preview = previewChoice(
+      fields,
+      jobs(),
+      choiceFor(fields, 'employer', 'logistics'),
+      NOW,
+    );
+
+    expect(byElement(preview?.reports ?? [])).toEqual({
+      employer: ['fill', 'Example Logistics'],
+      reason: ['manual', null],
+    });
+  });
+
+  it('says when the chosen job lacks a saved value', () => {
+    loadFixture('employment-application.html');
+    const fields = scan();
+    const [current, earlier] = employmentRecords();
+    if (!current || !earlier) throw new Error('No jobs');
+
+    const preview = previewChoice(
+      fields,
+      jobs([current, { ...earlier, description: '' }]),
+      choiceFor(fields, 'j1-company', 'logistics'),
+      NOW,
+    );
+
+    expect(
+      preview?.reports.find((r) => r.field.element.id === 'j1-duties'),
+    ).toMatchObject({
+      status: 'no-value',
+      reason: 'Your saved job has no description.',
+    });
+  });
+
+  it('fills only the chosen section and counts what the page kept', async () => {
+    loadFixture('employment-application.html');
+    const fields = scan();
+    const choice = choiceFor(fields, 'j1-company', 'logistics');
+    const preview = previewChoice(fields, jobs(), choice, NOW);
+    const changed: string[] = [];
+    document.addEventListener('input', (event) => {
+      changed.push((event.target as HTMLElement).id);
+    });
+
+    const check = confirmChoice(
+      scan(),
+      jobs(),
+      choice,
+      preview?.reports ?? [],
+      NOW,
+    );
+    if (!check.ok) throw new Error(check.message);
+    const outcomes = await fillFields(check.plan);
+
+    expect(outcomes.map((r) => [r.field.element.id, r.status])).toEqual([
+      ['j1-company', 'filled'],
+      ['j1-title', 'filled'],
+      ['j1-from', 'filled'],
+      ['j1-to', 'filled'],
+      ['j1-duties', 'filled'],
+    ]);
+    expect(changed).toEqual([
+      'j1-company',
+      'j1-title',
+      'j1-from',
+      'j1-to',
+      'j1-duties',
+    ]);
+    for (const id of ['cur-employer', 'prev-employer', 'j2-employer']) {
+      expect(input(id).value, id).toBe('');
+    }
+  });
+
+  it('fills nothing when the job was removed from the profile', () => {
+    loadFixture('employment-application.html');
+    const fields = scan();
+    const choice = choiceFor(fields, 'j1-company', 'logistics');
+    const preview = previewChoice(fields, jobs(), choice, NOW);
+
+    const check = confirmChoice(
+      scan(),
+      jobs(employmentRecords().slice(0, 1)),
+      choice,
+      preview?.reports ?? [],
+      NOW,
+    );
+
+    expect(check).toEqual({
+      ok: false,
+      message: 'That record is no longer in your saved profile. Choose again.',
+    });
+  });
+
+  it('fills nothing when the job was edited after the preview', () => {
+    loadFixture('employment-application.html');
+    const fields = scan();
+    const choice = choiceFor(fields, 'j1-company', 'logistics');
+    const preview = previewChoice(fields, jobs(), choice, NOW);
+    const [current, earlier] = employmentRecords();
+    if (!current || !earlier) throw new Error('No jobs');
+
+    const check = confirmChoice(
+      scan(),
+      jobs([current, { ...earlier, title: 'Shift Lead' }]),
+      choice,
+      preview?.reports ?? [],
+      NOW,
+    );
+
+    expect(check.ok).toBe(false);
+  });
+
+  it('fills nothing when the section changed after the preview', () => {
+    loadFixture('employment-application.html');
+    const fields = scan();
+    const choice = choiceFor(fields, 'j1-company', 'logistics');
+    const preview = previewChoice(fields, jobs(), choice, NOW);
+    document
+      .querySelector('[aria-labelledby="job-1"]')
+      ?.insertAdjacentHTML(
+        'beforeend',
+        '<label>Job title <input id="j1-extra"></label>',
+      );
+
+    const check = confirmChoice(
+      scan(),
+      jobs(),
+      choice,
+      preview?.reports ?? [],
+      NOW,
+    );
+
+    expect(check).toEqual({
+      ok: false,
+      message:
+        'This section has changed since you chose. Nothing was filled; review it again.',
+    });
+  });
+
+  it('writes nothing more when the same choice is confirmed twice', async () => {
+    loadFixture('employment-application.html');
+    const fields = scan();
+    const choice = choiceFor(fields, 'j1-company', 'logistics');
+    const preview = previewChoice(fields, jobs(), choice, NOW);
+    const first = confirmChoice(
+      scan(),
+      jobs(),
+      choice,
+      preview?.reports ?? [],
+      NOW,
+    );
+    if (!first.ok) throw new Error(first.message);
+    await fillFields(first.plan);
+    input('j1-title').value = 'Edited by me';
+
+    const second = confirmChoice(
+      scan(),
+      jobs(),
+      choice,
+      preview?.reports ?? [],
+      NOW,
+    );
+
+    expect(second.ok).toBe(false);
+    expect(input('j1-title').value).toBe('Edited by me');
   });
 });

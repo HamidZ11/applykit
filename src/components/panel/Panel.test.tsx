@@ -17,6 +17,7 @@ import { OPEN_PROFILE, type AutofillValuesResponse } from '@/messages';
 import { autofillValuesFrom } from '@/autofill/profile-values';
 import {
   educationRecords,
+  employmentRecords,
   fullProfile,
   gcseRecord,
   sampleValues,
@@ -790,6 +791,170 @@ describe('choosing a saved education record', () => {
 
     expect(findButton('Choose a saved record')).toBeUndefined();
     expect(radios()).toHaveLength(0);
+  });
+});
+
+describe('choosing a saved job', () => {
+  function twoJobs(): AutofillValuesResponse {
+    const profile = fullProfile();
+    profile.employment = employmentRecords();
+    return ready(autofillValuesFrom(profile));
+  }
+
+  beforeEach(async () => {
+    loadFixture('employment-application.html');
+    document.body.append(host);
+    await open(twoJobs());
+    click('Show all fields');
+  });
+
+  function field(id: string): HTMLInputElement {
+    const element = document.getElementById(id);
+    if (!element) throw new Error(`No #${id}`);
+    return element as HTMLInputElement;
+  }
+
+  function radios(): HTMLInputElement[] {
+    return [...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+  }
+
+  async function choose(employer: string) {
+    const radio = radios().find((r) =>
+      r.closest('label')?.textContent.includes(employer),
+    );
+    if (!radio) throw new Error(`No job ${employer}`);
+    await act(async () => {
+      radio.click();
+      await Promise.resolve();
+    });
+  }
+
+  async function openChooser(row: RegExp) {
+    click(row);
+    click('Choose a saved record');
+    await settle();
+  }
+
+  function previewRows(): string[] {
+    const preview = host.querySelector('[aria-label="What this record fills"]');
+    return [...(preview?.querySelectorAll('li') ?? [])].map((li) =>
+      li.textContent.trim(),
+    );
+  }
+
+  it('groups the jobs under Employment', () => {
+    expect(dialog().textContent).toContain('Employment');
+    expect(button(/^Company name/).textContent).toContain(
+      'Several records fit',
+    );
+  });
+
+  it('offers both jobs with their titles and years, choosing neither', async () => {
+    await openChooser(/^Company name/);
+
+    expect(radios().map((r) => r.closest('label')?.textContent.trim())).toEqual(
+      [
+        'Example Testing ServicesTest Centre Associate · 2025–Present',
+        'Example LogisticsWarehouse Operative · 2024–2025',
+      ],
+    );
+    expect(radios().some((r) => r.checked)).toBe(false);
+    expect(button(/^Fill fields/).disabled).toBe(true);
+    // Descriptions are not shown to tell jobs apart.
+    expect(
+      host.querySelector('fieldset')?.textContent.includes('invigilated'),
+    ).toBe(false);
+  });
+
+  it('previews and fills only the chosen section after confirming', async () => {
+    await openChooser(/^Company name/);
+    await choose('Example Logistics');
+
+    expect(previewRows()).toEqual([
+      'Company nameWill fill',
+      'Position heldWill fill',
+      'FromWill fill',
+      'ToWill fill',
+      'ResponsibilitiesWill fill',
+    ]);
+    expect(field('j1-company').value).toBe('');
+
+    click('Fill 5 fields');
+    await settle();
+
+    expect(field('j1-company').value).toBe('Example Logistics');
+    expect(field('j1-from').value).toBe('2024-01');
+    expect(field('j2-employer').value).toBe('');
+    expect(fillFields).toHaveBeenCalledTimes(1);
+    expect(loadValues).toHaveBeenCalledTimes(2);
+    expect(announcement()).toBe(
+      'Filled 5 fields from the record you chose. Nothing was submitted.',
+    );
+    expect(dialog().textContent).toContain('Filled · your choice');
+    expect(document.activeElement).toBe(button(/^Company name/));
+  });
+
+  it('says what a current job leaves to the user before filling', async () => {
+    await openChooser(/^EmployerSeveral/);
+    await choose('Example Testing Services');
+
+    expect(previewRows()).toEqual([
+      'EmployerWill fill',
+      'Start dateSaved value does not fit',
+      'End dateAnswer yourself',
+      'Employment typeChoose on the page',
+      'Job titleAlready filled',
+    ]);
+    expect(button('Fill 1 field').disabled).toBe(false);
+  });
+
+  it('cancels with Escape without filling or closing the panel', async () => {
+    await openChooser(/^Company name/);
+    await choose('Example Logistics');
+    const [first] = radios();
+    if (!first) throw new Error('No radio');
+
+    act(() => {
+      first.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+    });
+
+    expect(radios()).toHaveLength(0);
+    expect(field('j1-company').value).toBe('');
+    expect(fillFields).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(button(/^Company name/));
+  });
+
+  it('guides the current-role box and never ticks it', async () => {
+    click(/^I currently work here/);
+
+    expect(dialog().textContent).toContain('From your saved profile');
+    expect(dialog().textContent).toContain('Tick it');
+    expect(findButton('Choose a saved record')).toBeUndefined();
+
+    click('Show summary');
+    await autofill();
+
+    expect(input('cur-current').checked).toBe(false);
+    expect(field('cur-employer').value).toBe('Example Testing Services');
+    expect(field('j1-company').value).toBe('');
+  });
+
+  it('never shows an arbitrary job for a custom dropdown several jobs fit', () => {
+    // The second "Employment type": Employment 2's custom dropdown.
+    const row = [...host.querySelectorAll('button')].filter((b) =>
+      b.textContent.startsWith('Employment type'),
+    )[1];
+    act(() => {
+      row?.click();
+    });
+
+    expect(dialog().textContent).toContain(
+      'Several of your saved jobs could fit, so ApplyKit does not suggest one.',
+    );
+    expect(dialog().textContent).not.toContain('From your saved profile');
   });
 });
 

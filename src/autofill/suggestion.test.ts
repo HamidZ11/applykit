@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { educationRecords, fullProfile } from '@/test/autofill-fixtures';
-import { loadFixture } from '@/test/load-fixture';
+import {
+  educationRecords,
+  employmentRecords,
+  fullProfile,
+} from '@/test/autofill-fixtures';
+import { loadFixture, loadHtml } from '@/test/load-fixture';
 import type { AutofillValues } from './fields';
 import { autofillValuesFrom, phoneParts } from './profile-values';
 import { planFill, type FieldReport } from './report';
@@ -114,5 +118,115 @@ describe('guidance for custom dropdowns', () => {
     );
 
     expect(found?.suggestion).toBeNull();
+  });
+});
+
+describe('guidance for employment fields ApplyKit cannot fill', () => {
+  function jobs(records = employmentRecords()): AutofillValues {
+    const profile = fullProfile();
+    profile.employment = records;
+    return autofillValuesFrom(profile);
+  }
+
+  /** A custom employment-type dropdown and a current-role box. */
+  function guided(legend: string, v: AutofillValues) {
+    loadHtml(`<form><fieldset><legend>${legend}</legend>
+      <label>Employer <input id="employer"></label>
+      <span id="type-label">Employment type</span>
+      <div id="type" role="combobox" aria-labelledby="type-label" tabindex="0"></div>
+      <span id="end-label">End date</span>
+      <div id="end" role="combobox" aria-labelledby="end-label" tabindex="0"></div>
+      <label><input id="current" type="checkbox"> I currently work here</label>
+    </fieldset></form>`);
+    const reports = planFill(scanFields(document), v, NOW);
+    return (id: string) => reports.find((r) => r.field.element.id === id);
+  }
+
+  it('suggests the one job a section asks about', () => {
+    const report = guided('Previous employment', jobs());
+
+    expect(report('type')?.suggestion).toMatchObject({
+      kind: 'value',
+      value: 'Full-time',
+    });
+    expect(report('end')?.suggestion).toMatchObject({
+      kind: 'value',
+      value: 'January 2025',
+    });
+    expect(report('current')).toMatchObject({
+      status: 'unsupported',
+      reason:
+        'ApplyKit never ticks boxes: many sites only notice a real click. Tick it yourself if it applies.',
+      suggestion: { kind: 'value', value: 'Leave it unticked' },
+    });
+  });
+
+  it('says a current role has no end date', () => {
+    const report = guided('Current employment', jobs());
+
+    expect(report('end')?.suggestion).toMatchObject({
+      kind: 'value',
+      value: 'No end date',
+    });
+    expect(report('current')?.suggestion).toMatchObject({
+      kind: 'value',
+      value: 'Tick it',
+    });
+  });
+
+  it('never shows an arbitrary job when several fit', () => {
+    const report = guided('Employment 1', jobs());
+
+    for (const id of ['type', 'end', 'current']) {
+      expect(report(id)?.suggestion, id).toEqual({
+        kind: 'ambiguous',
+        reason:
+          'Several of your saved jobs could fit, so ApplyKit does not suggest one. Check which job this asks about.',
+      });
+    }
+  });
+
+  it('says what is missing from the saved job', () => {
+    const [current] = employmentRecords();
+    if (!current) throw new Error('No job');
+
+    const report = guided(
+      'Current employment',
+      jobs([{ ...current, employmentType: '' }]),
+    );
+
+    expect(report('type')?.suggestion).toEqual({
+      kind: 'missing',
+      reason: 'Your saved job has no value for this.',
+    });
+  });
+
+  it('gives no date for an expected end, as autofill does', () => {
+    loadHtml(`<form><fieldset><legend>Previous employment</legend>
+      <label>Employer <input id="employer"></label>
+      <span id="end-label">Expected employment end date</span>
+      <div id="end" role="combobox" aria-labelledby="end-label" tabindex="0"></div>
+    </fieldset></form>`);
+
+    const report = planFill(scanFields(document), jobs(), NOW).find(
+      (r) => r.field.element.id === 'end',
+    );
+
+    expect(report?.suggestion).toEqual({
+      kind: 'unsuitable',
+      reason:
+        'This asks when you expect to leave. Your profile saves only when a job ended.',
+    });
+  });
+
+  it('never suggests from a job for a reference’s employer', () => {
+    loadHtml(`<form><fieldset><legend>Reference</legend>
+      <span id="ref-label">Referee's employer</span>
+      <div id="ref" role="combobox" aria-labelledby="ref-label" tabindex="0"></div>
+    </fieldset></form>`);
+
+    const [report] = planFill(scanFields(document), jobs(), NOW);
+
+    expect(report?.suggestion).toBeNull();
   });
 });

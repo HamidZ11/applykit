@@ -3,14 +3,17 @@ import {
   AUTOFILL_FIELD_LABEL,
   type AutofillField,
   isEducationField,
+  isEmploymentField,
   type AutofillValues,
   type CountryValue,
   type EducationValue,
+  type EmploymentValue,
   type PhoneParts,
 } from './fields';
 import { comparable, isPlaceholderOption, usableOptions } from './options';
 import { suggestionFor, type Suggestion } from './suggestion';
 import { chooseRecords, planEducation } from './plan-education';
+import { chooseEmployment, planEmployment } from './plan-employment';
 import type { Planned, RecordChoice, SectionChoices } from './records';
 import {
   isControlField,
@@ -67,8 +70,8 @@ export interface FieldReport {
   note: string | null;
   evidence: Evidence[];
   /**
-   * For `ambiguous` education fields: the ids of the saved records the user
-   * can choose between. Empty otherwise.
+   * For `ambiguous` education or employment fields: the ids of the saved
+   * records the user can choose between. Empty otherwise.
    */
   candidates: string[];
   /** Planned or filled from a record the user explicitly chose. */
@@ -104,6 +107,8 @@ const REASON = {
     'A personal or sensitive question. ApplyKit never answers these for you.',
   consent: 'A declaration or consent. Only you can agree to this.',
   verification: 'A verification check. Complete it yourself.',
+  answer:
+    'ApplyKit does not save answers to questions like this, and never writes them for you. Answer it yourself.',
   otherPerson:
     'This seems to ask about someone else or an organisation, such as a reference or employer.',
   unrecognised: 'ApplyKit does not know what this field asks for.',
@@ -126,6 +131,8 @@ interface FormContext {
   splitPhone: boolean;
   /** The saved record each education field would be filled from. */
   education: Map<ScannedField, RecordChoice<EducationValue>>;
+  /** The saved job each employment field would be filled from. */
+  employment: Map<ScannedField, RecordChoice<EmploymentValue>>;
   now: Date;
 }
 
@@ -143,6 +150,7 @@ export function planFill(
   const context: FormContext | null = values && {
     values,
     education: chooseRecords(fields, values.education, sectionChoices),
+    employment: chooseEmployment(fields, values.employment, sectionChoices),
     now,
     // Also when the code is a custom dropdown the user sets themselves.
     splitPhone: fields.some(
@@ -213,19 +221,21 @@ function planField(
           evidence: support.custom.evidence,
           suggestion:
             target && context
-              ? suggestionFor(
-                  field,
-                  target,
-                  context.values,
-                  context.education.get(field),
-                  context.now,
-                )
+              ? suggestionFor(field, target, {
+                  values: context.values,
+                  education: context.education.get(field),
+                  employment: context.employment.get(field),
+                  now: context.now,
+                })
               : null,
-          reason: `${
-            target
-              ? `This looks like your ${AUTOFILL_FIELD_LABEL[target].toLowerCase()}, but it`
-              : 'This'
-          } is a custom dropdown, which ApplyKit cannot fill. Choose it yourself on this page.`,
+          reason:
+            field.kind === 'checkbox'
+              ? 'ApplyKit never ticks boxes: many sites only notice a real click. Tick it yourself if it applies.'
+              : `${
+                  target
+                    ? `This looks like your ${AUTOFILL_FIELD_LABEL[target].toLowerCase()}, but it`
+                    : 'This'
+                } is a custom dropdown, which ApplyKit cannot fill. Choose it yourself on this page.`,
         };
       }
       return { ...base, status: 'unsupported', reason: REASON.unsupported };
@@ -279,7 +289,14 @@ function planField(
     element.maxLength > 0 &&
     planned.fillValue.length > element.maxLength
   ) {
-    return { ...matched, status: 'manual', reason: REASON.tooLong };
+    return {
+      ...matched,
+      status: 'manual',
+      reason:
+        support.field === 'jobDescription'
+          ? `Your saved description has ${String(planned.fillValue.length)} characters, but this field allows ${String(element.maxLength)}. ApplyKit does not shorten it: write a shorter version yourself.`
+          : REASON.tooLong,
+    };
   }
   return {
     ...matched,
@@ -294,8 +311,23 @@ function planField(
 function planValue(
   field: ControlField,
   target: AutofillField,
-  { values, splitPhone, education, now }: FormContext,
+  { values, splitPhone, education, employment, now }: FormContext,
 ): Planned {
+  if (isEmploymentField(target)) {
+    const choice = employment.get(field);
+    if (!choice) {
+      return { status: 'no-value', reason: 'Your profile has no jobs saved.' };
+    }
+    if ('status' in choice) return choice;
+    const planned = planEmployment(field, target, choice.record, now);
+    if ('reason' in planned) return planned;
+    return {
+      display: planned.display,
+      fillValue: planned.fillValue,
+      ...(choice.note ? { note: choice.note } : {}),
+      chosen: choice.chosen,
+    };
+  }
   if (isEducationField(target)) {
     const choice = education.get(field);
     if (!choice) {

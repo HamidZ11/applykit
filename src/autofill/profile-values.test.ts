@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { educationRecords, fullProfile } from '@/test/autofill-fixtures';
+import {
+  educationRecords,
+  employmentRecords,
+  fullProfile,
+} from '@/test/autofill-fixtures';
 import { validProfile } from '@/test/profile-fixtures';
 import { autofillValuesFrom, phoneParts } from './profile-values';
 
@@ -35,7 +39,28 @@ describe('autofillValuesFrom', () => {
         regionNames: ['GB', 'GBR', 'United Kingdom', 'UK', 'Great Britain'],
       },
       education: [],
+      employment: [],
     });
+  });
+
+  it('passes on saved jobs with only what autofill uses', () => {
+    const profile = fullProfile();
+    profile.employment = employmentRecords();
+
+    expect(autofillValuesFrom(profile).employment).toEqual([
+      {
+        id: 'testing',
+        employer: 'Example Testing Services',
+        title: 'Test Centre Associate',
+        employmentType: 'part-time',
+        startDate: '2025-02',
+        endDate: '',
+        current: true,
+        description:
+          'Welcomed candidates, checked identification and invigilated computer-based exams.',
+      },
+      expect.objectContaining({ id: 'logistics', current: false }),
+    ]);
   });
 
   it('passes on education records with their level', () => {
@@ -120,6 +145,7 @@ describe('autofillValuesFrom', () => {
       'country',
       'phone',
       'education',
+      'employment',
     ]);
   });
 });

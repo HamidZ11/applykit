@@ -69,6 +69,20 @@ describe('isAutofillValuesResponse', () => {
       { status: 'ready', values: { ...sampleValues(), education: undefined } },
     ],
     [
+      'a missing employment list',
+      { status: 'ready', values: { ...sampleValues(), employment: undefined } },
+    ],
+    [
+      'malformed employment',
+      {
+        status: 'ready',
+        values: {
+          ...sampleValues(),
+          employment: [{ id: 'x', employer: 'E', current: 'yes' }],
+        },
+      },
+    ],
+    [
       'a malformed country',
       { status: 'ready', values: { ...sampleValues(), country: { code: 1 } } },
     ],

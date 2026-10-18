@@ -1,7 +1,9 @@
 import {
   isEducationField,
+  isEmploymentField,
   type AutofillField,
   type EducationField,
+  type EmploymentField,
 } from './fields';
 
 /**
@@ -71,7 +73,12 @@ export interface Evidence {
   text: string;
 }
 
-export type ManualReason = 'sensitive' | 'consent' | 'verification';
+export type ManualReason =
+  | 'sensitive'
+  | 'consent'
+  | 'verification'
+  /** About the applicant's own circumstances, which no profile holds. */
+  | 'answer';
 
 export type Detection =
   | { kind: 'match'; field: AutofillField; evidence: Evidence[] }
@@ -109,7 +116,10 @@ const AUTOCOMPLETE_NOT_PERSONAL = new Set(['work', 'fax', 'pager']);
  * Patterns on normalised text (lower case, words separated by single
  * spaces). Anchored patterns only match a whole label or attribute.
  */
-const TEXT_RULES: Record<Exclude<AutofillField, EducationField>, RegExp[]> = {
+const TEXT_RULES: Record<
+  Exclude<AutofillField, EducationField | EmploymentField>,
+  RegExp[]
+> = {
   fullName: [
     /^(?:your |applicant |candidate )?(?:full |legal |full legal )?name$/,
     /^fullname$/,
@@ -280,6 +290,125 @@ const LESS_SPECIFIC: [EducationField, EducationField[]][] = [
   ['fieldOfStudy', ['educationStart', 'educationEnd', 'grade']],
 ];
 
+/**
+ * Employment fields. `strong` patterns name the applicant's own job
+ * ("Current employer", "Previous job title"); `contextual` ones
+ * ("Company", "Title", "From") count only inside a work-history section.
+ * A job the applicant is applying for is never their employment history.
+ */
+const EMPLOYMENT_RULES: Record<
+  Exclude<EmploymentField, 'currentlyEmployed'>,
+  { strong: RegExp[]; contextual: RegExp[] }
+> = {
+  employer: {
+    strong: [
+      /^(?:name of )?(?:your )?(?:current|present|previous|former|most recent|last|latest) (?:employer|company|organi[sz]ation)(?: s)?(?: name)?$/,
+    ],
+    contextual: [
+      /^(?:name of )?(?:the )?(?:employer|company|organi[sz]ation|business|firm)(?: s)?(?: name)?$/,
+      /^employed (?:by|at)$/,
+    ],
+  },
+  jobTitle: {
+    strong: [
+      /^(?:your )?(?:current|present|previous|former|most recent|last|latest) (?:job title|job|role|position|post)(?: title| held)?$/,
+    ],
+    contextual: [
+      /^(?:job |role |position )?title$/,
+      /^(?:job|role|position|post|occupation)(?: held| title| name)?$/,
+      /^positions? held$/,
+    ],
+  },
+  employmentType: {
+    strong: [],
+    contextual: [
+      /^(?:employment|contract|job|work|position|role) type$/,
+      /^type of (?:employment|contract|job|work|position|role)$/,
+      /^full (?:time )?or part time$/,
+    ],
+  },
+  employmentStart: {
+    strong: [
+      /\b(?:employment|job|role|position) start(?: date| month| year)?\b/,
+      /\bdate (?:employment|job|role) (?:started|began|commenced)\b/,
+      /\bstart(?:ed)? (?:date )?(?:of|in) (?:employment|role|position|job)\b/,
+    ],
+    contextual: [
+      /^(?:start(?:ed|ing)?|from|began|commenced|joined)(?: date| year| month)?$/,
+      /^(?:date|year|month) (?:started|from|joined)$/,
+    ],
+  },
+  employmentEnd: {
+    strong: [
+      /\b(?:employment|job|role|position) end(?: date| month| year)?\b/,
+      /\bdate (?:employment|job|role) (?:ended|finished)\b/,
+    ],
+    contextual: [
+      /^(?:end(?:ed|ing)?|to|until|finish(?:ed)?|left)(?: date| year| month)?$/,
+      /^(?:date|year|month) (?:ended|finished|to|left)$/,
+      /^(?:leaving date|date of leaving)$/,
+    ],
+  },
+  jobDescription: {
+    strong: [],
+    contextual: [
+      /^(?:(?:main|key) )?(?:duties|responsibilities)(?: (?:and|&) (?:duties|responsibilities))?$/,
+      /^(?:job|role|position) (?:description|summary|duties|responsibilities)$/,
+      /^(?:description|summary)(?: of (?:your )?(?:role|duties|responsibilities|job|position))?$/,
+    ],
+  },
+};
+
+/** "I currently work here": only ever a checkbox, and only ever guided. */
+const CURRENT_ROLE = {
+  strong: [
+    /^(?:i )?(?:currently|still) (?:work|working|am working|employed) (?:here|there)$/,
+    /^i (?:currently |still )?work here$/,
+    /^i am (?:currently |still )?(?:employed|working) here$/,
+    /^(?:this is )?(?:my )?current (?:role|job|position|employer|employment)$/,
+    /^currently employed here$/,
+  ],
+  contextual: [
+    /^(?:current|currently employed|present|to present|until present|ongoing|still employed)$/,
+  ],
+};
+
+/**
+ * Sections clearly about the applicant's own jobs. "Experience" alone is
+ * not enough: forms use it for CVs, portfolios and links too.
+ */
+const WORK_HISTORY =
+  /\b(?:(?<!application for )(?<!apply for )employment(?! (?:application|applications|form|details|status|eligibility|opportunit\w*|preferences?|equity|type|agenc\w*))|work (?:history|experience)|career history|job history|professional experience|positions? held|(?:current|present|previous|former|past|prior|recent|earlier|last|latest) (?:employment|employers?|company)|(?:current|present) (?:job|position|role)|(?:previous|former|past|prior|recent|earlier|last|latest) (?:jobs?|positions?|roles?)|(?:employers?|employment) \d+|employer details)\b/;
+
+/**
+ * Sections about the job being applied for: whatever they ask, it is not
+ * the applicant's history. Read from the field's own section and heading. "Apply for one of our current jobs", "Which
+ * roles are you applying for?", "Our vacancies".
+ */
+const APPLYING =
+  /\b(?:appl(?:y|ying|ied)|vacanc\w*|opportunit\w*|role preferences?|our (?:jobs|roles|positions|openings))\b/;
+
+/**
+ * Personal details that, inside a work-history section, belong to the
+ * employer: its name, address, phone or email.
+ */
+const EMPLOYER_DETAILS = new Set<AutofillField>([
+  'fullName',
+  'firstName',
+  'lastName',
+  'preferredName',
+  'email',
+  'phone',
+  'phoneCountryCode',
+  'phoneNational',
+  'addressLine1',
+  'addressLine2',
+  'city',
+  'region',
+  'postcode',
+  'country',
+]);
+
 /** Address parts are short labels; longer text is likely a question. */
 const SHORT_ONLY = new Set<AutofillField>(['city', 'region', 'country']);
 const MAX_WORDS = 8;
@@ -293,6 +422,10 @@ const OTHER_NAMES =
  * extension or a dialling code. They veto the field whatever other signals
  * say, unless they only appear in an instruction ("including country code").
  */
+/** The job applied for, or the start someone could make: not their history. */
+const NOT_OWN_JOB =
+  /\b(?:appl(?:y|ying|ied)|desired|preferred|target|seeking|sought|vacanc\w*|advert\w*|available|availability|earliest|notice)\b/;
+
 const EXCLUDE: Partial<Record<AutofillField, RegExp>> = {
   phone:
     /\b(?:ext|extension|prefix)\b|\b(?:phone|tel|telephone|mobile) (?:type|code)\b|\b(?:country|area|dial(?:l?ing)?|calling) code\b/,
@@ -312,6 +445,15 @@ const EXCLUDE: Partial<Record<AutofillField, RegExp>> = {
   // Professional or language qualifications are not the saved education.
   qualification:
     /\b(?:number|id|code|reference|certificate number|professional|language|teaching|driving|vocational)\b/,
+  // "Employer address", "Company website": about the employer, not its name.
+  employer:
+    /\b(?:address|street|city|town|country|postcode|post code|zip|phone|telephone|mobile|email|e mail|website|url|web|contact|number|no|id|code|reference|size|industry|sector|type|registration)\b|\b(?:appl(?:y|ying|ied)|desired|preferred|target)\b/,
+  jobTitle: NOT_OWN_JOB,
+  employmentType: NOT_OWN_JOB,
+  employmentStart: NOT_OWN_JOB,
+  employmentEnd: NOT_OWN_JOB,
+  jobDescription:
+    /\b(?:reasons?|leaving|left|gaps?|why|motivation|cover|salary|achievements?)\b|\b(?:appl(?:y|ying|ied)|vacanc\w*|advert\w*)\b/,
 };
 const INSTRUCTION = /\b(?:include|including|incl|with)\b/;
 
@@ -335,6 +477,13 @@ const CONSENT =
   /\b(?:consent|agree\w*|declar\w*|terms|privacy|acknowledg\w*|certify|newsletter|marketing|subscribe|opt in|signature|signed|sign here)\b/;
 const VERIFICATION = /captcha|turnstile|g-recaptcha/i;
 
+/**
+ * Questions about the applicant's own circumstances: a profile never holds
+ * the answer, and ApplyKit never writes one.
+ */
+const ANSWER_YOURSELF =
+  /\b(?:reasons? for (?:leaving|wanting to leave|change|changing)|why (?:did |are |do )?you (?:leave|left|leaving|want to leave|wish to leave)|leaving reason|gaps? in (?:your )?(?:employment|work history|career|cv)|employment gaps?|career breaks?|disciplinary)\b/;
+
 /** Someone or something other than the applicant. */
 const OTHER_PERSON =
   /\b(?:references?|referees?|referr\w*|referrals?|employers?|employees?|colleagues?|friends?|relatives?|interviewers?|company|organi[sz]ation|hiring|recruiter|manager|supervisor|emergency|next of kin|guardian|parent|spouse|partner|agency|business|work|office|school|university|college|previous|former|landlord|contact person)\b/;
@@ -353,6 +502,16 @@ const OTHER_PERSON_EDUCATION =
 const OTHER_PERSON_HEADING =
   /\b(?:references?|referees?|referr\w*|referrals?|employers?|supervisors?|emergency|next of kin|guardian|spouse|partner|landlord|contact person)\b/;
 
+/**
+ * For employment fields: employers, companies and previous jobs are the
+ * applicant's own history, but people at them, and anyone else, are not.
+ * "Employer contact", "Company representative", "Hiring manager".
+ */
+const OTHER_PERSON_EMPLOYMENT =
+  /\b(?:references?|referees?|referr\w*|referrals?|colleagues?|friends?|relatives?|interviewers?|hiring|recruit\w*|managers?|supervisors?|representatives?|contacts?|emergency|next of kin|guardian|parent|spouse|partner|landlord|agency|agencies|clients?|customers?|person to (?:speak|contact)|speak to)\b/;
+const OTHER_PERSON_HEADING_EMPLOYMENT =
+  /\b(?:references?|referees?|referr\w*|referrals?|hiring|recruit\w*|managers?|supervisors?|representatives?|contacts?|emergency|next of kin|guardian|spouse|partner|landlord|agency|agencies|clients?|customers?|person to (?:speak|contact)|speak to)\b/;
+
 export function detectControl(control: DetectableControl): Detection {
   const texts = textSignals(control);
   const context = sectionText(control);
@@ -363,6 +522,13 @@ export function detectControl(control: DetectableControl): Detection {
     EDUCATION_CONTEXT.test(surroundings) &&
     !EMPLOYMENT_CONTEXT.test(surroundings);
   const inEmployment = EMPLOYMENT_CONTEXT.test(surroundings);
+  // The field's own section and heading, not a page-wide "Apply" region.
+  const applying = APPLYING.test(
+    `${groupName(control.closest(SECTIONS))} ${heading}`,
+  );
+  const inWorkHistory = WORK_HISTORY.test(surroundings) && !applying;
+  const checkbox =
+    control instanceof HTMLInputElement && control.type === 'checkbox';
 
   const identifiers = [
     nameOf(control),
@@ -398,6 +564,9 @@ export function detectControl(control: DetectableControl): Detection {
   if (CONSENT.test(all) || CONSENT.test(heading)) {
     return { kind: 'manual', reason: 'consent' };
   }
+  if (texts.some((t) => ANSWER_YOURSELF.test(t.normalised))) {
+    return { kind: 'manual', reason: 'answer' };
+  }
 
   const candidates = new Map<AutofillField, Evidence[]>();
   const add = (field: AutofillField, evidence: Evidence) => {
@@ -424,13 +593,25 @@ export function detectControl(control: DetectableControl): Detection {
     if (type === 'tel') add('phone', { signal: 'type', text: type });
   }
 
-  for (const { signal, raw, normalised } of texts) {
+  // Generic employment labels count only where the section is clearly
+  // about jobs, and not also about education.
+  const jobContext = inWorkHistory && !EDUCATION_CONTEXT.test(surroundings);
+  for (const { signal, raw, normalised, core } of texts) {
     for (const field of matchText(normalised))
       add(field, { signal, text: raw });
+    for (const field of matchEmployment(core, jobContext, checkbox)) {
+      add(field, { signal, text: raw });
+    }
     if (inEmployment && !inEducation) continue;
     for (const field of matchEducation(normalised, inEducation)) {
       add(field, { signal, text: raw });
     }
+  }
+  for (const field of [...candidates.keys()]) {
+    // Only "I currently work here" is a checkbox; nothing else is.
+    if (checkbox !== (field === 'currentlyEmployed')) candidates.delete(field);
+    // Nothing in a section about the job applied for is history.
+    if (applying && isEmploymentField(field)) candidates.delete(field);
   }
 
   // "Country code" alone could be an ISO code or a calling code; a select
@@ -473,15 +654,37 @@ export function detectControl(control: DetectableControl): Detection {
       candidates.delete(general);
     }
   }
+  // In a work-history section, a name, phone or address is the employer's.
+  const employerDetails: Evidence[] = [];
+  if (inWorkHistory) {
+    for (const [field, found] of [...candidates]) {
+      if (
+        EMPLOYER_DETAILS.has(field) &&
+        !found.some((e) => e.signal === 'autocomplete')
+      ) {
+        employerDetails.push(...found);
+        candidates.delete(field);
+      }
+    }
+  }
 
-  const evidence = [...candidates.values()].flat();
-  const onlyEducation =
-    candidates.size > 0 && [...candidates.keys()].every(isEducationField);
-  const otherPerson = onlyEducation ? OTHER_PERSON_EDUCATION : OTHER_PERSON;
+  const evidence = [...[...candidates.values()].flat(), ...employerDetails];
+  const keys = [...candidates.keys()];
+  const onlyEducation = keys.length > 0 && keys.every(isEducationField);
+  const onlyEmployment = keys.length > 0 && keys.every(isEmploymentField);
+  const otherPerson = onlyEducation
+    ? OTHER_PERSON_EDUCATION
+    : onlyEmployment
+      ? OTHER_PERSON_EMPLOYMENT
+      : OTHER_PERSON;
+  const otherPersonHeading = onlyEmployment
+    ? OTHER_PERSON_HEADING_EMPLOYMENT
+    : OTHER_PERSON_HEADING;
   if (
     notPersonal ||
     otherPerson.test(all) ||
-    OTHER_PERSON_HEADING.test(heading)
+    otherPersonHeading.test(heading) ||
+    (candidates.size === 0 && employerDetails.length > 0)
   ) {
     return evidence.length > 0 || notPersonal
       ? { kind: 'other-person', evidence }
@@ -571,12 +774,56 @@ function matchEducation(text: string, inEducation: boolean): EducationField[] {
   return matches;
 }
 
+/**
+ * The employment fields a piece of text refers to. `text` has any
+ * parenthesised hint removed ("End date (leave blank if current)"); the
+ * full text still decides whether the field is about someone else.
+ */
+function matchEmployment(
+  text: string,
+  inWorkHistory: boolean,
+  checkbox: boolean,
+): EmploymentField[] {
+  if (text.split(' ').length > MAX_WORDS || QUESTION.test(text)) return [];
+  const pick = (rules: { strong: RegExp[]; contextual: RegExp[] }) =>
+    inWorkHistory ? [...rules.strong, ...rules.contextual] : rules.strong;
+  if (checkbox) {
+    return pick(CURRENT_ROLE).some((pattern) => pattern.test(text))
+      ? ['currentlyEmployed']
+      : [];
+  }
+  const matches: EmploymentField[] = [];
+  for (const [field, rules] of Object.entries(EMPLOYMENT_RULES) as [
+    Exclude<EmploymentField, 'currentlyEmployed'>,
+    { strong: RegExp[]; contextual: RegExp[] },
+  ][]) {
+    if (!pick(rules).some((pattern) => pattern.test(text))) continue;
+    if (excluded(field, text)) continue;
+    matches.push(field);
+  }
+  return matches;
+}
+
 const FORMAT_HINT = /\b(?:dd|mm|yyyy|yy)\b/g;
 
 interface TextSignal {
   signal: Signal;
   raw: string;
   normalised: string;
+  /** `normalised` without parenthesised hints. */
+  core: string;
+}
+
+/** Lower case words, without format hints such as "MM/YYYY". */
+function clean(text: string): string {
+  return (
+    normalise(text)
+      // Format hints ("Start date (MM/YYYY)") say how to answer, not what
+      // is asked; dates.ts reads them when formatting the value.
+      .replace(FORMAT_HINT, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 function textSignals(control: DetectableControl): TextSignal[] {
@@ -587,22 +834,20 @@ function textSignals(control: DetectableControl): TextSignal[] {
     ['placeholder', placeholderOf(control)],
   ];
   return raw
-    .map(([signal, text]) => ({
-      signal,
-      raw: text.replace(/\s+/g, ' ').trim(),
+    .map(([signal, text]) => {
       // Example addresses in placeholders ("name@company.com") are not
       // statements about the field.
-      normalised: normalise(
+      const read =
         signal === 'placeholder'
           ? text.replace(/\S+@\S+|\S*(?:https?:\/\/|www\.)\S*/gi, ' ')
-          : text,
-      )
-        // Format hints ("Start date (MM/YYYY)") say how to answer, not what
-        // is asked; dates.ts reads them when formatting the value.
-        .replace(FORMAT_HINT, ' ')
-        .replace(/\s+/g, ' ')
-        .trim(),
-    }))
+          : text;
+      return {
+        signal,
+        raw: text.replace(/\s+/g, ' ').trim(),
+        normalised: clean(read),
+        core: clean(read.replace(/\([^)]*\)/g, ' ')),
+      };
+    })
     .filter((signal) => signal.normalised !== '');
 }
 
@@ -712,6 +957,23 @@ export function controlContext(control: DetectableControl): ControlContext {
     text: normalise(`${sectionText(control)} ${heading?.textContent ?? ''}`),
     group: control.closest(SECTIONS) ?? heading ?? formOf(control),
   };
+}
+
+/**
+ * A section's own name (`ControlContext.group`): its legend, accessible
+ * name or heading, normalised. Never the names of sections around it, so a
+ * page-wide "Apply to …" region names no section.
+ */
+export function groupName(group: Element | null): string {
+  if (!group || group instanceof HTMLFormElement) return '';
+  if (group instanceof HTMLFieldSetElement) {
+    return normalise(group.querySelector(':scope > legend')?.textContent ?? '');
+  }
+  if (group.matches(HEADINGS)) return normalise(group.textContent);
+  const heading = [...group.querySelectorAll(HEADINGS)].find(
+    (h) => h.closest(SECTIONS) === group,
+  );
+  return normalise(`${accessibleName(group)} ${heading?.textContent ?? ''}`);
 }
 
 export function labelText(control: DetectableControl): string {

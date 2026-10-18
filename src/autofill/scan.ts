@@ -1,4 +1,4 @@
-import { isEducationField, type AutofillField } from './fields';
+import { isRecordField, type AutofillField } from './fields';
 import {
   controlContext,
   detectControl,
@@ -135,14 +135,27 @@ const SELECT_FIELDS = new Set<AutofillField>([
   'educationStart',
   'educationEnd',
   'grade',
+  'employer',
+  'jobTitle',
+  'employmentType',
+  'employmentStart',
+  'employmentEnd',
 ]);
 
 /**
- * Date inputs, writable only for education dates. A `date` input is listed
- * so the panel can say why it is left: it needs a day.
+ * Date inputs, writable only for education and employment dates. A `date`
+ * input is listed so the panel can say why it is left: it needs a day.
  */
 const DATE_INPUT_TYPES = new Set(['month', 'number', 'date']);
-const DATE_FIELDS = new Set<AutofillField>(['educationStart', 'educationEnd']);
+const DATE_FIELDS = new Set<AutofillField>([
+  'educationStart',
+  'educationEnd',
+  'employmentStart',
+  'employmentEnd',
+]);
+
+/** Long answers ApplyKit may fill: only a saved description of a job. */
+const TEXTAREA_FIELDS = new Set<AutofillField>(['jobDescription']);
 
 const POPUP_ROLES = new Set([
   'listbox',
@@ -382,23 +395,24 @@ const CONFIRMATION =
  * reference whose section ApplyKit could not recognise. Confirmation fields
  * ("Confirm email") are the exception.
  *
- * Education is asked once per record, so an education field only repeats
- * one in the same section: "University" and "School name" in separate
- * sections are both kept.
+ * Education and jobs are asked once per record, so such a field only
+ * repeats one in the same section: "University" and "School name", or
+ * "Employer" in "Employment 1" and "Employment 2", are all kept.
  */
 function firstOfEachDetail(fields: ScannedField[]): ScannedField[] {
-  const seen = new Set<AutofillField>();
-  const seenInSection = new Map<Element | null, Set<AutofillField>>();
+  const seen = new Set<string>();
+  const seenInSection = new Map<Element | null, Set<string>>();
   return fields.map((field) => {
     const { support, element } = field;
     if (support.status !== 'match') return field;
     let scope = seen;
-    if (isEducationField(support.field)) {
+    if (isRecordField(support.field)) {
       scope = seenInSection.get(field.group) ?? new Set();
       seenInSection.set(field.group, scope);
     }
-    if (!scope.has(support.field)) {
-      scope.add(support.field);
+    const key = detailKey(support.field, field.label);
+    if (!scope.has(key)) {
+      scope.add(key);
       return field;
     }
     const text = normalise(
@@ -407,6 +421,14 @@ function firstOfEachDetail(fields: ScannedField[]): ScannedField[] {
     if (CONFIRMATION.test(text)) return field;
     return { ...field, support: { ...support, status: 'duplicate' } };
   });
+}
+
+/** "Start month" and "Start year" are two parts of one date, not a repeat. */
+function detailKey(field: AutofillField, label: string): string {
+  if (!DATE_FIELDS.has(field)) return field;
+  const month = /\bmonths?\b/i.test(label);
+  const year = /\byears?\b/i.test(label);
+  return month === year ? field : `${field}:${month ? 'month' : 'year'}`;
 }
 
 function describe(element: FieldElement, root: ParentNode): ScannedField {
@@ -438,8 +460,13 @@ function supportOf(element: FieldElement): FieldSupport {
   }
 
   // Custom dropdowns built on a text input commit a choice through their own
-  // scripts; typing into them would not select anything.
-  if (!isFormControl(element) || isCustomDropdown(element)) {
+  // scripts; typing into them would not select anything. Checkboxes are
+  // only guided: many sites register a tick only from a real click.
+  if (
+    !isFormControl(element) ||
+    isCustomDropdown(element) ||
+    (detection.kind === 'match' && detection.field === 'currentlyEmployed')
+  ) {
     return {
       status: 'unsupported',
       custom: {
@@ -451,14 +478,14 @@ function supportOf(element: FieldElement): FieldSupport {
 
   // What the engine can write: text-like inputs, and native selects whose
   // options it can match exactly.
+  const matched = detection.kind === 'match' ? detection.field : null;
   const writable = isInput(element)
     ? TEXT_INPUT_TYPES.has(element.type) ||
       (DATE_INPUT_TYPES.has(element.type) &&
-        detection.kind === 'match' &&
-        DATE_FIELDS.has(detection.field))
-    : element.localName === 'select' &&
-      detection.kind === 'match' &&
-      SELECT_FIELDS.has(detection.field);
+        matched !== null &&
+        DATE_FIELDS.has(matched))
+    : matched !== null &&
+      (isTextArea(element) ? TEXTAREA_FIELDS : SELECT_FIELDS).has(matched);
   if (!writable) return { status: 'unsupported' };
 
   switch (detection.kind) {
