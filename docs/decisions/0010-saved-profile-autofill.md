@@ -25,8 +25,11 @@ sites' pages.
   use), or with `missing`, `invalid` or `error`. The panel validates the
   reply's shape and treats anything malformed as `error`.
 - The background calls `storage.local.setAccessLevel('TRUSTED_CONTEXTS')`
-  where the browser supports it, so content scripts cannot read storage
-  directly.
+  where the browser supports it. Chrome documents this as hiding
+  `storage.local` from content scripts; it has not been checked in a
+  real browser, and Safari and Firefox lack it (see Consequences). The
+  boundary ApplyKit relies on is that its content scripts never read
+  storage.
 - There is no fallback: without a confirmed profile, autofill is
   unavailable and the panel offers "Set up your profile". Sample data
   exists only in tests.
