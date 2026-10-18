@@ -5,6 +5,7 @@ import {
   FileUp,
   History,
   Info,
+  MessageSquareText,
   ShieldCheck,
 } from 'lucide-react';
 import {
@@ -18,6 +19,10 @@ import {
   type LoadResult,
   type ProfileStore,
 } from '@/storage/profile-store';
+import {
+  browserAnswersStore,
+  type AnswersStore,
+} from '@/storage/answers-store';
 import { BrandMark, Icon } from '@/components/ui/icons';
 import {
   GhostButton,
@@ -25,6 +30,7 @@ import {
   SecondaryButton,
 } from '@/components/ui/primitives';
 import { readCv, type CvFile, type CvReadResult } from '@/cv/read';
+import { AnswersView } from './AnswersView';
 import { CvImport } from './CvImport';
 import { formatSavedAt } from './format';
 import { LinksStep } from './LinksStep';
@@ -84,6 +90,7 @@ const systemClock = () => new Date();
 
 interface OnboardingAppProps {
   store?: ProfileStore;
+  answersStore?: AnswersStore;
   /** Reads a CV file; injectable for tests. */
   readCvFile?: (file: CvFile) => Promise<CvReadResult>;
   /** Clock for save timestamps; injectable for tests. */
@@ -100,6 +107,7 @@ interface OnboardingAppProps {
  */
 export function OnboardingApp({
   store = browserProfileStore,
+  answersStore = browserAnswersStore,
   readCvFile = readCv,
   now = systemClock,
 }: OnboardingAppProps) {
@@ -113,6 +121,13 @@ export function OnboardingApp({
   const [attempt, setAttempt] = useState(0);
   /** Showing the CV import screen instead of a step. */
   const [importing, setImporting] = useState(false);
+  /**
+   * Showing the saved application answers instead of the profile; the
+   * panel links straight to them with "#answers".
+   */
+  const [answering, setAnswering] = useState(
+    () => window.location.hash === '#answers',
+  );
   /** How many CV details were just added, until the user moves on. */
   const [imported, setImported] = useState<number | null>(null);
   const main = useRef<HTMLElement>(null);
@@ -194,6 +209,7 @@ export function OnboardingApp({
   const go = (step: Step) => {
     pendingFocus.current = 'heading';
     setImporting(false);
+    setAnswering(false);
     setImported(null);
     dispatch({ type: 'go', step });
   };
@@ -284,6 +300,41 @@ export function OnboardingApp({
     );
   }
 
+  const showAnswers = () => {
+    pendingFocus.current = 'heading';
+    setImporting(false);
+    setImported(null);
+    setAnswering(true);
+  };
+  const rail = (
+    <StepRail
+      state={state}
+      editing={editing}
+      importing={importing}
+      answering={answering}
+      onGo={go}
+      onImport={() => {
+        setImported(null);
+        setAnswering(false);
+        setImporting(true);
+      }}
+      onAnswers={showAnswers}
+    />
+  );
+
+  // Answers are saved apart from the profile, so they can be edited
+  // before a profile exists.
+  if (answering) {
+    return (
+      <div className="min-h-screen bg-canvas text-ink md:grid md:grid-cols-[248px_minmax(0,1fr)]">
+        {rail}
+        <main ref={main} className="flex min-h-screen flex-col">
+          <AnswersView store={answersStore} now={now} heading={heading} />
+        </main>
+      </div>
+    );
+  }
+
   if (!state.started) {
     return (
       <WelcomeScreen
@@ -315,16 +366,7 @@ export function OnboardingApp({
 
   return (
     <div className="min-h-screen bg-canvas text-ink md:grid md:grid-cols-[248px_minmax(0,1fr)]">
-      <StepRail
-        state={state}
-        editing={editing}
-        importing={importing}
-        onGo={go}
-        onImport={() => {
-          setImported(null);
-          setImporting(true);
-        }}
-      />
+      {rail}
 
       <main ref={main} className="flex min-h-screen flex-col">
         {importing ? (
@@ -562,14 +604,18 @@ function StepRail({
   state,
   editing,
   importing,
+  answering,
   onGo,
   onImport,
+  onAnswers,
 }: {
   state: OnboardingState;
   editing: boolean;
   importing: boolean;
+  answering: boolean;
   onGo: (step: Step) => void;
   onImport: () => void;
+  onAnswers: () => void;
 }) {
   const sectionsWithErrors = new Set(
     Object.keys(state.errors).map((key) => key.split('.')[0]),
@@ -596,7 +642,7 @@ function StepRail({
       <nav aria-label="Profile sections" className="hidden md:mt-4 md:block">
         <ol className="space-y-0.5">
           {STEPS.map((step, i) => {
-            const current = !importing && step === state.step;
+            const current = !importing && !answering && step === state.step;
             const reachable = canVisit(state, step);
             const section = step === 'review' ? null : STEP_SECTION[step];
             const invalid = section !== null && sectionsWithErrors.has(section);
@@ -650,18 +696,44 @@ function StepRail({
           <Icon icon={FileUp} size={14} className="shrink-0" />
           Import from CV
         </button>
+        <button
+          type="button"
+          onClick={onAnswers}
+          aria-current={answering ? 'page' : undefined}
+          className={`mt-0.5 flex h-8 w-full items-center gap-2.5 rounded-sm px-2 text-left transition-colors duration-100 ${
+            answering
+              ? 'bg-hover font-medium text-ink'
+              : 'text-ink-2 hover:bg-hover/70 hover:text-ink'
+          }`}
+        >
+          <Icon icon={MessageSquareText} size={14} className="shrink-0" />
+          Application answers
+        </button>
       </div>
 
       <p className="ml-auto text-xs text-ink-3 md:hidden">
-        {importing ? 'Import from CV' : STEP_COPY[state.step].label}
+        {answering
+          ? 'Application answers'
+          : importing
+            ? 'Import from CV'
+            : STEP_COPY[state.step].label}
       </p>
-      {!importing && (
+      {!importing && !answering && (
         <button
           type="button"
           onClick={onImport}
           className="text-xs font-medium text-accent md:hidden"
         >
           Import CV
+        </button>
+      )}
+      {!answering && (
+        <button
+          type="button"
+          onClick={onAnswers}
+          className="text-xs font-medium text-accent md:hidden"
+        >
+          Answers
         </button>
       )}
 
