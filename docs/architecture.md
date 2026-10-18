@@ -88,8 +88,13 @@ autofill and on an explicit rescan; autofill runs only from the primary
 action, and only when the profile is `ready`.
 
 Compact mode shows counts and statuses only, never personal values. The
-expanded view shows values, and for a selected field the explanation, the
-profile property it matched and the evidence.
+expanded view shows values, and for a selected field the explanation and
+what the user can do. With "Developer diagnostics" on (a checkbox in the
+profile page's rail, stored as `local:developerDiagnostics`, off unless
+exactly `true`), it also shows the profile property the field matched and
+the evidence, in a separate block. The background sends the setting with
+`applykit:get-panel-settings`; the panel reads it when it opens, and
+treats any failure as off.
 
 ## Data flow
 

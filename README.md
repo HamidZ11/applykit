@@ -129,8 +129,11 @@ Limitations:
 7. Expand with the ⤢ button in the header, or click any plan line, to see
    every field grouped by topic (personal information, education, sensitive
    disclosures…) with its value. Select a field to see why it was
-   filled or skipped, and the evidence (label, `autocomplete`, name). Collapse
-   with ⤡ or Escape; nothing is lost.
+   filled or skipped, and what you can do. Collapse with ⤡ or Escape;
+   nothing is lost. To see how each field was recognised (the matched
+   field and the label, `autocomplete` or name it came from), tick
+   **Developer diagnostics** at the bottom of the profile page's side
+   rail, then reopen the panel.
 8. Edit your profile in another tab, then click ↻: the panel uses the
    updated details. It never refills the page by itself.
 9. The line under the form confirms the input events and that the form was
