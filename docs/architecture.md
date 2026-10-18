@@ -220,18 +220,22 @@ profile", "Open your profile" or "Try again" instead of Autofill.
 
 ## Autofill rules
 
-Details and reasoning are in ADR 0010 and ADR 0011.
+Details and reasoning are in ADR 0010, ADR 0011 and ADR 0015.
 
 - Fields: full, first, last and preferred name; email; phone, or its
   calling code and national number separately; address lines 1 and 2, town
   or city, region or county, postcode, country; LinkedIn, GitHub,
   portfolio or website; institution, qualification, field of study, start
-  and graduation dates, and grade from one saved education record.
+  and graduation dates, and grade from one saved education record;
+  employer, job title, employment type, start and end dates and duties
+  from one saved job.
 - Modules in `src/autofill`: `detect` (what a control asks), `scan` (every
-  control, with support and section), `report` and `plan-education` (the
-  plan: value or reason per field), `resolve` (preview and confirm a record
-  the user chose for a section), `suggestion` (saved values shown as
-  guidance for fields ApplyKit cannot fill), `fill` (write and verify),
+  control, with support and section), `report`, `plan-education` and
+  `plan-employment` (the plan: value or reason per field), `records` (what
+  both topics share: one record per section, the user's choice, writing
+  text, options and month-year dates), `resolve` (preview and confirm a
+  record the user chose for a section), `suggestion` (saved values shown
+  as guidance for fields ApplyKit cannot fill), `fill` (write and verify),
   plus pure rules in `education`, `dates`, `options` and `categories`.
   `src/page/navigate.ts` takes the user to a field ("Go to field"): it
   scrolls to it and focuses only plain native controls, never custom
@@ -247,28 +251,35 @@ Details and reasoning are in ADR 0010 and ADR 0011.
   `placeholder`, and fieldset legends or labelled groups for context.
   Exactly one unopposed match is required; conflicting signals are skipped.
 - Skipped with a reason: details about someone else (references,
-  employers, companies, hiring managers), sensitive questions (right to
-  work, visa, salary, disability, demographics, date of birth), consent
-  and declarations, CAPTCHAs, values longer than `maxlength`, and fields
-  outside the application form.
+  employer contacts and addresses, companies outside a job section, hiring
+  managers), sensitive questions (right to work, visa, salary,
+  disability, demographics, date of birth), consent and declarations,
+  questions only the applicant can answer (reasons for leaving, gaps in
+  employment), CAPTCHAs, values longer than `maxlength`, and fields
+  outside the application form. Generic job labels ("Company name",
+  "From") count only inside a work-history section, where names, phones
+  and addresses are the employer's.
 - Writable controls: text, email, tel, url and search inputs; month and
-  number inputs for education dates; native selects for country, calling
-  code and education fields (exact or explicitly equivalent options only).
-  Never hidden, disabled, read-only or password controls, checkboxes,
-  radios, textareas, file inputs or custom dropdowns.
+  number inputs for education and job dates; native selects for country,
+  calling code, education and job fields (exact or explicitly equivalent
+  options only); textareas only for a saved job description. Never
+  hidden, disabled, read-only or password controls, checkboxes (an "I
+  currently work here" box is guided only), radios, file inputs or custom
+  dropdowns.
 - Preferred names use the first name only when the user chose that in
-  their profile. Education records are chosen per section of the form;
-  several fitting records leave the fields for the user, who can choose
-  one in the expanded list, preview its effect and confirm (ADR 0012).
-  Choices are never saved and never reach another section. Dates are never
-  given a day the profile does not have.
+  their profile. Education records and jobs are chosen per section of the
+  form; several fitting records leave the fields for the user, who can
+  choose one in the expanded list, preview its effect and confirm
+  (ADR 0012, ADR 0015). Choices are never saved and never reach another
+  section. Dates are never given a day the profile does not have, and a
+  current job never gets an end date.
 - Values are set through the native prototype setter, then a bubbling
   `input` and `change` are dispatched. A field is re-checked just before
   writing and never overwritten; afterwards the value is read back and
   reported as filled, reformatted, rejected or detached.
 - Autofill never clicks, presses keys, focuses anything or submits.
 - Fields asking for a detail already matched earlier on the form are left
-  to the user, except confirmation fields; education fields repeat once per
-  section.
+  to the user, except confirmation fields; education and job fields repeat
+  once per section, and a month and a year of one date count separately.
 - The panel's shadow root is closed in production; browser tests build a
   variant with an open root into `.output/chrome-mv3-e2e`.

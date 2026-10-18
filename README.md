@@ -5,8 +5,8 @@ repetitive job applications. Everything stays on your device: no account, no
 backend, no tracking.
 
 > **Status: profile autofill.** Save your profile once (by hand or from your
-> CV), then fill your personal, contact, address, link and education
-> details on application forms. ApplyKit leaves everything else to you and
+> CV), then fill your personal, contact, address, link, education and
+> employment details on application forms. ApplyKit leaves everything else to you and
 > never submits.
 
 ## Technology
@@ -108,8 +108,10 @@ Limitations:
    is a long single-page internship form with a separate calling code,
    university and school sections, and sections marked only by headings;
    `interactive-education.html` has school and numbered education sections
-   where you choose which saved record to use; `custom-controls.html` is
-   built from custom dropdowns.)
+   where you choose which saved record to use; `employment-application.html`
+   has a current job, a previous job and numbered job sections next to
+   employer contacts, a reference and an emergency contact;
+   `custom-controls.html` is built from custom dropdowns.)
 4. Click the ApplyKit toolbar button. Without a saved profile the panel
    says so and offers **Set up your profile**; it fills nothing. Save a
    profile with fictional details (see below), then click the rescan button
@@ -177,6 +179,12 @@ Limitations:
   asks about (university or school). When several records could fit, the
   fields are left for you with "Several records fit"; in the full list you
   can choose the right record, see what it would fill, and confirm.
+- Employment: employer, job title, employment type, start and end dates
+  and duties, from the one saved job a section asks about (your current
+  job, a previous one, or the job the section names). Several possible
+  jobs show "Several employment records fit" and you choose, preview and
+  confirm. A current job never gets an end date. "I currently work here"
+  boxes are never ticked: the full list says whether to tick them.
 - Fields your profile has no value for link to your profile page.
 - Custom dropdowns are counted as fields and, when ApplyKit recognises
   them, show "From your saved profile" with the value to choose, plus
@@ -191,8 +199,9 @@ Limitations:
   placeholders and surrounding sections, and skips any field whose signals
   disagree.
 - Never answers right-to-work, visa, salary, disability, demographic or
-  consent questions, and never fills details about references, employers
-  or hiring managers, CAPTCHAs, or hidden, disabled or read-only fields.
+  consent questions, reasons for leaving or gaps in employment, and never
+  fills details about references, employer contacts, hiring managers or
+  emergency contacts, CAPTCHAs, or hidden, disabled or read-only fields.
 - Writes with native `input` and `change` events so framework-controlled
   inputs (e.g. React) update, then checks what the site kept and reports
   values it rejected or reformatted.
@@ -210,8 +219,9 @@ Limitations:
 
 ## Known limitations
 
-- Autofill covers personal, contact, address, link and education fields;
-  not employment history or written answers.
+- Autofill covers personal, contact, address, link, education and
+  employment fields; not written answers such as motivation or reasons for
+  leaving.
 - Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
   and similar platforms) are listed and never filled: the full list shows
   the saved value to choose and a "Go to field" button. Only standard ARIA
@@ -229,10 +239,16 @@ Limitations:
   country; their length is checked, not whether the number is in use.
 - Detection rules are English only. They are conservative: some fields a
   person would fill are left to you, for example a select without an empty
-  first option (treated as already answered), or a "Website" field inside
-  an employment section.
+  first option (treated as already answered), a "Website" field inside
+  an employment section, or job fields under a heading that says only
+  "Experience" or only the company's name.
+- Employment: several saved jobs, a numbered "Employment 2" or "Most
+  recent" with overlapping or incomplete dates leave the choice to you.
+  Date inputs that need a day, expected leaving dates and descriptions
+  longer than the field allows are left to you.
 - Country selects must offer the country by ISO code or name; custom
-  dropdown widgets, checkboxes, radios and textareas are never filled.
+  dropdown widgets, checkboxes and radios are never filled, and textareas
+  only with a saved job description.
 - CV import reads text only: no scanned or image-only PDFs (no OCR), no
   password-protected PDFs, no older .doc files, 5 MB and 10 pages at most.
   Extraction is rule-based and conservative: unusual layouts yield fewer

@@ -11,11 +11,12 @@ onboarding/editing in a full tab with local storage and drafts, local CV
 import with review, and autofill of personal, contact, address, link and
 education fields from the confirmed saved profile, including split calling
 codes and preferred names (ADR 0010, ADR 0011), and user-confirmed choice
-of the saved record for ambiguous education sections (ADR 0012), and
-listing of custom dropdowns with saved-value guidance (ADR 0013).
+of the saved record for ambiguous education sections (ADR 0012),
+listing of custom dropdowns with saved-value guidance (ADR 0013), and
+employment autofill with the same per-section record choice (ADR 0015).
 
-Still to come (build only when asked, one at a time): employment autofill;
-custom dropdown widgets; application details and reusable answers; review
+Still to come (build only when asked, one at a time): custom dropdown
+widgets; application details and reusable answers; review
 of uncertain fields. A separate marketing website comes later.
 
 No authentication, subscriptions, backend, external databases or AI APIs.
