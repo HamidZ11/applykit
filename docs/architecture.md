@@ -215,7 +215,12 @@ panel: port applykit:ai-draft { …, selected ids, approve }
 background: re-checks question, items by id, approval fingerprint, daily limit
             → POST /v1/messages (anthropic.ts) → { draft } or a fixed failure
 panel: user edits → "Insert answer" → confirmDraft → fillFields (never submits)
+panel: answered question → "Improve my answer" (mode improve, approved each time)
+       → "Replace your answer…" + confirm → confirmReplace → replaceText
 ```
+
+Length requirements live in `src/autofill/answer-limits.ts` (ranges,
+sentence counting, violations), shared by the panel and the background.
 
 The AI Assistant section talks to the background with
 `applykit:ai-status|connect|disconnect`, answered only for ApplyKit's own

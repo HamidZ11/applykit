@@ -274,17 +274,25 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   links, education and roles are suggested with their source text and a
   Confident / Check this label, and only what you accept enters your draft.
 - Skills & projects: a list of technical skills and short project
-  summaries on the profile page. Optional, never filled into forms.
+  summaries on the profile page, each optionally with what you did, a
+  challenge and the result. Optional, never filled into forms.
 - Optional AI drafting with your own Anthropic API key (**AI Assistant** on
   the profile page). Open questions ("Describe your programming skills",
   "Why are you interested in this role?") offer **Draft with AI** in the
   full list: you see exactly what will be shared, approve it, review and
   edit the draft, and insert it yourself. Only the skills, projects, jobs
   and education you tick are sent, with the question; never contact
-  details, your address, diversity answers or your saved answers. Drafts
-  use only what you shared and respect the question's word, sentence and
-  character limits. A daily request limit (50 by default) and today's
-  estimated cost are shown.
+  details, your address, diversity answers or your saved answers. The
+  most relevant items are ticked for you (for example skills and
+  software projects for a skills question), with each item's exact text
+  under "Show details". Drafts use only what you shared and must meet
+  the question's stated word, sentence and character requirements before
+  they can be inserted. For a question you have already answered,
+  **Improve my answer** tidies your own wording without adding claims;
+  you confirm before it replaces your text. Optional writing preferences
+  (a short sample of your writing, words to avoid) can be shared too.
+  Drafting is not offered where the form forbids AI. A daily request
+  limit (50 by default) and today's estimated cost are shown.
 - Requests only `activeTab`, `scripting` and `storage`: no access to any
   site until you click the toolbar button on it. Access to
   api.anthropic.com is requested only when you connect AI drafting, and
@@ -322,8 +330,11 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   sensitive, legal or about eligibility are never drafted. The daily
   limit counts requests from this browser only; set a spend limit in the
   Claude Console. A remembered key is stored unencrypted in the browser
-  profile. Keys that span several workspaces are not supported. AI
-  drafting has not been tried in Safari, and needs Safari 17.1 or later.
+  profile; Safari never remembers keys. Keys that span several
+  workspaces are not supported. Context ranking is word-based and can
+  miss a relevant item; check the ticks. Detecting a form's ban on AI is
+  English-only and needs the ban near the question. AI drafting has not
+  been tried in Safari, and needs Safari 17.1 or later.
 - Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
   and similar platforms) are listed and never filled: the full list shows
   the saved value to choose and a "Go to field" button. Only standard ARIA

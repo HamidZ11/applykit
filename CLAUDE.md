@@ -49,6 +49,9 @@ Read `docs/architecture.md` before changing structure, and the ADRs in
   host access needs an ADR and the user's approval.
 - No `web_accessible_resources` unless an ADR justifies it.
 - Autofill never submits, clicks, sends keys or overwrites user-entered values.
+  The one exception is "Improve my answer" (ADR 0019): the user confirms
+  replacing their own text, and `replaceText` writes only if the field
+  still holds exactly the text they approved.
 - Autofill uses only the confirmed profile, read by the background worker
   and sent to the panel as narrow `AutofillValues` (ADR 0010). Never read
   drafts for autofill, never fall back to sample data, and keep storage
@@ -59,8 +62,11 @@ Read `docs/architecture.md` before changing structure, and the ADRs in
   names shared items by id; the background re-checks the question,
   builds the context from saved data, enforces approval and the daily
   limit. Drafts are inserted only by "Insert answer" after
-  `confirmDraft`, never automatically. Tests mock `fetch`; never make
-  real API requests.
+  `confirmDraft`, never automatically; the applicant's own text is sent
+  only with explicit approval each time. Employer length requirements
+  (`answer-limits.ts`) are enforced before writing. Tests mock `fetch`;
+  never make real API requests; `src/ai/evaluation.test.ts` uses only
+  the fictional applicants in `src/test/evaluation-applicants.ts`.
 - A correct skip beats a wrong fill: never answer sensitive, consent or
   verification questions (the one exception: the five exact monitoring
   questions, with the user's reuse opt-in, ADR 0018; diversity answers

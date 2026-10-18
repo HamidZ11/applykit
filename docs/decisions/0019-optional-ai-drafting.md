@@ -90,3 +90,46 @@ omit`, `redirect: error`, a 25-second timeout (Chrome stops a worker
 - **Insertion** goes through `confirmDraft` (same field, same question,
   still empty and writable, within the stated limits and `maxlength`)
   and `fillFields`.
+
+## Refinements after real testing (Prompt 18.2)
+
+- **Output budget.** A one-sentence question with `maxlength="200"` was
+  given 90 output tokens, the minimum of tight per-limit estimates, and
+  real drafts ended at `max_tokens`. `max_tokens` only caps a reply
+  (billing counts tokens written), so the ceiling is now twice the
+  expected length plus 128, at least 384 tokens (Haiku 5.5) or 512
+  (Sonnet 5.5), at most 2048. A reply cut off is never shown; the user
+  can try again.
+- **Length requirements** are ranges (`answer-limits.ts`): "Write two
+  sentences" is exactly two, "Maximum 150 words" at most, "At least 200
+  words" at least, "150–200 words" the range, `maxlength` a character
+  maximum. Sentences are counted without splitting on abbreviations,
+  initials, decimals or names such as Node.js. A draft that misses any
+  requirement says how, cannot be written, and can be sent back once,
+  explicitly ("Revise to fit").
+- **Default context** is chosen by a small deterministic ranking per
+  kind of question (technical signal, recorded challenge, detail, words
+  shared with the question, role and employer). Unrelated jobs are not
+  selected for technical questions; nothing that scores zero is
+  selected. The preview shows type, title and a summary, with the exact
+  text under "Show details".
+- **Instructions**: a short universal brief (an informed editor; only
+  interview-defensible claims from shared facts; the employer's limits
+  override style) and one or two lines per kind. No invented challenge.
+- **Improve my answer**: for an answered open question, the applicant's
+  own text is shown in the preview and sent only with explicit approval
+  each time; approvals for it are never stored. The result replaces the
+  page text only after a confirmation, through `replaceText`, which
+  writes only if the field still holds exactly the approved text.
+  `fillFields` still never overwrites.
+- **Writing preferences** (optional sample and words to avoid) are a
+  preview item like any other, sent only when ticked, and given to the
+  model as style, never as facts.
+- **Employer restrictions**: drafting is not offered where the question,
+  its own hints or its section clearly forbid AI.
+- **Safari**: "Remember on this device" is not offered and the
+  background never remembers a key in a Safari build; an existing
+  remembered key can be kept for the session or removed, never silently
+  deleted.
+- **Project details** (what the applicant did, a challenge, a result)
+  are optional; skills schema 2, read from version 1.
