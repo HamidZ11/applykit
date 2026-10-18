@@ -13,7 +13,6 @@ import { ExpandedView, visibleReports } from './ExpandedView';
 import { fieldKey } from './FieldRow';
 import { BrandMark, Icon } from '@/components/ui/icons';
 import { Locator } from './Locator';
-import { openProfile } from './profile-access';
 import {
   Announcer,
   CloseButton,
@@ -38,12 +37,15 @@ const EXPANDED_HEIGHT = 'min(600px, calc(100vh - 32px))';
 export function Panel({
   onClose,
   loadValues,
+  openProfile,
 }: {
   onClose: () => void;
   /** Where the confirmed profile's values come from; replaced in tests. */
   loadValues?: LoadValues;
+  /** Opens the profile page; replaced in tests. */
+  openProfile?: () => Promise<boolean>;
 }) {
-  const model = usePanel(loadValues);
+  const model = usePanel(loadValues, undefined, openProfile);
   const frame = useRef<HTMLDivElement>(null);
   const { mode, phase, summary, selected, fields } = model;
   const hasForm = summary.total > 0;
@@ -117,11 +119,19 @@ export function Panel({
                 : 'Open your profile'
             }
             icon={UserRound}
-            onClick={openProfile}
+            onClick={model.openProfile}
           />
           {hasForm && <ModeToggle model={model} />}
           <CloseButton onClose={onClose} />
         </header>
+        {model.problem && (
+          <p
+            role="alert"
+            className="shrink-0 border-b border-line bg-danger-soft px-3.5 py-2 text-xs text-danger"
+          >
+            {model.problem}
+          </p>
+        )}
 
         <div
           key={
@@ -257,11 +267,15 @@ function ReadyAction({ model }: { model: PanelModel }) {
   switch (values.status) {
     case 'missing':
       return (
-        <PrimaryButton onClick={openProfile}>Set up your profile</PrimaryButton>
+        <PrimaryButton onClick={model.openProfile}>
+          Set up your profile
+        </PrimaryButton>
       );
     case 'invalid':
       return (
-        <PrimaryButton onClick={openProfile}>Open your profile</PrimaryButton>
+        <PrimaryButton onClick={model.openProfile}>
+          Open your profile
+        </PrimaryButton>
       );
     case 'error':
       return <PrimaryButton onClick={model.rescan}>Try again</PrimaryButton>;

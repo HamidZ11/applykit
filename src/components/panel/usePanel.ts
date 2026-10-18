@@ -32,7 +32,12 @@ import {
   type FieldFilter,
   type PanelState,
 } from './panel-state';
-import { requestAutofillValues } from './profile-access';
+import {
+  CONTEXT_LOST,
+  isExtensionContextValid,
+  openProfile,
+  requestAutofillValues,
+} from './profile-access';
 import { plural } from './vocabulary';
 
 /** Reads the confirmed profile's values; injectable for tests. */
@@ -73,6 +78,10 @@ export interface PanelModel extends PanelState {
   ) => Promise<ChoiceResult>;
   /** Scrolls to a field of the current scan and focuses it if safe. */
   goToField: (element: FieldElement) => GoToResult;
+  /** Opens the profile page; a failure is reported in `problem`. */
+  openProfile: () => void;
+  /** Why the last profile action failed, in words the user can act on. */
+  problem: string | null;
 }
 
 /**
@@ -90,7 +99,10 @@ export interface PanelModel extends PanelState {
 export function usePanel(
   loadValues: LoadValues = requestAutofillValues,
   root: ParentNode = document,
+  openProfileRequest: () => Promise<boolean> = openProfile,
 ): PanelModel {
+  /** Why an action failed, shown in the panel; cleared on the next try. */
+  const [problem, setProblem] = useState<string | null>(null);
   const [state, dispatch] = useReducer(panelReducer, root, (r) =>
     initialPanelState(scanFields(r)),
   );
@@ -98,6 +110,18 @@ export function usePanel(
   // The newest read wins, so a slow earlier reply never replaces fresh values.
   const latestRequest = useRef(0);
   const filling = useRef(false);
+
+  const openProfileAction = useCallback(() => {
+    setProblem(null);
+    void openProfileRequest().then((opened) => {
+      if (opened) return;
+      setProblem(
+        isExtensionContextValid()
+          ? 'ApplyKit could not open your profile. Try again, or open it from your browser’s extension settings.'
+          : CONTEXT_LOST,
+      );
+    });
+  }, [openProfileRequest]);
 
   const refreshValues = useCallback(async () => {
     const request = ++latestRequest.current;
@@ -273,6 +297,14 @@ export function usePanel(
     previewChoice: preview,
     applyChoice,
     goToField: goTo,
+    openProfile: openProfileAction,
+    // An old panel left on the page after ApplyKit was reloaded can no
+    // longer reach it; "Try again" cannot help, so say what will.
+    problem:
+      problem ??
+      (state.values.status === 'error' && !isExtensionContextValid()
+        ? CONTEXT_LOST
+        : null),
   };
 }
 

@@ -3,6 +3,7 @@ import {
   GET_AUTOFILL_VALUES,
   OPEN_PROFILE,
   isAutofillValuesResponse,
+  isOpenProfileResponse,
   type AutofillValuesResponse,
 } from '@/messages';
 
@@ -21,7 +22,33 @@ export async function requestAutofillValues(): Promise<AutofillValuesResponse> {
   }
 }
 
-/** Opens the profile page (onboarding or editing) in a new tab. */
-export function openProfile(): void {
-  void browser.runtime.sendMessage(OPEN_PROFILE).catch(() => undefined);
+/**
+ * Asks the background to open the profile page (onboarding or editing) in
+ * a new tab. Resolves to whether it opened; never throws, including when
+ * the extension was reloaded and this script can no longer reach it.
+ */
+export async function openProfile(): Promise<boolean> {
+  try {
+    const response: unknown = await browser.runtime.sendMessage(OPEN_PROFILE);
+    return isOpenProfileResponse(response) && response.ok;
+  } catch {
+    return false;
+  }
 }
+
+/**
+ * False once ApplyKit has been reloaded or updated while this panel was
+ * open: the page keeps the old script, which can no longer reach the
+ * extension ("Extension context invalidated").
+ */
+export function isExtensionContextValid(): boolean {
+  try {
+    return Boolean(browser.runtime.id);
+  } catch {
+    return false;
+  }
+}
+
+/** What the panel says when it can no longer reach ApplyKit. */
+export const CONTEXT_LOST =
+  'ApplyKit was updated or reloaded since this panel opened. Close the panel and open ApplyKit again from the toolbar.';

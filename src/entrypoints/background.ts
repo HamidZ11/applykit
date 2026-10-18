@@ -47,8 +47,15 @@ export default defineBackground(() => {
 
       // Content scripts cannot open extension pages themselves.
       if (isOpenProfileMessage(message)) {
-        void browser.runtime.openOptionsPage();
-        return undefined;
+        browser.runtime.openOptionsPage().then(
+          () => {
+            sendResponse({ ok: true });
+          },
+          () => {
+            sendResponse({ ok: false });
+          },
+        );
+        return true; // The response is sent asynchronously.
       }
 
       // Read on every request, so the panel always uses the latest saved

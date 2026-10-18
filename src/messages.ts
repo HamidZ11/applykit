@@ -10,6 +10,21 @@ export const OPEN_PROFILE: OpenProfileMessage = {
   type: 'applykit:open-profile',
 };
 
+/** Whether the background could open the profile page. */
+export interface OpenProfileResponse {
+  ok: boolean;
+}
+
+export function isOpenProfileResponse(
+  value: unknown,
+): value is OpenProfileResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { ok?: unknown }).ok === 'boolean'
+  );
+}
+
 /** Asks for the values autofill may use, from the confirmed profile. */
 export interface GetAutofillValuesMessage {
   type: 'applykit:get-autofill-values';

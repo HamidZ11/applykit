@@ -944,3 +944,35 @@ describe('custom dropdowns', () => {
     expect(dialog().textContent).not.toContain('From your saved profile');
   });
 });
+
+describe('opening the profile', () => {
+  it('says so when the profile page could not be opened', async () => {
+    await open();
+    root.render(
+      <Panel
+        onClose={onClose}
+        loadValues={loadValues}
+        openProfile={() => Promise.resolve(false)}
+      />,
+    );
+    await settle();
+
+    click('Open your profile');
+    await settle();
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      'ApplyKit could not open your profile.',
+    );
+  });
+
+  it('tells the user to reopen ApplyKit after it was reloaded', async () => {
+    await open({ status: 'error' });
+    fakeBrowser.runtime.id = '';
+    click('Rescan the page');
+    await settle();
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'ApplyKit was updated or reloaded since this panel opened. Close the panel and open ApplyKit again from the toolbar.',
+    );
+  });
+});

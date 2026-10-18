@@ -79,14 +79,21 @@ describe('background messages', () => {
     ).toBeUndefined();
   });
 
-  it('opens the profile page on request', async () => {
+  it('opens the profile page on request and says it did', async () => {
     const open = vi
       .spyOn(fakeBrowser.runtime, 'openOptionsPage')
       .mockResolvedValue(undefined);
 
-    await send(OPEN_PROFILE);
-
+    expect(await send(OPEN_PROFILE)).toEqual({ ok: true });
     expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('says when the profile page could not be opened', async () => {
+    vi.spyOn(fakeBrowser.runtime, 'openOptionsPage').mockRejectedValue(
+      new Error('No options page'),
+    );
+
+    expect(await send(OPEN_PROFILE)).toEqual({ ok: false });
   });
 
   it('answers the panel in a tab’s top frame and extension pages', async () => {

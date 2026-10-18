@@ -8,7 +8,6 @@ import { Icon } from '@/components/ui/icons';
 import { GhostButton, PrimaryButton } from '@/components/ui/primitives';
 import { fieldKey } from './FieldRow';
 import { StatusGlyph } from './icons';
-import { openProfile } from './profile-access';
 import type { PanelModel } from './usePanel';
 import { plural } from './vocabulary';
 
@@ -50,7 +49,7 @@ export function FieldActions({
       {(profileLacksIt || needsYou(report)) && (
         <div className="mt-1.5 -ml-2 flex flex-wrap items-center gap-1">
           {profileLacksIt && (
-            <GhostButton onClick={openProfile}>
+            <GhostButton onClick={model.openProfile}>
               <Icon icon={UserRound} size={14} />
               {status === 'no-profile'
                 ? 'Set up your profile'
