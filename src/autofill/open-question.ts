@@ -1,3 +1,4 @@
+import type { AnswerLimits } from './answer-limits';
 import { SENSITIVE } from './detect';
 
 /**
@@ -22,12 +23,6 @@ export const OPEN_QUESTION_KINDS = [
 ] as const;
 
 export type OpenQuestionKind = (typeof OPEN_QUESTION_KINDS)[number];
-
-export interface AnswerLimits {
-  words: number | null;
-  characters: number | null;
-  sentences: number | null;
-}
 
 export interface OpenQuestion {
   kind: OpenQuestionKind;
@@ -123,67 +118,4 @@ export function openQuestionKind(
     return null;
   }
   return KINDS.find(([, pattern]) => pattern.test(question))?.[0] ?? null;
-}
-
-const NUMBER_WORDS: Record<string, number> = {
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-};
-
-function numberOf(text: string | undefined): number | null {
-  if (text === undefined) return null;
-  const value = NUMBER_WORDS[text] ?? Number(text);
-  return Number.isInteger(value) && value > 0 ? value : null;
-}
-
-const N = '(\\d{1,5}|one|two|three|four|five|six|seven|eight|nine|ten)';
-const RANGE = `${N}(?:\\s*(?:-|–|to|or)\\s*${N})?`;
-
-/** The largest stated limit for `unit` in `text`, or null. */
-function limitOf(text: string, unit: string): number | null {
-  const found: number[] = [];
-  const before = new RegExp(`${RANGE}[\\s-]*${unit}`, 'g');
-  for (const match of text.matchAll(before)) {
-    const upper = numberOf(match[2]) ?? numberOf(match[1]);
-    if (upper !== null) found.push(upper);
-  }
-  const after = new RegExp(
-    `${unit}\\s*(?:limit|count|max(?:imum)?)?\\s*(?:of|:)?\\s*${N}`,
-    'g',
-  );
-  for (const match of text.matchAll(after)) {
-    const value = numberOf(match[1]);
-    if (value !== null) found.push(value);
-  }
-  return found.length > 0 ? Math.min(...found) : null;
-}
-
-/**
- * Length limits the question or its hints state ("in two sentences",
- * "maximum 200 words", "500 characters"), and the control's own
- * `maxlength`. The strictest applies.
- */
-export function readLimits(
-  text: string,
-  maxLength: number | null,
-): AnswerLimits {
-  const lower = text.toLowerCase().replace(/\s+/g, ' ');
-  const stated = limitOf(lower, '(?:characters?|chars?)\\b');
-  const characters =
-    maxLength !== null && maxLength > 0
-      ? Math.min(maxLength, stated ?? maxLength)
-      : stated;
-  return {
-    words: limitOf(lower, 'words?\\b'),
-    characters,
-    sentences: limitOf(lower, 'sentences?\\b'),
-  };
 }

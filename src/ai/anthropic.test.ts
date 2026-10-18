@@ -198,6 +198,29 @@ describe('requestDraft', () => {
     );
   });
 
+  it('never returns text cut off at max_tokens, even after thinking', async () => {
+    const result = await requestDraft(CALL, {
+      fetch: reply(200, {
+        ...message('', 'max_tokens', {
+          input_tokens: 500,
+          output_tokens: 300,
+          output_tokens_details: { thinking_tokens: 260 },
+        }),
+        content: [
+          { type: 'thinking', thinking: '', signature: 'x' },
+          { type: 'text', text: 'I bring Python, SQL and' },
+        ],
+      }),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      failure: 'truncated',
+      usage: { inputTokens: 500, outputTokens: 300 },
+      retryAfterSeconds: null,
+    });
+  });
+
   it('keeps billed usage for a refusal', async () => {
     const result = await requestDraft(CALL, {
       fetch: reply(200, message('No.', 'refusal')),

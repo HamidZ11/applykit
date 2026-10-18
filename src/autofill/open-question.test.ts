@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadFixture } from '@/test/load-fixture';
-import {
-  openQuestionKind,
-  readLimits,
-  type OpenQuestion,
-} from './open-question';
+import { NO_LIMITS } from './answer-limits';
+import { openQuestionKind, type OpenQuestion } from './open-question';
 import { planFill, type FieldReport } from './report';
 import { confirmDraft } from './resolve';
 import { scanFields } from './scan';
@@ -65,27 +62,6 @@ describe('openQuestionKind', () => {
   });
 });
 
-describe('readLimits', () => {
-  it.each([
-    ['Describe your skills in two sentences.', null, { sentences: 2 }],
-    ['In one or two sentences, why this role?', null, { sentences: 2 }],
-    ['Tell us about a project (max 150 words)', null, { words: 150 }],
-    ['Answer in 150-200 words', null, { words: 200 }],
-    ['Word limit: 300', null, { words: 300 }],
-    ['No more than 500 characters', null, { characters: 500 }],
-    ['A 400-character summary', null, { characters: 400 }],
-    ['Why this role? (1000 characters)', 600, { characters: 600 }],
-    ['Why this role?', 500, { characters: 500 }],
-  ])('reads “%s”', (text, maxLength, expected) => {
-    expect(readLimits(text, maxLength)).toEqual({
-      words: null,
-      characters: null,
-      sentences: null,
-      ...expected,
-    });
-  });
-});
-
 describe('open questions on a form', () => {
   function plan() {
     loadFixture('open-questions.html');
@@ -99,12 +75,19 @@ describe('open questions on a form', () => {
   }
 
   it.each([
-    ['q-skills', 'skills', { sentences: 2 }],
-    ['q-project', 'project', { words: 150 }],
-    ['q-motivation', 'motivation', { characters: 500 }],
+    ['q-skills', 'skills', { sentences: { min: 2, max: 2 } }],
+    ['q-project', 'project', { words: { min: null, max: 150 } }],
+    ['q-motivation', 'motivation', { characters: { min: null, max: 500 } }],
     ['q-experience', 'experience', {}],
-    ['q-problem', 'problem', { words: 200 }],
-    ['q-bring', 'skills', { sentences: 1, characters: 200 }],
+    ['q-problem', 'problem', { words: { min: null, max: 200 } }],
+    [
+      'q-bring',
+      'skills',
+      {
+        sentences: { min: 1, max: 1 },
+        characters: { min: null, max: 200 },
+      },
+    ],
     ['q-answered', 'motivation', {}],
     ['q-injected', 'skills', {}],
   ])('recognises #%s as a %s question', (id, kind, limits) => {
@@ -115,7 +98,7 @@ describe('open questions on a form', () => {
       status: 'open',
       question: {
         kind,
-        limits: { words: null, characters: null, sentences: null, ...limits },
+        limits: { ...NO_LIMITS, ...limits },
       },
     });
     expect(report.fillValue).toBeNull();
@@ -152,7 +135,7 @@ describe('open questions on a form', () => {
 const SKILLS_QUESTION: OpenQuestion = {
   kind: 'skills',
   question: 'Describe your programming skills in two sentences.',
-  limits: { words: null, characters: null, sentences: 2 },
+  limits: { ...NO_LIMITS, sentences: { min: 2, max: 2 } },
 };
 
 /** The question as it was when a draft was requested. */
@@ -193,7 +176,7 @@ describe('confirmDraft', () => {
   it.each([
     ['disabled', 'can no longer be written to'],
     ['readonly', 'can no longer be written to'],
-    ['maxlength="10"', 'longer than this question allows'],
+    ['maxlength="10"', 'does not meet the length'],
   ])('writes nothing to a %s field', (attributes, message) => {
     // A maxlength is part of the question's limits from the start.
     const report = setUp(attributes.startsWith('maxlength') ? attributes : '');

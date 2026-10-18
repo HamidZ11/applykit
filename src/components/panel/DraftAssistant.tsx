@@ -1,8 +1,15 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
-import { flagDraft, measure, overLimits } from '@/ai/check';
+import { flagDraft } from '@/ai/check';
+import {
+  describeBound,
+  describeViolation,
+  limitViolations,
+  measure,
+  type AnswerLimits,
+} from '@/autofill/answer-limits';
 import { failureText } from '@/ai/failures';
-import type { AnswerLimits, OpenQuestion } from '@/autofill/open-question';
+import type { OpenQuestion } from '@/autofill/open-question';
 import { currentValue, type FieldReport } from '@/autofill/report';
 import type { AiPrepareResponse, SharedItem } from '@/messages';
 import { Icon } from '@/components/ui/icons';
@@ -511,24 +518,29 @@ function DraftReview({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const size = measure(text);
-  const over = overLimits(text, limits);
+  const violations = limitViolations(text, limits);
   const flags = flagDraft(text, shared);
 
   useEffect(() => {
     box.current?.focus({ preventScroll: true });
   }, []);
 
+  // Each count, with the employer's requirement where there is one.
   const counts = [
-    limits.sentences !== null
-      ? `${String(size.sentences)} of ${plural(limits.sentences, 'sentence')}`
-      : plural(size.sentences, 'sentence'),
-    limits.words !== null
-      ? `${String(size.words)} of ${String(limits.words)} words`
-      : plural(size.words, 'word'),
-    limits.characters !== null
-      ? `${String(size.characters)} of ${String(limits.characters)} characters`
-      : null,
-  ].filter(Boolean);
+    [
+      plural(size.sentences, 'sentence'),
+      describeBound(limits.sentences, 'sentences'),
+    ],
+    [plural(size.words, 'word'), describeBound(limits.words, 'words')],
+    [
+      plural(size.characters, 'character'),
+      describeBound(limits.characters, 'characters'),
+    ],
+  ]
+    .filter(([, required], index) => index < 2 || required !== null)
+    .map(([actual, required]) =>
+      required ? `${String(actual)} (${required})` : actual,
+    );
 
   return (
     <div className="basis-full space-y-1.5">
@@ -546,10 +558,14 @@ function DraftReview({
         }}
         className="block w-full resize-y rounded-sm border border-line-strong bg-white px-2 py-1.5 text-xs leading-5 text-ink outline-none focus:border-accent"
       />
-      <p className={over.length > 0 ? 'text-danger' : 'text-ink-3'}>
-        {counts.join(' · ')}
-        {over.length > 0 && '. Over the limit: shorten it before inserting.'}
-      </p>
+      <p className="text-ink-3">{counts.join(' · ')}</p>
+      {violations.length > 0 && (
+        <p className="text-danger">
+          Does not meet the question&rsquo;s requirements.{' '}
+          {violations.map(describeViolation).join(' ')} Edit it, or ask Claude
+          to revise it, before inserting.
+        </p>
+      )}
       {flags.unstated.length > 0 && (
         <p className="text-warning">
           Check: {flags.unstated.join(', ')}{' '}
@@ -570,7 +586,7 @@ function DraftReview({
       <div className="flex flex-wrap gap-1.5">
         <PrimaryButton
           className="h-7 px-2.5 text-xs"
-          disabled={busy || over.length > 0 || text.trim() === ''}
+          disabled={busy || violations.length > 0 || text.trim() === ''}
           onClick={() => {
             setBusy(true);
             setError(null);

@@ -210,7 +210,11 @@ describe('diversity in replies', () => {
 describe('AI drafting messages', () => {
   const request = {
     question: 'Describe your programming skills in two sentences.',
-    limits: { words: null, characters: 500, sentences: 2 },
+    limits: {
+      words: { min: null, max: null },
+      characters: { min: null, max: 500 },
+      sentences: { min: 2, max: 2 },
+    },
     role: '',
     employer: '',
   };
@@ -226,11 +230,11 @@ describe('AI drafting messages', () => {
     ['an overlong question', { question: 'x'.repeat(1001) }],
     [
       'a negative limit',
-      { limits: { words: -1, characters: null, sentences: null } },
+      { limits: { ...request.limits, words: { min: -1, max: null } } },
     ],
     [
       'a huge limit',
-      { limits: { words: 1e6, characters: null, sentences: null } },
+      { limits: { ...request.limits, words: { min: null, max: 1e6 } } },
     ],
     ['an overlong role', { role: 'x'.repeat(101) }],
     ['a missing employer', { employer: undefined }],

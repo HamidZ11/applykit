@@ -1,4 +1,10 @@
-import type { AnswerLimits, OpenQuestionKind } from '@/autofill/open-question';
+import {
+  describeBound,
+  hasLimits,
+  type AnswerLimits,
+} from '@/autofill/answer-limits';
+import type { OpenQuestionKind } from '@/autofill/open-question';
+import type { ModelChoice } from './models';
 
 /**
  * The instructions and request for one draft (ADR 0019). The question,
@@ -40,24 +46,19 @@ function data(value: unknown): string {
     .replace(/>/g, '\\u003e');
 }
 
-function plural(count: number, word: string): string {
-  return `${String(count)} ${word}${count === 1 ? '' : 's'}`;
-}
-
+/** The employer's requirements in plain words, for the prompt. */
 export function limitText(limits: AnswerLimits): string {
-  const parts: string[] = [];
-  if (limits.sentences !== null) {
-    parts.push(`At most ${plural(limits.sentences, 'sentence')}.`);
-  }
-  if (limits.words !== null) {
-    parts.push(`At most ${plural(limits.words, 'word')}.`);
-  }
-  if (limits.characters !== null) {
-    parts.push(
-      `At most ${plural(limits.characters, 'character')}, including spaces.`,
-    );
-  }
-  return parts.join(' ') || 'No stated limit.';
+  if (!hasLimits(limits)) return 'No stated limit.';
+  const parts = (['sentences', 'words', 'characters'] as const).flatMap(
+    (unit) => {
+      const text = describeBound(limits[unit], unit);
+      if (!text) return [];
+      return [
+        `${text.charAt(0).toUpperCase()}${text.slice(1)}${unit === 'characters' ? ', including spaces' : ''}.`,
+      ];
+    },
+  );
+  return `${parts.join(' ')} These are the employer's requirements and override any other guidance.`;
 }
 
 export function buildPrompt(
@@ -83,16 +84,23 @@ export function buildPrompt(
 }
 
 /**
- * Enough output tokens for the stated length and no more (about 1.6
- * tokens a word in English), so a draft cannot run up the bill.
+ * The output-token ceiling for one draft. `max_tokens` only caps the
+ * reply; billing counts the tokens actually written. A ceiling close to
+ * the expected length cut drafts off (a one-sentence question got 90
+ * tokens), so it allows twice the expected length plus headroom, with a
+ * floor per model and a hard cap so a reply can never run on. Length
+ * itself is checked after the reply, never by cutting it off.
  */
-export function maxTokensFor(limits: AnswerLimits): number {
-  const budgets: number[] = [];
-  if (limits.words !== null) budgets.push(Math.ceil(limits.words * 1.6) + 40);
-  if (limits.characters !== null) {
-    budgets.push(Math.ceil(limits.characters / 3) + 40);
-  }
-  if (limits.sentences !== null) budgets.push(limits.sentences * 50 + 40);
-  const budget = budgets.length > 0 ? Math.min(...budgets) : 350;
-  return Math.min(1000, Math.max(80, budget));
+export function maxTokensFor(limits: AnswerLimits, model: ModelChoice): number {
+  const { words, characters, sentences } = limits;
+  const expected: number[] = [];
+  // About 1.5 tokens per English word, 3.5 characters per token, and up
+  // to 45 tokens for a long sentence.
+  if (words.max !== null) expected.push(words.max * 1.5);
+  else if (words.min !== null) expected.push(words.min * 2);
+  if (characters.max !== null) expected.push(characters.max / 3.5);
+  if (sentences.max !== null) expected.push(sentences.max * 45);
+  const likely = expected.length > 0 ? Math.min(...expected) : 250;
+  const floor = model === 'quality' ? 512 : 384;
+  return Math.min(2048, Math.max(floor, Math.ceil(likely * 2) + 128));
 }

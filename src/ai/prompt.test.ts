@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { NO_LIMITS } from '@/autofill/answer-limits';
 import { SYSTEM_PROMPT, buildPrompt, limitText, maxTokensFor } from './prompt';
-
-const NO_LIMITS = { words: null, characters: null, sentences: null };
 
 describe('the prompt', () => {
   it('states the rules that keep drafts honest', () => {
@@ -47,21 +46,46 @@ describe('the prompt', () => {
     expect(prompt).toContain('["Inventory Dashboard: Built a dashboard."]');
   });
 
-  it('states limits plainly', () => {
-    expect(limitText({ words: 150, characters: 500, sentences: 2 })).toBe(
-      'At most 2 sentences. At most 150 words. At most 500 characters, including spaces.',
+  it('states limits as the employer’s requirements', () => {
+    expect(
+      limitText({
+        words: { min: 150, max: 200 },
+        characters: { min: null, max: 500 },
+        sentences: { min: 2, max: 2 },
+      }),
+    ).toBe(
+      "Exactly 2 sentences. Between 150 and 200 words. At most 500 characters, including spaces. These are the employer's requirements and override any other guidance.",
     );
-    expect(limitText({ ...NO_LIMITS, sentences: 1 })).toBe(
-      'At most 1 sentence.',
+    expect(limitText({ ...NO_LIMITS, words: { min: 200, max: null } })).toBe(
+      "At least 200 words. These are the employer's requirements and override any other guidance.",
     );
     expect(limitText(NO_LIMITS)).toBe('No stated limit.');
   });
 
-  it('caps output tokens by the stated length', () => {
-    expect(maxTokensFor(NO_LIMITS)).toBe(350);
-    expect(maxTokensFor({ ...NO_LIMITS, sentences: 2 })).toBe(140);
-    expect(maxTokensFor({ ...NO_LIMITS, words: 150 })).toBe(280);
-    expect(maxTokensFor({ ...NO_LIMITS, characters: 100 })).toBe(80);
-    expect(maxTokensFor({ ...NO_LIMITS, words: 5000 })).toBe(1000);
+  it('allows room to finish, with a floor per model and a hard cap', () => {
+    const oneSentence = {
+      ...NO_LIMITS,
+      sentences: { min: 1, max: 1 },
+      characters: { min: null, max: 200 },
+    };
+    // The question that was cut off at 90 tokens.
+    expect(maxTokensFor(oneSentence, 'fast')).toBe(384);
+    expect(maxTokensFor(oneSentence, 'quality')).toBe(512);
+    expect(
+      maxTokensFor({ ...NO_LIMITS, sentences: { min: 2, max: 2 } }, 'fast'),
+    ).toBe(384);
+    expect(
+      maxTokensFor({ ...NO_LIMITS, words: { min: null, max: 150 } }, 'fast'),
+    ).toBe(578);
+    expect(
+      maxTokensFor({ ...NO_LIMITS, words: { min: 200, max: null } }, 'fast'),
+    ).toBe(928);
+    expect(maxTokensFor(NO_LIMITS, 'fast')).toBe(628);
+    expect(
+      maxTokensFor(
+        { ...NO_LIMITS, words: { min: null, max: 5000 } },
+        'quality',
+      ),
+    ).toBe(2048);
   });
 });

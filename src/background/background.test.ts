@@ -294,7 +294,11 @@ describe('AI drafting preview', () => {
       await send({
         type: 'applykit:ai-prepare',
         question: 'Describe your programming skills.',
-        limits: { words: null, characters: null, sentences: null },
+        limits: {
+          words: { min: null, max: null },
+          characters: { min: null, max: null },
+          sentences: { min: null, max: null },
+        },
         role: '',
         employer: '',
       }),
@@ -343,7 +347,11 @@ describe('AI drafting port', () => {
 
   const request = {
     question: 'Describe your programming skills.',
-    limits: { words: null, characters: null, sentences: null },
+    limits: {
+      words: { min: null, max: null },
+      characters: { min: null, max: null },
+      sentences: { min: null, max: null },
+    },
     role: '',
     employer: '',
     selected: ['skills'],

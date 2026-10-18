@@ -11,6 +11,7 @@ import { savedDiversity } from '@/test/diversity-fixtures';
 import { employmentRecords, fullProfile } from '@/test/autofill-fixtures';
 import { savedSkills } from '@/test/skills-fixtures';
 import type { DraftContextRequest } from '@/messages';
+import { NO_LIMITS } from '@/autofill/answer-limits';
 import type { Fetch } from './anthropic';
 import {
   approvalFingerprint,
@@ -25,7 +26,7 @@ const NOW = new Date(2026, 9, 18, 12);
 
 const QUESTION: DraftContextRequest = {
   question: 'Describe your programming skills in two sentences.',
-  limits: { words: null, characters: null, sentences: 2 },
+  limits: { ...NO_LIMITS, sentences: { min: 2, max: 2 } },
   role: '',
   employer: '',
 };
@@ -159,7 +160,10 @@ describe('approvalFingerprint', () => {
       await approvalFingerprint('fast', QUESTION, [{ ...item, text: 'Go' }]),
       await approvalFingerprint(
         'fast',
-        { ...QUESTION, limits: { ...QUESTION.limits, words: 50 } },
+        {
+          ...QUESTION,
+          limits: { ...QUESTION.limits, words: { min: null, max: 50 } },
+        },
         [item],
       ),
     ]) {
@@ -388,6 +392,25 @@ describe('draft', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('gives a one-sentence question room to finish', async () => {
+    const fetch = answers('I bring Python, TypeScript and PostgreSQL.');
+
+    await draft(deps({ fetch }), {
+      ...ASK,
+      question: 'In one sentence, what technical skills would you bring?',
+      limits: {
+        ...NO_LIMITS,
+        sentences: { min: 1, max: 1 },
+        characters: { min: null, max: 200 },
+      },
+    });
+
+    // Was 90 tokens, which cut real drafts off.
+    expect(JSON.parse(fetch.mock.calls[0]?.[1].body as string)).toMatchObject({
+      max_tokens: 384,
+    });
+  });
+
   it('uses the chosen model', async () => {
     const fetch = answers();
     await browserAiSettingsStore.save({ model: 'quality', dailyLimit: 50 });
@@ -396,7 +419,7 @@ describe('draft', () => {
 
     expect(JSON.parse(fetch.mock.calls[0]?.[1].body as string)).toMatchObject({
       model: 'claude-sonnet-5-5',
-      max_tokens: 140,
+      max_tokens: 512,
     });
   });
 });

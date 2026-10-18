@@ -1,46 +1,7 @@
-import type { AnswerLimits } from '@/autofill/open-question';
-
 /**
- * Local checks on a draft, before and as the user edits it (ADR 0019): its
- * length against the question's limits, and anything worth checking by
- * hand. Pure, so the panel and the background agree.
+ * Local checks on a draft, as the user reviews it (ADR 0019): anything
+ * worth checking by hand. Length is checked in `answer-limits`.
  */
-
-export interface DraftMeasure {
-  words: number;
-  sentences: number;
-  characters: number;
-}
-
-export function measure(text: string): DraftMeasure {
-  const trimmed = text.trim();
-  return {
-    words: trimmed === '' ? 0 : trimmed.split(/\s+/).length,
-    sentences:
-      trimmed === ''
-        ? 0
-        : trimmed.split(/[.!?]+(?=\s|$)/).filter((s) => s.trim() !== '').length,
-    // UTF-16 code units, as `maxlength` counts them.
-    characters: text.length,
-  };
-}
-
-/** Which stated limits the text is over; empty when it fits. */
-export function overLimits(
-  text: string,
-  limits: AnswerLimits,
-): ('words' | 'sentences' | 'characters')[] {
-  const size = measure(text);
-  const over: ('words' | 'sentences' | 'characters')[] = [];
-  if (limits.words !== null && size.words > limits.words) over.push('words');
-  if (limits.sentences !== null && size.sentences > limits.sentences) {
-    over.push('sentences');
-  }
-  if (limits.characters !== null && size.characters > limits.characters) {
-    over.push('characters');
-  }
-  return over;
-}
 
 export interface DraftFlags {
   /** Numbers and names in the draft that none of the shared facts state. */

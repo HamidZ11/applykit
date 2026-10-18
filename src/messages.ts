@@ -2,10 +2,10 @@ import type { AiFailure } from '@/ai/anthropic';
 import type { AiStatus, ConnectFailure } from '@/ai/connection';
 import { isModelChoice } from '@/ai/models';
 import { TEXT_FIELDS, type AutofillValues } from '@/autofill/fields';
+import type { AnswerLimits } from '@/autofill/answer-limits';
 import {
   MAX_QUESTION_LENGTH,
   OPEN_QUESTION_KINDS,
-  type AnswerLimits,
   type OpenQuestionKind,
 } from '@/autofill/open-question';
 import {
@@ -520,12 +520,18 @@ export const MAX_ROLE_LENGTH = 100;
 const MAX_LIMIT = 10_000;
 const MAX_SELECTED = 40;
 
-const isLimit = (value: unknown) =>
+const isCount = (value: unknown) =>
   value === null ||
   (typeof value === 'number' &&
     Number.isInteger(value) &&
     value > 0 &&
     value <= MAX_LIMIT);
+
+const isLimit = (value: unknown) =>
+  isRecord(value) &&
+  Object.keys(value).length === 2 &&
+  isCount(value.min) &&
+  isCount(value.max);
 
 function isContextRequest(value: Record<string, unknown>): boolean {
   const limits = value.limits;

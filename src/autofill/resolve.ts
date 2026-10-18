@@ -5,8 +5,8 @@ import {
   type EducationValue,
   type EmploymentValue,
 } from './fields';
-import { overLimits } from '@/ai/check';
 import { currentValue, needsYou, planFill, type FieldReport } from './report';
+import { limitViolations } from './answer-limits';
 import type { OpenQuestion } from './open-question';
 import { isFormControl, type ScannedField } from './scan';
 
@@ -281,13 +281,13 @@ export function confirmDraft(
   const maxLength =
     'maxLength' in element && element.maxLength > 0 ? element.maxLength : null;
   if (
-    overLimits(answer, current.support.question.limits).length > 0 ||
+    limitViolations(answer, current.support.question.limits).length > 0 ||
     (maxLength !== null && answer.length > maxLength)
   ) {
     return {
       ok: false,
       message:
-        'The answer is longer than this question allows. Shorten it, then insert it.',
+        'The answer does not meet the length this question asks for. Change it, then insert it.',
     };
   }
   return {

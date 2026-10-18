@@ -1,29 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { cleanDraft, flagDraft, measure, overLimits } from './check';
-
-const NO_LIMITS = { words: null, characters: null, sentences: null };
+import { cleanDraft, flagDraft } from './check';
 
 describe('draft checks', () => {
-  it('measures words, sentences and characters', () => {
-    expect(measure('I write Python. I use SQL daily!')).toEqual({
-      words: 7,
-      sentences: 2,
-      characters: 32,
-    });
-    expect(measure('   ')).toEqual({ words: 0, sentences: 0, characters: 3 });
-  });
-
-  it('reports which limits a draft is over', () => {
-    const text = 'One. Two. Three.';
-    expect(overLimits(text, { ...NO_LIMITS, sentences: 2 })).toEqual([
-      'sentences',
-    ]);
-    expect(
-      overLimits(text, { words: 2, characters: 10, sentences: 3 }),
-    ).toEqual(['words', 'characters']);
-    expect(overLimits(text, NO_LIMITS)).toEqual([]);
-  });
-
   it('flags numbers and names the shared facts do not state', () => {
     const flags = flagDraft(
       'I improved query speed by 40% using Kubernetes and Python in 2025.',

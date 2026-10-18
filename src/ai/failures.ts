@@ -60,7 +60,7 @@ export function failureText(
     case 'refusal':
       return 'Claude declined to draft this answer. Write it yourself, or change what you share.';
     case 'truncated':
-      return 'The draft was cut off. Try again, or ask for a shorter answer.';
+      return 'Claude stopped before finishing, so ApplyKit did not show an incomplete draft. Nothing was inserted. You can try again.';
     case 'empty':
       return 'Claude returned an empty draft. Try again.';
   }

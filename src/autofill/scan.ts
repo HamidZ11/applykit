@@ -17,10 +17,10 @@ import {
   type Evidence,
   type ManualReason,
 } from './detect';
+import { readLimits } from './answer-limits';
 import {
   MAX_QUESTION_LENGTH,
   openQuestionKind,
-  readLimits,
   type OpenQuestion,
 } from './open-question';
 
@@ -588,8 +588,8 @@ function openQuestionOf(
   if (
     !textArea &&
     (maxLength === null || maxLength < 100) &&
-    limits.words === null &&
-    limits.sentences === null
+    limits.words.max === null &&
+    limits.sentences.max === null
   ) {
     return null;
   }

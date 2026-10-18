@@ -2024,7 +2024,11 @@ describe('AI drafting', () => {
     );
     expect(drafting.preview).toHaveBeenCalledWith({
       question: 'Describe your programming skills in two sentences.',
-      limits: { words: null, characters: null, sentences: 2 },
+      limits: {
+        words: { min: null, max: null },
+        characters: { min: null, max: null },
+        sentences: { min: 2, max: 2 },
+      },
       role: '',
       employer: '',
     });
@@ -2086,13 +2090,46 @@ describe('AI drafting', () => {
     await startDraft();
     await send();
 
-    expect(dialog().textContent).toContain('Over the limit');
+    expect(dialog().textContent).toContain(
+      'Has 3 sentences; the question asks for exactly 2 sentences.',
+    );
     expect(button('Insert answer').disabled).toBe(true);
 
     act(() => {
       setInputValue(draftBox(), 'One. Two.');
     });
     expect(button('Insert answer').disabled).toBe(false);
+  });
+
+  it('will not insert one sentence where exactly two are required', async () => {
+    await openWith();
+    draftReply = { status: 'draft', text: 'I write Python and TypeScript.' };
+    await startDraft();
+    await send();
+
+    expect(dialog().textContent).toContain(
+      'Has 1 sentence; the question asks for exactly 2 sentences.',
+    );
+    expect(button('Insert answer').disabled).toBe(true);
+    expect(field('q-skills').value).toBe('');
+  });
+
+  it('explains a draft that was cut off and inserts nothing', async () => {
+    await openWith();
+    draftReply = {
+      status: 'failed',
+      failure: 'truncated',
+      retryAfterSeconds: null,
+    };
+    await startDraft();
+    await send();
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      'did not show an incomplete draft',
+    );
+    expect(findButton('Try again')).toBeDefined();
+    expect(field('q-skills').value).toBe('');
+    expect(drafting.draft).toHaveBeenCalledTimes(1);
   });
 
   it('keeps what the user typed on the page meanwhile', async () => {

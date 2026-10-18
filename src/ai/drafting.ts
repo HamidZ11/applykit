@@ -164,7 +164,7 @@ export async function draft(
         request.role,
         request.employer,
       ),
-      maxTokens: maxTokensFor(request.limits),
+      maxTokens: maxTokensFor(request.limits, settings.model),
     },
     {
       ...(deps.fetch ? { fetch: deps.fetch } : {}),
