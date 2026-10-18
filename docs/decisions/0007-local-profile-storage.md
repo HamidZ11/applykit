@@ -41,3 +41,10 @@ import, multiple profiles and export.
   profile is a separate, deliberate step. _Done in ADR 0010._
 - Personal data is never logged; storage errors are reported with generic
   messages.
+
+## Later changes
+
+- ADR 0019 adds optional AI drafting: when the user connects their own
+  Anthropic key and asks for a draft, the information they approve for
+  that question is sent to Anthropic. The profile itself is still never
+  uploaded, and nothing is sent without AI drafting.

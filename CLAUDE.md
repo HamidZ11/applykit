@@ -17,15 +17,19 @@ employment autofill with the same per-section record choice (ADR 0015),
 saved application answers, suggested and filled only when the user
 confirms each one (ADR 0016), and graduation answers worked out from the
 saved degree's expected graduation date, suggested the same way
-(ADR 0017), and opt-in diversity preferences for the five exact
-monitoring questions (ADR 0018).
+(ADR 0017), opt-in diversity preferences for the five exact
+monitoring questions (ADR 0018), Skills & projects, and optional AI
+drafting of open questions with the user's own Anthropic key (ADR 0019).
 
 Still to come (build only when asked, one at a time): custom dropdown
 widgets; review
 of uncertain fields. A separate marketing website comes later.
 
-No authentication, subscriptions, backend, external databases or AI APIs.
-User data never leaves the device. Do not invent requirements beyond these.
+No authentication, subscriptions, backend or external databases. ApplyKit
+is local-first: user data never leaves the device, except that optional AI
+drafting sends the information the user approves for one question to
+Anthropic, with the user's own key (ADR 0019). Diversity data is never
+sent. Do not invent requirements beyond these.
 
 Read `docs/architecture.md` before changing structure, and the ADRs in
 `docs/decisions/` before revisiting a recorded decision.
@@ -39,14 +43,24 @@ Read `docs/architecture.md` before changing structure, and the ADRs in
   without React or an extension runtime.
 - Import explicitly; WXT auto-imports are disabled.
 - Use `wxt/browser`, never `chrome.*`, and avoid Chromium-only assumptions.
-- Permissions stay at `activeTab` + `scripting` + `storage`. Any new permission or host
-  access needs an ADR and the user's approval.
+- Permissions stay at `activeTab` + `scripting` + `storage`, plus the
+  optional `https://api.anthropic.com/*` host permission requested only
+  when the user connects AI drafting (ADR 0019). Any new permission or
+  host access needs an ADR and the user's approval.
 - No `web_accessible_resources` unless an ADR justifies it.
 - Autofill never submits, clicks, sends keys or overwrites user-entered values.
 - Autofill uses only the confirmed profile, read by the background worker
   and sent to the panel as narrow `AutofillValues` (ADR 0010). Never read
   drafts for autofill, never fall back to sample data, and keep storage
   access out of content scripts.
+- AI drafting (ADR 0019): only the background worker reads the API key
+  and calls the API (fixed URL, no retries); the key never reaches the
+  panel, page, messages, logs, diagnostics, profile or tests. The panel
+  names shared items by id; the background re-checks the question,
+  builds the context from saved data, enforces approval and the daily
+  limit. Drafts are inserted only by "Insert answer" after
+  `confirmDraft`, never automatically. Tests mock `fetch`; never make
+  real API requests.
 - A correct skip beats a wrong fill: never answer sensitive, consent or
   verification questions (the one exception: the five exact monitoring
   questions, with the user's reuse opt-in, ADR 0018; diversity answers
@@ -131,7 +145,9 @@ old (pnpm enforces a minimum release age; do not add exclusions).
   change; never overwrite or drop a profile or draft silently.
   `fixtures/custom-controls.html` covers listing, deduplication and page
   furniture; `fixtures/diversity-application.html` covers monitoring
-  questions next to sensitive and consent questions.
+  questions next to sensitive and consent questions;
+  `fixtures/open-questions.html` covers open questions for AI drafting
+  next to questions that must never be drafted.
 - A user's choice must never make other fields eligible for automatic
   filling: choices go through `planFill` as `SectionChoices`, are
   previewed, re-checked by `confirmChoice` and written by `fillFields`.

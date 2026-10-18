@@ -29,3 +29,10 @@ strong install warning, and contradicts ApplyKit's privacy promise.
 - The toolbar button is the only activation path for now. A keyboard
   shortcut (`commands`) also grants `activeTab` and can be added later.
 - Pages like `chrome://` cannot be scripted; the background logs a warning.
+
+## Later changes
+
+- ADR 0019 adds one optional host permission, `https://api.anthropic.com/*`,
+  requested at runtime only when the user connects AI drafting and removed
+  when they disconnect. Install-time permissions are unchanged, and the
+  panel is still injected only through `activeTab`.

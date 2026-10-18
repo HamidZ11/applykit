@@ -1,13 +1,17 @@
 # ApplyKit
 
 A free, open-source, privacy-first browser extension that saves time on
-repetitive job applications. Everything stays on your device: no account, no
-backend, no tracking.
+repetitive job applications. ApplyKit is local-first: your profile stays on
+your device, with no account, no backend and no tracking. The only
+exception is optional AI drafting: if you connect your own Anthropic API
+key, the information you approve for a question is sent to Anthropic when
+you ask for a draft. Diversity answers are never sent.
 
 > **Status: profile autofill.** Save your profile once (by hand or from your
 > CV), then fill your personal, contact, address, link, education and
 > employment details on application forms, and reuse your saved answers to
-> common questions one at a time. ApplyKit leaves everything else to you and
+> common questions one at a time. Optionally, draft open questions with AI
+> using your own Anthropic key. ApplyKit leaves everything else to you and
 > never submits.
 
 ## Technology
@@ -120,6 +124,8 @@ Limitations:
    `diversity-application.html` has equal-opportunities monitoring
    lists, radios and a custom dropdown next to sex, health, adjustments,
    right-to-work and consent questions;
+   `open-questions.html` has open questions to draft with AI next to
+   questions that must never be drafted;
    `custom-controls.html` is built from custom dropdowns.)
 4. Click the ApplyKit toolbar button. Without a saved profile the panel
    says so and offers **Set up your profile**; it fills nothing. Save a
@@ -144,6 +150,27 @@ Limitations:
 9. The line under the form confirms the input events and that the form was
    **not** submitted. Close with ✕, Escape (from compact), or the toolbar
    button.
+
+## Trying AI drafting (optional)
+
+Uses your own Anthropic API key and costs a fraction of a cent per draft,
+billed by Anthropic. Without a key, nothing changes and nothing is sent.
+
+1. In the [Claude Console](https://platform.claude.com/settings/keys),
+   create a key for a single workspace, ideally with a spend limit and an
+   expiry.
+2. On the profile page, add a few skills and a project under **Skills &
+   projects** (fictional while testing), then open **AI Assistant**, paste
+   the key and **Connect**. Chrome asks to allow access to
+   api.anthropic.com. The key is kept until the browser closes unless you
+   tick **Remember on this device** (stored without encryption).
+3. Open http://127.0.0.1:4321/open-questions.html, open ApplyKit, expand
+   the panel and select "Describe your programming skills in two
+   sentences". Choose **Draft with AI**, check what will be shared, and
+   **Send to Anthropic**.
+4. Edit the draft if you like, then **Insert answer**. Nothing is inserted
+   or submitted otherwise. **Disconnect** removes the key and the
+   permission.
 
 ## Setting up your profile
 
@@ -246,16 +273,31 @@ Limitations:
 - CV import from PDF or Word, read entirely in the browser: contact details,
   links, education and roles are suggested with their source text and a
   Confident / Check this label, and only what you accept enters your draft.
+- Skills & projects: a list of technical skills and short project
+  summaries on the profile page. Optional, never filled into forms.
+- Optional AI drafting with your own Anthropic API key (**AI Assistant** on
+  the profile page). Open questions ("Describe your programming skills",
+  "Why are you interested in this role?") offer **Draft with AI** in the
+  full list: you see exactly what will be shared, approve it, review and
+  edit the draft, and insert it yourself. Only the skills, projects, jobs
+  and education you tick are sent, with the question; never contact
+  details, your address, diversity answers or your saved answers. Drafts
+  use only what you shared and respect the question's word, sentence and
+  character limits. A daily request limit (50 by default) and today's
+  estimated cost are shown.
 - Requests only `activeTab`, `scripting` and `storage`: no access to any
-  site until you click the toolbar button on it, and nothing leaves the
+  site until you click the toolbar button on it. Access to
+  api.anthropic.com is requested only when you connect AI drafting, and
+  removed when you disconnect. Without AI drafting, nothing leaves the
   browser.
 
 ## Known limitations
 
 - Autofill covers personal, contact, address, link, education and
   employment fields; saved answers cover five factual questions and are
-  filled one at a time. Written answers such as motivation or reasons for
-  leaving are never filled.
+  filled one at a time. Written answers such as motivation are never
+  filled automatically (AI drafting can help, only when you ask), and
+  reasons for leaving are never drafted.
 - Saved answers: radio buttons, ranges and salary bands are never chosen;
   questions in other units, periods or currencies, relocation questions
   that do not say where (unless both of your answers agree), text date
@@ -273,6 +315,15 @@ Limitations:
   or its options mention sex, birth or legal records. Recognition is English-only and limited
   to exact UK wordings; age, caring responsibilities and socio-economic
   background are not covered.
+- AI drafting: Anthropic only, with your own key; no other providers.
+  Drafts can still be wrong: review every claim before inserting. Open
+  questions are recognised from English wording and textareas (or long
+  text inputs) only; cover letters, "anything else" boxes and anything
+  sensitive, legal or about eligibility are never drafted. The daily
+  limit counts requests from this browser only; set a spend limit in the
+  Claude Console. A remembered key is stored unencrypted in the browser
+  profile. Keys that span several workspaces are not supported. AI
+  drafting has not been tried in Safari, and needs Safari 17.1 or later.
 - Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
   and similar platforms) are listed and never filled: the full list shows
   the saved value to choose and a "Go to field" button. Only standard ARIA

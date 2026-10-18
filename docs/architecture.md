@@ -194,6 +194,33 @@ background: sender is ApplyKit, top frame? → resolveDiversity(diversityStore, 
 panel: writes only a value its own list offered, through fillFields
 ```
 
+### Skills & projects and AI drafting
+
+Skills and short project summaries live in `local:skillsProjects`
+(`SkillsProjectsView`, `options.html#skills`), apart from the profile.
+They are never filled into forms.
+
+Optional AI drafting (ADR 0019, `src/ai`) uses the user's own Anthropic
+key, connected in the "AI Assistant" section (`AiSettingsView`,
+`options.html#ai`). The key lives in `session:aiCredential`, or
+`local:aiCredential` (unencrypted) when remembered, and only the
+background worker reads it. `https://api.anthropic.com/*` is an optional
+host permission requested on Connect.
+
+```
+panel: open question (status `open`) → applykit:ai-prepare { question, limits, role, employer }
+background: connected? open question? → items from profile + skills (context.ts), default selection, approved?
+panel: shows exactly what is shared; user ticks items and approves
+panel: port applykit:ai-draft { …, selected ids, approve }
+background: re-checks question, items by id, approval fingerprint, daily limit
+            → POST /v1/messages (anthropic.ts) → { draft } or a fixed failure
+panel: user edits → "Insert answer" → confirmDraft → fillFields (never submits)
+```
+
+The AI Assistant section talks to the background with
+`applykit:ai-status|connect|disconnect`, answered only for ApplyKit's own
+pages.
+
 ### Autofill values
 
 Autofill reads only the confirmed profile and the saved application
@@ -236,6 +263,10 @@ profile", "Open your profile" or "Try again" instead of Autofill.
 6. **Storage** (`src/storage`) is the only code that touches extension
    storage. It validates everything it reads and returns results instead of
    throwing (ADR 0007).
+7. **AI** (`src/ai`) holds AI drafting (ADR 0019): the Anthropic client,
+   the context and prompt builders and the drafting flow run only in the
+   background worker; `check.ts` (length and flags) is pure and shared
+   with the panel. The only network code in ApplyKit is `anthropic.ts`.
 
 ## Browser integration strategy
 
@@ -245,7 +276,9 @@ profile", "Open your profile" or "Try again" instead of Autofill.
 - Browser APIs are accessed through `wxt/browser`, the promise-based
   `browser` namespace that works in Chrome and Safari.
 - Permissions are `activeTab`, `scripting` and `storage` (ADR 0002,
-  ADR 0007). Adding a permission requires a decision record.
+  ADR 0007), plus the optional `https://api.anthropic.com/*` host
+  permission for AI drafting (ADR 0019). Adding a permission requires a
+  decision record.
 - Panel CSS and fonts are bundled into the content script (no
   `web_accessible_resources`), so pages cannot detect the extension by
   probing its files. Fonts are registered with the `FontFace` API; see
@@ -285,7 +318,8 @@ ADR 0017 and ADR 0018.
   to use), `answers` (what a saved answer gives one question, or why
   not), `graduation` (what a saved degree's expected graduation says about
   a graduation question), `diversity` (monitoring questions and
-  which option says a saved answer), `suggestion` (saved values shown
+  which option says a saved answer), `open-question` (open questions AI drafting may help with, and their
+  limits), `suggestion` (saved values shown
   as guidance for fields ApplyKit cannot fill), `fill` (write and verify),
   plus pure rules in `education`, `dates`, `options` and `categories`.
   `src/page/navigate.ts` takes the user to a field ("Go to field"): it

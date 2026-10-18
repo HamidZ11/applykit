@@ -1,6 +1,6 @@
 # 0019: Optional AI drafting with the user's own key
 
-- Status: Proposed (awaiting approval; nothing is implemented)
+- Status: Accepted (implemented; Safari not yet verified)
 - Date: 2026-10-18
 
 ## Context
@@ -13,7 +13,7 @@ server, accounts or network access, and CLAUDE.md currently rules out
 AI APIs. The full investigation is in
 [the AI assistant architecture](../ai-assistant-architecture.md).
 
-## Decision (proposed)
+## Decision
 
 - **Optional.** Off by default; every existing feature works without
   it, onboarding never mentions it, and without it ApplyKit makes no
@@ -55,3 +55,38 @@ AI APIs. The full investigation is in
   request limits are not a provider spending cap.
 - Safari support requires 17.1+ and manual verification of background
   fetch, permission prompts and worker lifetime.
+
+## Implementation notes
+
+Checked against Anthropic's documentation on 2026-10-18; see
+`docs/ai-assistant-architecture.md` for sources.
+
+- **Requests.** `POST https://api.anthropic.com/v1/messages` with
+  `Authorization: Bearer <key>` (the documented primary header),
+  `anthropic-version: 2023-06-01` and
+  `anthropic-dangerous-direct-browser-access: true` (sent by the official
+  SDK for browser use; documented only in its source). `credentials:
+omit`, `redirect: error`, a 25-second timeout (Chrome stops a worker
+  whose fetch response takes over 30 seconds), cancellation by closing
+  the panel's port, response validation, and fixed failure kinds: the
+  API's error text is never shown. No automatic retries.
+- **Models.** `claude-haiku-5-5` with `thinking: {type: "disabled"}`
+  ("Fast", default) and `claude-sonnet-5-5` with `thinking: {type:
+"between_tools"}` ("Higher quality"), the lowest setting each accepts;
+  thinking tokens are billed as output. Output tokens are capped by the
+  question's stated length (80 to 1,000).
+- **Connecting** checks the key with the free token-counting endpoint.
+  Keys that span several workspaces get a clear error (they need an
+  `anthropic-workspace-id` header, which ApplyKit does not send).
+- **Skills & projects** are a separate store (`local:skillsProjects`),
+  not part of the profile, so existing profiles are untouched.
+- **Open questions** get their own support status, `open`, only when
+  detection found nothing else; a strict exclusion list applies again,
+  and the background re-checks the question text before sending.
+- **Approval** is a session-only SHA-256 fingerprint of the provider,
+  model, question, limits, role, employer and each shared item's text.
+- **Daily limit** of 1 to 50 requests (default 50), counted under a lock
+  before sending; a damaged counter allows none.
+- **Insertion** goes through `confirmDraft` (same field, same question,
+  still empty and writable, within the stated limits and `maxlength`)
+  and `fillFields`.

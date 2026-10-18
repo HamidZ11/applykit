@@ -1,9 +1,13 @@
 # Optional AI drafting: architecture and product design
 
-- Status: Proposal, awaiting approval (nothing here is implemented)
+- Status: Implemented, with the differences listed below (ADR 0019)
 - Date: 2026-10-18
 - Decision record: [ADR 0019](decisions/0019-optional-ai-drafting.md)
-  (Proposed)
+- Differences from this proposal in the implementation: the key is sent
+  as `Authorization: Bearer` (the documented primary header); Sonnet 5.5
+  runs with `thinking: {type: "between_tools"}`; there are no automatic
+  retries at all (the proposal allowed one for 500 and 529); Skills &
+  projects are their own store; the daily limit is 1 to 50.
 - Research: official Anthropic, Chrome, Apple and MDN documentation,
   read on 2026-10-18. No API requests were made and no credentials were
   used. Facts that could not be confirmed from documentation are marked
