@@ -13,6 +13,10 @@ import {
   isAutofillValuesResponse,
   isGetAutofillValuesMessage,
   isOpenProfileMessage,
+  isAiDraftRequest,
+  isAiDraftResponse,
+  isAiPrepareMessage,
+  isAiPrepareResponse,
 } from './messages';
 
 describe('saved answers in replies', () => {
@@ -136,7 +140,8 @@ describe('panel settings', () => {
   it('recognises the request and checks the reply', () => {
     expect(isGetPanelSettingsMessage(GET_PANEL_SETTINGS)).toBe(true);
     expect(isGetPanelSettingsMessage({ type: 'applykit:other' })).toBe(false);
-    expect(isPanelSettings({ diagnostics: true })).toBe(true);
+    expect(isPanelSettings({ diagnostics: true, ai: false })).toBe(true);
+    expect(isPanelSettings({ diagnostics: true })).toBe(false);
     expect(isPanelSettings({ diagnostics: 'true' })).toBe(false);
     expect(isPanelSettings(null)).toBe(false);
   });
@@ -199,5 +204,77 @@ describe('diversity in replies', () => {
         })),
       }),
     ).toBe(false);
+  });
+});
+
+describe('AI drafting messages', () => {
+  const request = {
+    question: 'Describe your programming skills in two sentences.',
+    limits: { words: null, characters: 500, sentences: 2 },
+    role: '',
+    employer: '',
+  };
+
+  it('accepts a well-formed preview request', () => {
+    expect(
+      isAiPrepareMessage({ type: 'applykit:ai-prepare', ...request }),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['an empty question', { question: '' }],
+    ['an overlong question', { question: 'x'.repeat(1001) }],
+    [
+      'a negative limit',
+      { limits: { words: -1, characters: null, sentences: null } },
+    ],
+    [
+      'a huge limit',
+      { limits: { words: 1e6, characters: null, sentences: null } },
+    ],
+    ['an overlong role', { role: 'x'.repeat(101) }],
+    ['a missing employer', { employer: undefined }],
+  ])('rejects %s', (_, change) => {
+    expect(
+      isAiPrepareMessage({
+        type: 'applykit:ai-prepare',
+        ...request,
+        ...change,
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts draft requests naming items only by id', () => {
+    expect(
+      isAiDraftRequest({ ...request, selected: ['skills'], approve: true }),
+    ).toBe(true);
+    expect(
+      isAiDraftRequest({
+        ...request,
+        selected: [{ text: 'x' }],
+        approve: true,
+      }),
+    ).toBe(false);
+    expect(isAiDraftRequest({ ...request, selected: ['skills'] })).toBe(false);
+    expect(
+      isAiDraftRequest({
+        ...request,
+        selected: Array.from({ length: 41 }, (_, i) => String(i)),
+        approve: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('checks replies before the panel uses them', () => {
+    expect(isAiDraftResponse({ status: 'draft', text: 'A draft.' })).toBe(true);
+    expect(isAiDraftResponse({ status: 'draft' })).toBe(false);
+    expect(
+      isAiDraftResponse({
+        status: 'failed',
+        failure: 'timeout',
+        retryAfterSeconds: null,
+      }),
+    ).toBe(true);
+    expect(isAiPrepareResponse({ status: 'ready', kind: 'poem' })).toBe(false);
   });
 });

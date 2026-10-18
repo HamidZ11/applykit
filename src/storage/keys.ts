@@ -53,3 +53,10 @@ export const SKILLS_KEY = 'local:skillsProjects';
 
 /** Every unreadable copy of the skills and projects, oldest first. */
 export const SKILLS_BACKUP_KEY = 'local:skillsProjectsBackup';
+
+/**
+ * Fingerprints of what the user approved sharing with Anthropic in this
+ * browser session (question, information, model). Cleared when the
+ * browser closes.
+ */
+export const AI_APPROVALS_KEY = 'session:aiApprovals';

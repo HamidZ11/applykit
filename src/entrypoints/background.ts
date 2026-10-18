@@ -1,15 +1,12 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
-import {
-  aiStatus,
-  connect,
-  disconnect,
-  type ConnectionDeps,
-} from '@/ai/connection';
+import { aiAvailable, aiStatus, connect, disconnect } from '@/ai/connection';
+import { prepare, type DraftingDeps } from '@/ai/drafting';
 import { browserHostAccess } from '@/ai/host-access';
 import {
   isAiConnectMessage,
   isAiDisconnectMessage,
+  isAiPrepareMessage,
   isAiStatusMessage,
   isGetAutofillValuesMessage,
   isGetPanelSettingsMessage,
@@ -21,10 +18,12 @@ import {
   browserCredentialStore,
   restrictSessionStorage,
 } from '@/storage/ai-credential';
+import { browserApprovalStore } from '@/storage/ai-approvals';
 import {
   browserAiSettingsStore,
   browserAiUsageStore,
 } from '@/storage/ai-settings';
+import { browserSkillsStore } from '@/storage/skills-store';
 import { resolveDiversity } from '@/storage/diversity-source';
 import { browserDiversityStore } from '@/storage/diversity-store';
 import { browserAnswersStore } from '@/storage/answers-store';
@@ -59,12 +58,15 @@ export default defineBackground(() => {
     ).session,
   );
 
-  const ai: ConnectionDeps = {
+  const ai: DraftingDeps = {
     credentials: browserCredentialStore,
     host: browserHostAccess,
     settings: browserAiSettingsStore,
     usage: browserAiUsageStore,
     now: () => new Date(),
+    profile: browserProfileStore,
+    skills: browserSkillsStore,
+    approvals: browserApprovalStore,
   };
   // Pages of ApplyKit itself, such as the profile page, as opposed to the
   // panel's content script, whose sender URL is the web page's.
@@ -167,9 +169,21 @@ export default defineBackground(() => {
         return true; // The response is sent asynchronously.
       }
 
+      // What a question could share. Built here from saved data; the
+      // panel shows it and names items by id when drafting.
+      if (isAiPrepareMessage(message)) {
+        prepare(ai, message).then(sendResponse, () => {
+          sendResponse({ status: 'unavailable' });
+        });
+        return true; // The response is sent asynchronously.
+      }
+
       if (isGetPanelSettingsMessage(message)) {
-        void browserSettingsStore.loadDiagnostics().then((diagnostics) => {
-          sendResponse({ diagnostics });
+        void Promise.all([
+          browserSettingsStore.loadDiagnostics(),
+          aiAvailable(ai).catch(() => false),
+        ]).then(([diagnostics, available]) => {
+          sendResponse({ diagnostics, ai: available });
         });
         return true; // The response is sent asynchronously.
       }

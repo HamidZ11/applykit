@@ -124,10 +124,16 @@ describe('background messages', () => {
   });
 
   it('tells the panel whether to show developer diagnostics', async () => {
-    expect(await send(GET_PANEL_SETTINGS)).toEqual({ diagnostics: false });
+    expect(await send(GET_PANEL_SETTINGS)).toEqual({
+      diagnostics: false,
+      ai: false,
+    });
 
     await browserSettingsStore.saveDiagnostics(true);
-    expect(await send(GET_PANEL_SETTINGS)).toEqual({ diagnostics: true });
+    expect(await send(GET_PANEL_SETTINGS)).toEqual({
+      diagnostics: true,
+      ai: false,
+    });
     expect(await send(GET_PANEL_SETTINGS, 'another-extension')).toBeUndefined();
   });
 
@@ -271,5 +277,19 @@ describe('AI settings messages', () => {
     expect(
       (await fakeBrowser.storage.session.get('aiCredential')).aiCredential,
     ).toBe('sk-ant-test-not-a-real-key-0000000000');
+  });
+});
+
+describe('AI drafting preview', () => {
+  it('offers nothing while AI drafting is not connected', async () => {
+    expect(
+      await send({
+        type: 'applykit:ai-prepare',
+        question: 'Describe your programming skills.',
+        limits: { words: null, characters: null, sentences: null },
+        role: '',
+        employer: '',
+      }),
+    ).toEqual({ status: 'unavailable' });
   });
 });

@@ -1,6 +1,13 @@
+import type { AiFailure } from '@/ai/anthropic';
 import type { AiStatus, ConnectFailure } from '@/ai/connection';
 import { isModelChoice } from '@/ai/models';
 import { TEXT_FIELDS, type AutofillValues } from '@/autofill/fields';
+import {
+  MAX_QUESTION_LENGTH,
+  OPEN_QUESTION_KINDS,
+  type AnswerLimits,
+  type OpenQuestionKind,
+} from '@/autofill/open-question';
 import {
   DIVERSITY_CATEGORIES,
   type DiversityCategory,
@@ -62,6 +69,8 @@ export const GET_PANEL_SETTINGS: GetPanelSettingsMessage = {
 /** How the panel shows fields; developer diagnostics are off by default. */
 export interface PanelSettings {
   diagnostics: boolean;
+  /** Whether AI drafting is connected; never the key. */
+  ai: boolean;
 }
 
 export function isGetPanelSettingsMessage(
@@ -74,7 +83,8 @@ export function isPanelSettings(value: unknown): value is PanelSettings {
   return (
     typeof value === 'object' &&
     value !== null &&
-    typeof (value as { diagnostics?: unknown }).diagnostics === 'boolean'
+    typeof (value as { diagnostics?: unknown }).diagnostics === 'boolean' &&
+    typeof (value as { ai?: unknown }).ai === 'boolean'
   );
 }
 
@@ -438,4 +448,163 @@ export function isAiConnectResponse(
   return value.ok === true
     ? isAiStatus(value.status)
     : value.ok === false && typeof value.failure === 'string';
+}
+
+/*
+ * AI drafting from the panel (ADR 0019). The panel sends the question as
+ * the page words it, its limits and, for motivation questions, role and
+ * employer names the user can edit; the background re-checks the question
+ * and builds everything it shares from saved data. The panel only ever
+ * names saved items by id.
+ */
+
+export const AI_PREPARE_TYPE = 'applykit:ai-prepare';
+/** A port, so closing it cancels the request. */
+export const AI_DRAFT_PORT = 'applykit:ai-draft';
+
+export interface DraftContextRequest {
+  question: string;
+  limits: AnswerLimits;
+  /** Role and employer names, untrusted page text the user may edit. */
+  role: string;
+  employer: string;
+}
+
+export interface AiPrepareMessage extends DraftContextRequest {
+  type: typeof AI_PREPARE_TYPE;
+}
+
+/** One piece of information the user may share; `text` is what is sent. */
+export interface SharedItem {
+  id: string;
+  label: string;
+  text: string;
+}
+
+export type AiPrepareResponse =
+  /** No key, or no permission: AI drafting is not offered. */
+  | { status: 'unavailable' }
+  /** The background does not consider this an open question. */
+  | { status: 'not-a-question' }
+  | {
+      status: 'ready';
+      kind: OpenQuestionKind;
+      items: SharedItem[];
+      selected: string[];
+      /** This exact request was approved earlier in this session. */
+      approved: boolean;
+      model: string;
+    };
+
+export interface AiDraftRequest extends DraftContextRequest {
+  selected: string[];
+  /** The user approved this request in the full preview. */
+  approve: boolean;
+}
+
+export type DraftFailure =
+  AiFailure | 'daily-limit' | 'busy' | 'no-context' | 'insufficient';
+
+export type AiDraftResponse =
+  | { status: 'draft'; text: string }
+  | { status: 'needs-approval' }
+  | { status: 'unavailable' }
+  | { status: 'not-a-question' }
+  | {
+      status: 'failed';
+      failure: DraftFailure;
+      retryAfterSeconds: number | null;
+    };
+
+export const MAX_ROLE_LENGTH = 100;
+const MAX_LIMIT = 10_000;
+const MAX_SELECTED = 40;
+
+const isLimit = (value: unknown) =>
+  value === null ||
+  (typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= MAX_LIMIT);
+
+function isContextRequest(value: Record<string, unknown>): boolean {
+  const limits = value.limits;
+  return (
+    typeof value.question === 'string' &&
+    value.question.length > 0 &&
+    value.question.length <= MAX_QUESTION_LENGTH &&
+    isRecord(limits) &&
+    isLimit(limits.words) &&
+    isLimit(limits.characters) &&
+    isLimit(limits.sentences) &&
+    typeof value.role === 'string' &&
+    value.role.length <= MAX_ROLE_LENGTH &&
+    typeof value.employer === 'string' &&
+    value.employer.length <= MAX_ROLE_LENGTH
+  );
+}
+
+export function isAiPrepareMessage(
+  message: unknown,
+): message is AiPrepareMessage {
+  return (
+    hasType(message, AI_PREPARE_TYPE) &&
+    isContextRequest(message as Record<string, unknown>)
+  );
+}
+
+export function isAiDraftRequest(message: unknown): message is AiDraftRequest {
+  if (!isRecord(message) || !isContextRequest(message)) return false;
+  const { selected, approve } = message;
+  return (
+    Array.isArray(selected) &&
+    selected.length <= MAX_SELECTED &&
+    selected.every((id) => typeof id === 'string' && id.length <= 200) &&
+    typeof approve === 'boolean'
+  );
+}
+
+const isSharedItem = (value: unknown) =>
+  isRecord(value) &&
+  typeof value.id === 'string' &&
+  typeof value.label === 'string' &&
+  typeof value.text === 'string';
+
+export function isAiPrepareResponse(
+  value: unknown,
+): value is AiPrepareResponse {
+  if (!isRecord(value)) return false;
+  if (value.status === 'unavailable' || value.status === 'not-a-question') {
+    return true;
+  }
+  return (
+    value.status === 'ready' &&
+    oneOf(OPEN_QUESTION_KINDS, value.kind) &&
+    Array.isArray(value.items) &&
+    value.items.every(isSharedItem) &&
+    Array.isArray(value.selected) &&
+    value.selected.every((id) => typeof id === 'string') &&
+    typeof value.approved === 'boolean' &&
+    typeof value.model === 'string'
+  );
+}
+
+export function isAiDraftResponse(value: unknown): value is AiDraftResponse {
+  if (!isRecord(value)) return false;
+  switch (value.status) {
+    case 'draft':
+      return typeof value.text === 'string';
+    case 'needs-approval':
+    case 'unavailable':
+    case 'not-a-question':
+      return true;
+    case 'failed':
+      return (
+        typeof value.failure === 'string' &&
+        (value.retryAfterSeconds === null ||
+          typeof value.retryAfterSeconds === 'number')
+      );
+    default:
+      return false;
+  }
 }

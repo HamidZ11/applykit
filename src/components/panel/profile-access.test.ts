@@ -80,9 +80,12 @@ describe('requestPanelSettings', () => {
   it('passes the background’s setting on', async () => {
     const sendMessage = vi
       .spyOn(fakeBrowser.runtime, 'sendMessage')
-      .mockResolvedValue({ diagnostics: true } as never);
+      .mockResolvedValue({ diagnostics: true, ai: false } as never);
 
-    expect(await requestPanelSettings()).toEqual({ diagnostics: true });
+    expect(await requestPanelSettings()).toEqual({
+      diagnostics: true,
+      ai: false,
+    });
     expect(sendMessage).toHaveBeenCalledWith(GET_PANEL_SETTINGS);
   });
 
@@ -93,7 +96,10 @@ describe('requestPanelSettings', () => {
         reply as never,
       );
 
-      expect(await requestPanelSettings()).toEqual({ diagnostics: false });
+      expect(await requestPanelSettings()).toEqual({
+        diagnostics: false,
+        ai: false,
+      });
     },
   );
 
@@ -102,6 +108,9 @@ describe('requestPanelSettings', () => {
       throw new Error('Extension context invalidated.');
     });
 
-    expect(await requestPanelSettings()).toEqual({ diagnostics: false });
+    expect(await requestPanelSettings()).toEqual({
+      diagnostics: false,
+      ai: false,
+    });
   });
 });

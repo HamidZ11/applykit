@@ -1,5 +1,9 @@
 import { browser } from 'wxt/browser';
 import {
+  AI_PREPARE_TYPE,
+  isAiPrepareResponse,
+  type AiPrepareResponse,
+  type DraftContextRequest,
   GET_AUTOFILL_VALUES,
   GET_PANEL_SETTINGS,
   OPEN_PROFILE,
@@ -58,9 +62,29 @@ export async function requestPanelSettings(): Promise<PanelSettings> {
   try {
     const response: unknown =
       await browser.runtime.sendMessage(GET_PANEL_SETTINGS);
-    return isPanelSettings(response) ? response : { diagnostics: false };
+    return isPanelSettings(response) ? response : NO_SETTINGS;
   } catch {
-    return { diagnostics: false };
+    return NO_SETTINGS;
+  }
+}
+
+const NO_SETTINGS: PanelSettings = { diagnostics: false, ai: false };
+
+/**
+ * What AI drafting could share for an open question, from the background,
+ * which alone reads saved data. Null when there is no valid reply.
+ */
+export async function requestDraftPreview(
+  request: DraftContextRequest,
+): Promise<AiPrepareResponse | null> {
+  try {
+    const response: unknown = await browser.runtime.sendMessage({
+      type: AI_PREPARE_TYPE,
+      ...request,
+    });
+    return isAiPrepareResponse(response) ? response : null;
+  } catch {
+    return null;
   }
 }
 

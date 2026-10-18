@@ -1384,7 +1384,7 @@ describe('developer diagnostics', () => {
         <Panel
           onClose={onClose}
           loadValues={loadValues}
-          loadSettings={() => Promise.resolve({ diagnostics })}
+          loadSettings={() => Promise.resolve({ diagnostics, ai: false })}
         />,
       );
     });
