@@ -1,12 +1,25 @@
 import { openQuestionKind } from '@/autofill/open-question';
 import { emptySkillsProjects } from '@/domain/skills-projects';
-import type { AiPrepareResponse, DraftContextRequest } from '@/messages';
+import type {
+  AiDraftRequest,
+  AiDraftResponse,
+  AiPrepareResponse,
+  DraftContextRequest,
+} from '@/messages';
 import type { ApprovalStore } from '@/storage/ai-approvals';
 import type { ProfileStore } from '@/storage/profile-store';
 import type { SkillsStore } from '@/storage/skills-store';
+import { requestDraft } from './anthropic';
+import { cleanDraft } from './check';
 import { aiAvailable, type ConnectionDeps } from './connection';
 import { contextItems, defaultSelection, type ContextItem } from './context';
 import { MODELS, type ModelChoice } from './models';
+import {
+  INSUFFICIENT,
+  SYSTEM_PROMPT,
+  buildPrompt,
+  maxTokensFor,
+} from './prompt';
 
 /**
  * AI drafting in the background worker (ADR 0019): what may be shared for
@@ -90,4 +103,90 @@ export async function prepare(
     approved,
     model: MODELS[settings.model].label,
   };
+}
+
+/**
+ * One draft, only for a request the user approved: now (`approve`, from
+ * the full preview) or earlier this session for exactly the same content.
+ * The background checks everything again: that AI is connected and
+ * allowed, that the question is an open question, which saved items are
+ * shared (by id, never text from the panel), the daily limit, and the
+ * reply. Nothing is retried automatically.
+ */
+export async function draft(
+  deps: DraftingDeps,
+  request: AiDraftRequest,
+  signal?: AbortSignal,
+): Promise<AiDraftResponse> {
+  if (!(await aiAvailable(deps))) return { status: 'unavailable' };
+  const kind = openQuestionKind(request.question);
+  if (!kind) return { status: 'not-a-question' };
+  const [items, settings] = await Promise.all([
+    availableItems(deps),
+    deps.settings.load(),
+  ]);
+  const shared = items.filter((item) => request.selected.includes(item.id));
+  if (shared.length === 0) {
+    return { status: 'failed', failure: 'no-context', retryAfterSeconds: null };
+  }
+  const fingerprint = await approvalFingerprint(
+    settings.model,
+    request,
+    shared,
+  );
+  if (!request.approve && !(await deps.approvals.has(fingerprint))) {
+    return { status: 'needs-approval' };
+  }
+  const credential = await deps.credentials.load();
+  if (!credential) return { status: 'unavailable' };
+  if (signal?.aborted) {
+    return { status: 'failed', failure: 'cancelled', retryAfterSeconds: null };
+  }
+  if (!(await deps.usage.reserve(settings.dailyLimit, deps.now()))) {
+    return {
+      status: 'failed',
+      failure: 'daily-limit',
+      retryAfterSeconds: null,
+    };
+  }
+  if (request.approve) await deps.approvals.add(fingerprint);
+
+  const reply = await requestDraft(
+    {
+      key: credential.key,
+      model: settings.model,
+      system: SYSTEM_PROMPT,
+      prompt: buildPrompt(
+        kind,
+        request.question,
+        request.limits,
+        shared.map((item) => item.text),
+        request.role,
+        request.employer,
+      ),
+      maxTokens: maxTokensFor(request.limits),
+    },
+    {
+      ...(deps.fetch ? { fetch: deps.fetch } : {}),
+      ...(signal ? { signal } : {}),
+    },
+  );
+  const { usage } = reply;
+  if (usage) await deps.usage.record(settings.model, usage, deps.now());
+  if (!reply.ok) {
+    return {
+      status: 'failed',
+      failure: reply.failure,
+      retryAfterSeconds: reply.retryAfterSeconds,
+    };
+  }
+  const text = cleanDraft(reply.text);
+  if (text.includes(INSUFFICIENT)) {
+    return {
+      status: 'failed',
+      failure: 'insufficient',
+      retryAfterSeconds: null,
+    };
+  }
+  return { status: 'draft', text };
 }

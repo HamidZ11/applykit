@@ -14,11 +14,19 @@ import { fullProfile } from '@/test/autofill-fixtures';
 import background from '@/entrypoints/background';
 
 let setAccessLevel: ReturnType<typeof vi.fn>;
+/** The fake browser has no ports; this records the background's listener. */
+let connectListeners: ((port: unknown) => void)[];
 
 beforeEach(() => {
   fakeBrowser.reset();
   setAccessLevel = vi.fn().mockResolvedValue(undefined);
   Reflect.set(fakeBrowser.storage.local, 'setAccessLevel', setAccessLevel);
+  connectListeners = [];
+  Reflect.set(fakeBrowser.runtime, 'onConnect', {
+    addListener: (listener: (port: unknown) => void) => {
+      connectListeners.push(listener);
+    },
+  });
   background.main();
 });
 
@@ -291,5 +299,92 @@ describe('AI drafting preview', () => {
         employer: '',
       }),
     ).toEqual({ status: 'unavailable' });
+  });
+});
+
+describe('AI drafting port', () => {
+  function port(sender: Partial<Browser.runtime.MessageSender>) {
+    const onMessage: ((message: unknown) => void)[] = [];
+    const onDisconnect: (() => void)[] = [];
+    const posted: unknown[] = [];
+    const fake = {
+      name: 'applykit:ai-draft',
+      sender: sender as Browser.runtime.MessageSender,
+      postMessage: vi.fn((message: unknown) => {
+        posted.push(message);
+      }),
+      disconnect: vi.fn(),
+      onMessage: {
+        addListener: (listener: (message: unknown) => void) => {
+          onMessage.push(listener);
+        },
+      },
+      onDisconnect: {
+        addListener: (listener: () => void) => {
+          onDisconnect.push(listener);
+        },
+      },
+    };
+    return {
+      fake,
+      posted,
+      send: (message: unknown) => {
+        for (const listener of onMessage) listener(message);
+      },
+    };
+  }
+
+  async function connect(sender: Partial<Browser.runtime.MessageSender>) {
+    const p = port(sender);
+    for (const listener of connectListeners) listener(p.fake);
+    await Promise.resolve();
+    return p;
+  }
+
+  const request = {
+    question: 'Describe your programming skills.',
+    limits: { words: null, characters: null, sentences: null },
+    role: '',
+    employer: '',
+    selected: ['skills'],
+    approve: true,
+  };
+
+  it('closes ports from other extensions and frames', async () => {
+    for (const sender of [
+      { id: 'another-extension', tab: { id: 7 } as never, frameId: 0 },
+      { id: fakeBrowser.runtime.id, tab: { id: 7 } as never, frameId: 2 },
+      { id: fakeBrowser.runtime.id },
+    ]) {
+      const p = await connect(sender);
+      expect(p.fake.disconnect).toHaveBeenCalled();
+    }
+  });
+
+  it('drafts nothing while AI drafting is not connected', async () => {
+    const p = await connect({
+      id: fakeBrowser.runtime.id,
+      tab: { id: 7 } as never,
+      frameId: 0,
+    });
+
+    p.send(request);
+    await vi.waitFor(() => {
+      expect(p.posted).toEqual([{ status: 'unavailable' }]);
+    });
+  });
+
+  it('rejects malformed requests', async () => {
+    const p = await connect({
+      id: fakeBrowser.runtime.id,
+      tab: { id: 7 } as never,
+      frameId: 0,
+    });
+
+    p.send({ ...request, selected: [{ text: 'my own context' }] });
+
+    expect(p.posted).toEqual([
+      { status: 'failed', failure: 'rejected', retryAfterSeconds: null },
+    ]);
   });
 });

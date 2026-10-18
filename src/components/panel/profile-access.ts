@@ -1,7 +1,11 @@
 import { browser } from 'wxt/browser';
 import {
+  AI_DRAFT_PORT,
   AI_PREPARE_TYPE,
+  isAiDraftResponse,
   isAiPrepareResponse,
+  type AiDraftRequest,
+  type AiDraftResponse,
   type AiPrepareResponse,
   type DraftContextRequest,
   GET_AUTOFILL_VALUES,
@@ -121,3 +125,50 @@ export function isExtensionContextValid(): boolean {
 /** What the panel says when it can no longer reach ApplyKit. */
 export const CONTEXT_LOST =
   'ApplyKit was updated or reloaded since this panel opened. Close the panel and open ApplyKit again from the toolbar.';
+
+/**
+ * Asks the background for one draft over a port; aborting `signal` closes
+ * the port, which cancels the request. Null when there is no valid reply.
+ */
+export function requestAiDraft(
+  request: AiDraftRequest,
+  signal: AbortSignal,
+): Promise<AiDraftResponse | null> {
+  if (signal.aborted) {
+    return Promise.resolve({
+      status: 'failed',
+      failure: 'cancelled',
+      retryAfterSeconds: null,
+    });
+  }
+  return new Promise((resolve) => {
+    let port: ReturnType<typeof browser.runtime.connect>;
+    try {
+      port = browser.runtime.connect({ name: AI_DRAFT_PORT });
+    } catch {
+      resolve(null);
+      return;
+    }
+    const finish = (response: AiDraftResponse | null) => {
+      signal.removeEventListener('abort', cancel);
+      resolve(response);
+      port.disconnect();
+    };
+    const cancel = () => {
+      finish({
+        status: 'failed',
+        failure: 'cancelled',
+        retryAfterSeconds: null,
+      });
+    };
+    port.onMessage.addListener((message: unknown) => {
+      finish(isAiDraftResponse(message) ? message : null);
+    });
+    port.onDisconnect.addListener(() => {
+      signal.removeEventListener('abort', cancel);
+      resolve(null);
+    });
+    signal.addEventListener('abort', cancel);
+    port.postMessage(request);
+  });
+}

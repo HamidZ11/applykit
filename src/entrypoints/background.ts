@@ -1,10 +1,12 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
 import { aiAvailable, aiStatus, connect, disconnect } from '@/ai/connection';
-import { prepare, type DraftingDeps } from '@/ai/drafting';
+import { draft, prepare, type DraftingDeps } from '@/ai/drafting';
 import { browserHostAccess } from '@/ai/host-access';
 import {
+  AI_DRAFT_PORT,
   isAiConnectMessage,
+  isAiDraftRequest,
   isAiDisconnectMessage,
   isAiPrepareMessage,
   isAiStatusMessage,
@@ -94,6 +96,60 @@ export default defineBackground(() => {
   // restarts never open tabs.
   browser.runtime.onInstalled.addListener(({ reason }) => {
     if (reason === 'install') void browser.runtime.openOptionsPage();
+  });
+
+  // Drafts run over a port, so the panel closing it cancels the request.
+  // Only the panel in a tab's top frame may ask, one draft per tab at a
+  // time, one request per port.
+  const drafting = new Set<number>();
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name !== AI_DRAFT_PORT) return;
+    const { sender } = port;
+    const tabId = sender?.tab?.id;
+    if (
+      sender?.id !== browser.runtime.id ||
+      tabId === undefined ||
+      sender.frameId !== 0
+    ) {
+      port.disconnect();
+      return;
+    }
+    const controller = new AbortController();
+    let asked = false;
+    port.onDisconnect.addListener(() => {
+      controller.abort();
+    });
+    port.onMessage.addListener((message: unknown) => {
+      if (asked) return;
+      asked = true;
+      const reply = (response: unknown) => {
+        if (!controller.signal.aborted) port.postMessage(response);
+      };
+      if (!isAiDraftRequest(message)) {
+        reply({
+          status: 'failed',
+          failure: 'rejected',
+          retryAfterSeconds: null,
+        });
+        return;
+      }
+      if (drafting.has(tabId)) {
+        reply({ status: 'failed', failure: 'busy', retryAfterSeconds: null });
+        return;
+      }
+      drafting.add(tabId);
+      draft(ai, message, controller.signal)
+        .then(reply, () => {
+          reply({
+            status: 'failed',
+            failure: 'server',
+            retryAfterSeconds: null,
+          });
+        })
+        .finally(() => {
+          drafting.delete(tabId);
+        });
+    });
   });
 
   browser.runtime.onMessage.addListener(
