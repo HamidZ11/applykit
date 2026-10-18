@@ -58,12 +58,12 @@ export default defineBackground(() => {
       if (isOpenProfileMessage(message)) {
         // The answers section has its own address; opening it needs no
         // extra permission.
-        const opened =
-          message.section === 'answers'
-            ? browser.tabs.create({
-                url: `${browser.runtime.getURL('/options.html')}#answers`,
-              })
-            : browser.runtime.openOptionsPage();
+        // Each section is a fixed address; a page cannot choose it.
+        const opened = message.section
+          ? browser.tabs.create({
+              url: `${browser.runtime.getURL('/options.html')}#${message.section === 'answers' ? 'answers' : 'diversity'}`,
+            })
+          : browser.runtime.openOptionsPage();
         opened.then(
           () => {
             sendResponse({ ok: true });

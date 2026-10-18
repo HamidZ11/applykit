@@ -8,6 +8,7 @@ import {
   expect,
   it,
   vi,
+  type Mock,
 } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { AutofillValues } from '@/autofill/fields';
@@ -27,6 +28,13 @@ import {
   sampleValues,
 } from '@/test/autofill-fixtures';
 import { emptyAnswers } from '@/domain/application-answers';
+import type { DiversityPreferences } from '@/domain/diversity';
+import type { DiversityRequest, ResolveDiversityResponse } from '@/messages';
+import {
+  loadDiversityStatus,
+  resolveDiversity,
+} from '@/storage/diversity-source';
+import { savedDiversity } from '@/test/diversity-fixtures';
 import { savedAnswers } from '@/test/answer-fixtures';
 import { loadFixture } from '@/test/load-fixture';
 import { Panel } from './Panel';
@@ -1757,5 +1765,136 @@ describe('opening the profile', () => {
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(
       'ApplyKit was updated or reloaded since this panel opened. Close the panel and open ApplyKit again from the toolbar.',
     );
+  });
+});
+
+describe('diversity questions', () => {
+  function storeOf(preferences: DiversityPreferences) {
+    return {
+      load: () =>
+        Promise.resolve({
+          status: 'loaded' as const,
+          preferences,
+          updatedAt: '2026-10-18T12:00:00.000Z',
+          damaged: [],
+        }),
+    };
+  }
+
+  const openPage = vi.fn(() => Promise.resolve(true));
+  let chooseDiversity: Mock<
+    (requests: DiversityRequest[]) => Promise<ResolveDiversityResponse>
+  >;
+
+  async function openWith(preferences: DiversityPreferences) {
+    loadFixture('diversity-application.html');
+    document.body.append(host);
+    const store = storeOf(preferences);
+    const status = await loadDiversityStatus(store);
+    chooseDiversity = vi.fn((requests: DiversityRequest[]) =>
+      resolveDiversity(store, requests),
+    );
+    profile = ready(autofillValuesFrom(fullProfile(), emptyAnswers(), status));
+    root = createRoot(host);
+    act(() => {
+      root.render(
+        <Panel
+          onClose={onClose}
+          loadValues={loadValues}
+          openProfile={openPage}
+          chooseDiversity={chooseDiversity}
+        />,
+      );
+    });
+    await settle();
+  }
+
+  function select(id: string): HTMLSelectElement {
+    const element = document.getElementById(id);
+    if (!(element instanceof HTMLSelectElement)) throw new Error(`No #${id}`);
+    return element;
+  }
+
+  it('fills matching monitoring lists only after Autofill, with reuse on', async () => {
+    await openWith(savedDiversity());
+    expect(chooseDiversity).not.toHaveBeenCalled();
+
+    await autofill();
+
+    expect(chooseDiversity).toHaveBeenCalledTimes(1);
+    expect(select('ethnicity').value).toBe('e12');
+    expect(select('orientation').value).toBe('p');
+    // Male and Female describe sex, not the saved gender identity.
+    expect(select('gender').value).toBe('');
+    // A choice already made on the page is kept.
+    expect(select('religion').value).toBe('Prefer not to say');
+    expect(
+      document.querySelectorAll('input[name="disability"]:checked'),
+    ).toHaveLength(0);
+  });
+
+  it('fills nothing and asks for nothing with reuse off', async () => {
+    await openWith({ ...savedDiversity(), reuse: false });
+
+    await autofill();
+
+    expect(chooseDiversity).not.toHaveBeenCalled();
+    expect(select('ethnicity').value).toBe('');
+    expect(select('orientation').value).toBe('');
+    click('Show all fields');
+    click(/^What is your ethnic group/);
+    expect(dialog().textContent).toContain(
+      'Reuse of your saved diversity answers is off, so ApplyKit leaves this to you.',
+    );
+  });
+
+  it('groups monitoring questions as sensitive disclosures, without values', async () => {
+    await openWith(savedDiversity());
+    await autofill();
+
+    const compact = dialog().textContent;
+    click('Show all fields');
+    const section = host.querySelector(
+      '[aria-label="Fields on this form"] section[aria-label="Sensitive disclosures"]',
+    );
+    expect(section?.textContent).toContain('What is your ethnic group');
+    expect(section?.textContent).toContain('What is your sexual orientation');
+    click(/^What is your ethnic group/);
+    expect(dialog().textContent).toContain(
+      'Filled from your saved diversity preferences. The site accepted it.',
+    );
+
+    for (const text of [compact, dialog().textContent]) {
+      for (const value of [
+        'Any other Mixed',
+        'Non-binary',
+        'non-binary',
+        'other-mixed',
+        'Prefer not to say',
+      ]) {
+        expect(text, value).not.toContain(value);
+      }
+    }
+  });
+
+  it('explains a list whose choices differ from the saved answer', async () => {
+    await openWith(savedDiversity());
+    await autofill();
+    click('Show all fields');
+    click(/^What is your gender/);
+
+    expect(dialog().textContent).toContain(
+      'The choices here differ from your saved answer, so ApplyKit leaves this to you.',
+    );
+  });
+
+  it('links monitoring questions to the diversity preferences', async () => {
+    await openWith({ ...savedDiversity(), reuse: false });
+    click('Show all fields');
+    click(/^What is your ethnic group/);
+
+    click('Diversity preferences');
+
+    expect(openPage).toHaveBeenCalledWith('diversity');
   });
 });

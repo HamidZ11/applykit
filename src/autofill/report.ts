@@ -294,7 +294,8 @@ function planField(
     return {
       ...matched,
       status: 'keep',
-      value: existing,
+      // A monitoring answer is not repeated in the panel, even the page's.
+      value: isDiversityField(support.field) ? null : existing,
       reason: 'You already entered this. ApplyKit leaves it as it is.',
     };
   }

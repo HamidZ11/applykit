@@ -16,9 +16,11 @@ import {
 
 export interface OpenProfileMessage {
   type: 'applykit:open-profile';
-  /** Open at the saved application answers instead of the profile. */
-  section?: 'answers';
+  /** Open at the saved answers or diversity preferences instead. */
+  section?: ProfileSection;
 }
+
+export type ProfileSection = 'answers' | 'diversity';
 
 export const OPEN_PROFILE: OpenProfileMessage = {
   type: 'applykit:open-profile',
@@ -102,7 +104,9 @@ export function isOpenProfileMessage(
 ): message is OpenProfileMessage {
   if (!hasType(message, OPEN_PROFILE.type)) return false;
   const { section } = message as { section?: unknown };
-  return section === undefined || section === 'answers';
+  return (
+    section === undefined || section === 'answers' || section === 'diversity'
+  );
 }
 
 export function isGetAutofillValuesMessage(

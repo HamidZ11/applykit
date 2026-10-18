@@ -10,6 +10,7 @@ import {
   isPanelSettings,
   type AutofillValuesResponse,
   type DiversityRequest,
+  type ProfileSection,
   type ResolveDiversityResponse,
   type PanelSettings,
 } from '@/messages';
@@ -69,7 +70,7 @@ export async function requestPanelSettings(): Promise<PanelSettings> {
  * opened; never throws, including when the extension was reloaded and this
  * script can no longer reach it.
  */
-export async function openProfile(section?: 'answers'): Promise<boolean> {
+export async function openProfile(section?: ProfileSection): Promise<boolean> {
   try {
     const response: unknown = await browser.runtime.sendMessage(
       section ? { ...OPEN_PROFILE, section } : OPEN_PROFILE,

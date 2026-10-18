@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/primitives';
 import { useHeightTransition } from './useHeightTransition';
 import { usePanel, type LoadValues, type PanelModel } from './usePanel';
-import type { PanelSettings } from '@/messages';
+import type { PanelSettings, ProfileSection } from '@/messages';
 import type { requestDiversityChoices } from './profile-access';
 import { locateTarget } from './vocabulary';
 
@@ -47,7 +47,7 @@ export function Panel({
   /** Where the confirmed profile's values come from; replaced in tests. */
   loadValues?: LoadValues;
   /** Opens the profile page; replaced in tests. */
-  openProfile?: (section?: 'answers') => Promise<boolean>;
+  openProfile?: (section?: ProfileSection) => Promise<boolean>;
   /** Where the panel's display preferences come from; replaced in tests. */
   loadSettings?: () => Promise<PanelSettings>;
   /** Chooses options for monitoring questions; replaced in tests. */

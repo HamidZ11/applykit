@@ -30,7 +30,11 @@ import {
   type FieldElement,
   type ScannedField,
 } from '@/autofill/scan';
-import type { AutofillValuesResponse, PanelSettings } from '@/messages';
+import type {
+  AutofillValuesResponse,
+  PanelSettings,
+  ProfileSection,
+} from '@/messages';
 import { goToField, type GoToResult } from '@/page/navigate';
 import { readPageContext, type PageContext } from '@/page/page-context';
 import {
@@ -104,6 +108,8 @@ export interface PanelModel extends PanelState {
   openProfile: () => void;
   /** Opens the saved application answers; failures as for the profile. */
   openAnswers: () => void;
+  /** Opens the diversity preferences; failures as for the profile. */
+  openDiversity: () => void;
   /** Why the last profile action failed, in words the user can act on. */
   problem: string | null;
   /** Show how each field was recognised (Developer diagnostics). */
@@ -125,7 +131,9 @@ export interface PanelModel extends PanelState {
 export function usePanel(
   loadValues: LoadValues = requestAutofillValues,
   root: ParentNode = document,
-  openProfileRequest: (section?: 'answers') => Promise<boolean> = openProfile,
+  openProfileRequest: (
+    section?: ProfileSection,
+  ) => Promise<boolean> = openProfile,
   loadSettings: () => Promise<PanelSettings> = requestPanelSettings,
   chooseDiversity: typeof requestDiversityChoices = requestDiversityChoices,
 ): PanelModel {
@@ -142,7 +150,7 @@ export function usePanel(
   const filling = useRef(false);
 
   const openPage = useCallback(
-    (section?: 'answers') => {
+    (section?: ProfileSection) => {
       setProblem(null);
       void openProfileRequest(section).then((opened) => {
         if (opened) return;
@@ -161,6 +169,9 @@ export function usePanel(
   }, [openPage]);
   const openAnswersAction = useCallback(() => {
     openPage('answers');
+  }, [openPage]);
+  const openDiversityAction = useCallback(() => {
+    openPage('diversity');
   }, [openPage]);
 
   const refreshValues = useCallback(async () => {
@@ -382,6 +393,7 @@ export function usePanel(
     diagnostics,
     openProfile: openProfileAction,
     openAnswers: openAnswersAction,
+    openDiversity: openDiversityAction,
     // An old panel left on the page after ApplyKit was reloaded can no
     // longer reach it; "Try again" cannot help, so say what will.
     problem:

@@ -4,8 +4,13 @@ import {
   LocateFixed,
   MessageSquareText,
   UserRound,
+  UsersRound,
 } from 'lucide-react';
-import { isAnswerField, type AutofillValues } from '@/autofill/fields';
+import {
+  isAnswerField,
+  isDiversityField,
+  type AutofillValues,
+} from '@/autofill/fields';
 import { needsYou, type FieldReport } from '@/autofill/report';
 import type { FieldElement } from '@/autofill/scan';
 import type { Suggestion } from '@/autofill/suggestion';
@@ -47,6 +52,11 @@ export function FieldActions({
   // Saved application answers are edited apart from the profile; a
   // graduation answer is worked out from the saved education.
   const graduation = report.target === 'graduation';
+  // Monitoring questions left to the user link to their preferences.
+  const monitoring =
+    report.target !== null &&
+    isDiversityField(report.target) &&
+    (status === 'no-value' || status === 'manual');
   const answer =
     report.target !== null && isAnswerField(report.target) && !graduation;
   const source = answer
@@ -86,7 +96,7 @@ export function FieldActions({
           }}
         />
       ) : (
-        (canChoose || profileLacksIt || needsYou(report)) && (
+        (canChoose || profileLacksIt || monitoring || needsYou(report)) && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {status === 'suggest' && (
               <UseAnswerButton report={report} model={model} />
@@ -102,7 +112,13 @@ export function FieldActions({
                 Choose a saved record
               </SecondaryButton>
             )}
-            {profileLacksIt &&
+            {monitoring ? (
+              <SecondaryButton size="sm" onClick={model.openDiversity}>
+                <Icon icon={UsersRound} size={14} className="text-ink-3" />
+                Diversity preferences
+              </SecondaryButton>
+            ) : (
+              profileLacksIt &&
               (answer && status !== 'no-profile' ? (
                 <SecondaryButton size="sm" onClick={model.openAnswers}>
                   <Icon
@@ -119,7 +135,8 @@ export function FieldActions({
                     ? 'Set up your profile'
                     : 'Edit your profile'}
                 </SecondaryButton>
-              ))}
+              ))
+            )}
             {needsYou(report) && (
               <GoToButton element={report.field.element} model={model} />
             )}
