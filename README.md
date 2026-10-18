@@ -243,6 +243,11 @@ Limitations:
 - One profile per browser; no import, export or sync.
 - Two tabs with unsaved profile edits share one draft: the latest
   autosave is kept until one of them saves.
+- Conflict protection between two tabs is not verified in Chrome: in a
+  manual test, both tabs' saves appeared to succeed (see ADR 0014).
+- After ApplyKit is reloaded or updated, a panel left open on a page can
+  no longer reach it. The panel now says so; close it and open ApplyKit
+  again from the toolbar.
 - Visibility uses the browser's own check plus size, opacity and
   off-page position, so common honeypots are skipped; other hiding
   techniques may still be listed.

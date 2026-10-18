@@ -47,7 +47,14 @@ The reliability review found three ways a user could lose profile data:
 - Validation changes no longer risk silent data loss; they surface as
   "Some saved details no longer pass ApplyKit's checks".
 - Two tabs still share one draft slot: while both have unsaved edits, the
-  latest autosave wins the draft until one of them saves. Saves themselves
-  are protected.
+  latest autosave wins the draft until one of them saves. Saves are
+  checked for conflicts, but see the next points.
 - Web Locks behaviour in Safari's extension pages has not been verified in
   a browser.
+- **Not verified in Chrome.** In a manual test (2026-10-18) two tabs saved
+  different preferred names and both saves appeared to succeed, with no
+  conflict notice. The same sequence against the real profile store in
+  unit tests (`two-tabs.test.tsx`) does report the conflict, so the cause
+  is unknown (build in use, timing, or browser behaviour). Concurrent
+  editing is a low-priority edge case; the safeguard stays, but conflict
+  protection must not be described as verified.
