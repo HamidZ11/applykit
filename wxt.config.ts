@@ -21,6 +21,9 @@ export default defineConfig({
     // explicitly activates ApplyKit on (see docs/decisions/0002). `storage`
     // keeps the profile in this browser (see docs/decisions/0007).
     permissions: ['activeTab', 'scripting', 'storage'],
+    // Optional AI drafting (docs/decisions/0019): requested only when the
+    // user connects their own Anthropic key, and removed on disconnect.
+    optional_host_permissions: ['https://api.anthropic.com/*'],
     action: {
       default_title: 'Open ApplyKit',
     },

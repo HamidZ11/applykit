@@ -28,3 +28,16 @@ export const DIVERSITY_KEY = 'local:diversityPreferences';
 
 /** Every unreadable copy of the diversity preferences, oldest first. */
 export const DIVERSITY_BACKUP_KEY = 'local:diversityPreferencesBackup';
+
+/**
+ * The user's Anthropic API key for AI drafting (ADR 0019), for this browser
+ * session only: in memory, cleared when the browser closes. Read only by
+ * the background worker.
+ */
+export const AI_SESSION_KEY = 'session:aiCredential';
+
+/**
+ * The same key when the user chose "Remember on this device": on disk and
+ * unencrypted. Never both at once.
+ */
+export const AI_REMEMBERED_KEY = 'local:aiCredential';
