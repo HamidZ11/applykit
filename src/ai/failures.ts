@@ -1,3 +1,4 @@
+import type { DraftFailure } from '@/messages';
 import type { AiFailure } from './anthropic';
 import type { ConnectFailure } from './connection';
 
@@ -6,10 +7,18 @@ import type { ConnectFailure } from './connection';
  * API's own error text, which could echo a request, and never the key.
  */
 export function failureText(
-  failure: ConnectFailure | AiFailure,
+  failure: ConnectFailure | AiFailure | DraftFailure,
   retryAfterSeconds: number | null = null,
 ): string {
   switch (failure) {
+    case 'daily-limit':
+      return 'You have reached today’s limit for AI requests. You can change it in AI Assistant.';
+    case 'busy':
+      return 'Another draft is being written in this tab. Try again when it finishes.';
+    case 'no-context':
+      return 'Choose at least one thing to share, so the draft has facts to use.';
+    case 'insufficient':
+      return 'What you shared does not answer this question, so no draft was written. Share more, or add details in Skills & projects.';
     case 'not-a-key':
       return 'That does not look like an Anthropic API key. Keys start with sk-ant-.';
     case 'no-permission':

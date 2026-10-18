@@ -20,6 +20,7 @@ import {
   PrimaryButton,
   SecondaryButton,
 } from '@/components/ui/primitives';
+import { DraftAssistant } from './DraftAssistant';
 import { fieldKey } from './FieldRow';
 import { StatusGlyph } from './icons';
 import type { PanelModel } from './usePanel';
@@ -136,6 +137,9 @@ export function FieldActions({
                     : 'Edit your profile'}
                 </SecondaryButton>
               ))
+            )}
+            {status === 'open' && (
+              <DraftAssistant report={report} model={model} />
             )}
             {needsYou(report) && (
               <GoToButton element={report.field.element} model={model} />

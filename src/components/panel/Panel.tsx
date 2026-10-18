@@ -21,7 +21,12 @@ import {
   SecondaryButton,
 } from '@/components/ui/primitives';
 import { useHeightTransition } from './useHeightTransition';
-import { usePanel, type LoadValues, type PanelModel } from './usePanel';
+import {
+  usePanel,
+  type Drafting,
+  type LoadValues,
+  type PanelModel,
+} from './usePanel';
 import type { PanelSettings, ProfileSection } from '@/messages';
 import type { requestDiversityChoices } from './profile-access';
 import { locateTarget } from './vocabulary';
@@ -42,6 +47,7 @@ export function Panel({
   openProfile,
   loadSettings,
   chooseDiversity,
+  drafting,
 }: {
   onClose: () => void;
   /** Where the confirmed profile's values come from; replaced in tests. */
@@ -52,6 +58,8 @@ export function Panel({
   loadSettings?: () => Promise<PanelSettings>;
   /** Chooses options for monitoring questions; replaced in tests. */
   chooseDiversity?: typeof requestDiversityChoices;
+  /** AI drafting's way to the background; replaced in tests. */
+  drafting?: Drafting;
 }) {
   const model = usePanel(
     loadValues,
@@ -59,6 +67,7 @@ export function Panel({
     openProfile,
     loadSettings,
     chooseDiversity,
+    drafting,
   );
   const frame = useRef<HTMLDivElement>(null);
   const { mode, phase, summary, selected, fields } = model;

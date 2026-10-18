@@ -12,7 +12,7 @@ import {
 } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { AutofillValues } from '@/autofill/fields';
-import { fillFields } from '@/autofill/fill';
+import { fillFields, setInputValue } from '@/autofill/fill';
 import { scanFields } from '@/autofill/scan';
 import {
   GET_PANEL_SETTINGS,
@@ -29,7 +29,13 @@ import {
 } from '@/test/autofill-fixtures';
 import { emptyAnswers } from '@/domain/application-answers';
 import type { DiversityPreferences } from '@/domain/diversity';
-import type { DiversityRequest, ResolveDiversityResponse } from '@/messages';
+import type {
+  AiDraftResponse,
+  AiPrepareResponse,
+  DiversityRequest,
+  ResolveDiversityResponse,
+} from '@/messages';
+import type { Drafting } from './usePanel';
 import {
   loadDiversityStatus,
   resolveDiversity,
@@ -1911,5 +1917,332 @@ describe('diversity questions', () => {
     click('Diversity preferences');
 
     expect(openPage).toHaveBeenCalledWith('diversity');
+  });
+});
+
+describe('AI drafting', () => {
+  const ITEMS = [
+    { id: 'skills', label: 'Skills', text: 'Python, TypeScript, PostgreSQL' },
+    {
+      id: 'project:inventory',
+      label: 'Project: Inventory Dashboard',
+      text: 'Inventory Dashboard: Built a dashboard for tracking stock.',
+    },
+  ];
+  const DRAFT = 'I write Python and TypeScript. I use PostgreSQL daily.';
+
+  function ready(approved = false): AiPrepareResponse {
+    return {
+      status: 'ready',
+      kind: 'skills',
+      items: ITEMS,
+      selected: ['skills'],
+      approved,
+      model: 'Fast',
+    };
+  }
+
+  let previewReply: AiPrepareResponse | null;
+  let draftReply: AiDraftResponse | null;
+  let drafting: {
+    preview: Mock<Drafting['preview']>;
+    draft: Mock<Drafting['draft']>;
+  };
+  const openPage = vi.fn(() => Promise.resolve(true));
+
+  async function openWith(ai = true) {
+    loadFixture('open-questions.html');
+    document.body.append(host);
+    previewReply = ready();
+    draftReply = { status: 'draft', text: DRAFT };
+    drafting = {
+      preview: vi.fn(() => Promise.resolve(previewReply)),
+      draft: vi.fn(() => Promise.resolve(draftReply)),
+    };
+    profile = { status: 'ready', values: sampleValues() };
+    root = createRoot(host);
+    act(() => {
+      root.render(
+        <Panel
+          onClose={onClose}
+          loadValues={loadValues}
+          openProfile={openPage}
+          loadSettings={() => Promise.resolve({ diagnostics: false, ai })}
+          drafting={drafting}
+        />,
+      );
+    });
+    await settle();
+    click('Show all fields');
+  }
+
+  function field(id: string): HTMLTextAreaElement {
+    const element = document.getElementById(id);
+    if (!(element instanceof HTMLTextAreaElement)) throw new Error(`No #${id}`);
+    return element;
+  }
+
+  function draftBox(): HTMLTextAreaElement {
+    const box = dialog().querySelector('textarea');
+    if (!box) throw new Error('No draft box');
+    return box;
+  }
+
+  async function startDraft(row = /^Describe your programming skills/) {
+    click(row);
+    click('Draft with AI');
+    await settle();
+  }
+
+  async function send(name = 'Send to Anthropic') {
+    click(name);
+    await settle();
+  }
+
+  it('offers nothing while AI drafting is not connected', async () => {
+    await openWith(false);
+    click(/^Describe your programming skills/);
+
+    expect(dialog().textContent).toContain('Open question');
+    expect(findButton('Draft with AI')).toBeUndefined();
+    expect(drafting.preview).not.toHaveBeenCalled();
+  });
+
+  it('shows exactly what will be shared before sending anything', async () => {
+    await openWith();
+
+    await startDraft();
+
+    const text = dialog().textContent;
+    expect(text).toContain('To share with Anthropic');
+    expect(text).toContain(
+      'Describe your programming skills in two sentences.',
+    );
+    expect(text).toContain('Python, TypeScript, PostgreSQL');
+    expect(text).toContain(
+      'Contact details and diversity answers are never shared',
+    );
+    expect(drafting.preview).toHaveBeenCalledWith({
+      question: 'Describe your programming skills in two sentences.',
+      limits: { words: null, characters: null, sentences: 2 },
+      role: '',
+      employer: '',
+    });
+    expect(drafting.draft).not.toHaveBeenCalled();
+    const boxes = [
+      ...dialog().querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    ];
+    expect(boxes.map((b) => b.checked)).toEqual([true, false]);
+  });
+
+  it('sends only the ticked items, after approval, and never inserts by itself', async () => {
+    await openWith();
+    await startDraft();
+    act(() => {
+      dialog()
+        .querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1]
+        ?.click();
+    });
+
+    await send();
+
+    expect(drafting.draft).toHaveBeenCalledTimes(1);
+    expect(drafting.draft.mock.calls[0]?.[0]).toMatchObject({
+      selected: ['skills', 'project:inventory'],
+      approve: true,
+    });
+    expect(draftBox().value).toBe(DRAFT);
+    expect(field('q-skills').value).toBe('');
+  });
+
+  it('inserts the edited answer only when asked, and never submits', async () => {
+    await openWith();
+    const submitted = vi.fn((event: Event) => {
+      event.preventDefault();
+    });
+    document
+      .getElementById('application')
+      ?.addEventListener('submit', submitted);
+    await startDraft();
+    await send();
+
+    act(() => {
+      setInputValue(draftBox(), 'I write Python daily. I enjoy tidy SQL.');
+    });
+    click('Insert answer');
+    await settle();
+
+    expect(field('q-skills').value).toBe(
+      'I write Python daily. I enjoy tidy SQL.',
+    );
+    expect(announcement()).toBe('Inserted your answer. Nothing was submitted.');
+    expect(submitted).not.toHaveBeenCalled();
+    expect(field('q-project').value).toBe('');
+  });
+
+  it('will not insert an answer over the question’s limit', async () => {
+    await openWith();
+    draftReply = { status: 'draft', text: 'One. Two. Three.' };
+    await startDraft();
+    await send();
+
+    expect(dialog().textContent).toContain('Over the limit');
+    expect(button('Insert answer').disabled).toBe(true);
+
+    act(() => {
+      setInputValue(draftBox(), 'One. Two.');
+    });
+    expect(button('Insert answer').disabled).toBe(false);
+  });
+
+  it('keeps what the user typed on the page meanwhile', async () => {
+    await openWith();
+    await startDraft();
+    await send();
+    field('q-skills').value = 'My own words.';
+
+    click('Insert answer');
+    await settle();
+
+    expect(field('q-skills').value).toBe('My own words.');
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'You entered an answer here, so ApplyKit left it as it is.',
+    );
+  });
+
+  it('inserts nothing when the question changed', async () => {
+    await openWith();
+    await startDraft();
+    await send();
+    const label = document.querySelector('label[for="q-skills"]');
+    if (label)
+      label.textContent = 'Describe your design skills in two sentences.';
+
+    click('Insert answer');
+    await settle();
+
+    expect(field('q-skills').value).toBe('');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      'This question has changed',
+    );
+  });
+
+  it('can be cancelled while drafting', async () => {
+    await openWith();
+    let signal: AbortSignal | undefined;
+    drafting.draft.mockImplementation((_request, s) => {
+      signal = s;
+      return new Promise(() => undefined);
+    });
+    await startDraft();
+    click('Send to Anthropic');
+    await settle();
+    expect(dialog().textContent).toContain('Drafting with Claude…');
+
+    click('Cancel');
+    await settle();
+
+    expect(signal?.aborted).toBe(true);
+    expect(field('q-skills').value).toBe('');
+  });
+
+  it('shows a short summary for a request approved earlier', async () => {
+    await openWith();
+    previewReply = ready(true);
+    await startDraft();
+
+    expect(dialog().textContent).toContain(
+      'Shares the question and 1 item with Anthropic, as you approved before.',
+    );
+    await send('Draft');
+    expect(drafting.draft.mock.calls[0]?.[0]).toMatchObject({ approve: false });
+  });
+
+  it('shows everything again when the background asks for approval', async () => {
+    await openWith();
+    previewReply = ready(true);
+    draftReply = { status: 'needs-approval' };
+    await startDraft();
+
+    await send('Draft');
+
+    expect(dialog().textContent).toContain('To share with Anthropic');
+    expect(findButton('Send to Anthropic')).toBeDefined();
+  });
+
+  it('sends nothing with nothing ticked', async () => {
+    await openWith();
+    await startDraft();
+    act(() => {
+      dialog()
+        .querySelector<HTMLInputElement>('input[type="checkbox"]')
+        ?.click();
+    });
+
+    expect(button('Send to Anthropic').disabled).toBe(true);
+  });
+
+  it('explains failures without retrying', async () => {
+    await openWith();
+    draftReply = {
+      status: 'failed',
+      failure: 'rate-limited',
+      retryAfterSeconds: 30,
+    };
+    await startDraft();
+
+    await send();
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'Anthropic is limiting requests. Try again in 30 seconds.',
+    );
+    expect(drafting.draft).toHaveBeenCalledTimes(1);
+  });
+
+  it('points to Skills & projects when the facts are not enough', async () => {
+    await openWith();
+    draftReply = {
+      status: 'failed',
+      failure: 'insufficient',
+      retryAfterSeconds: null,
+    };
+    await startDraft();
+    await send();
+
+    click('Skills & projects');
+
+    expect(openPage).toHaveBeenCalledWith('skills');
+  });
+
+  it('keeps the compact mode free of AI actions', async () => {
+    await openWith();
+    click('Show summary');
+
+    expect(findButton('Draft with AI')).toBeUndefined();
+    expect(dialog().textContent).not.toContain('Anthropic');
+  });
+
+  it('offers no draft for a question already answered', async () => {
+    await openWith();
+
+    click(/^What motivates you to apply/);
+
+    expect(findButton('Draft with AI')).toBeUndefined();
+  });
+
+  it('prefills role and employer for motivation questions', async () => {
+    document.title =
+      'Junior Data Engineer · Example Fernhill Analytics Careers';
+    await openWith();
+    document.title = '';
+
+    await startDraft(/^Why are you interested in this role/);
+
+    expect(drafting.preview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'Junior Data Engineer',
+        employer: 'Example Fernhill Analytics',
+      }),
+    );
   });
 });

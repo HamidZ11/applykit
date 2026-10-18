@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadFixture } from '@/test/load-fixture';
 import { openQuestionKind, readLimits } from './open-question';
 import { planFill } from './report';
+import { confirmDraft } from './resolve';
 import { scanFields } from './scan';
 
 const visible = { isVisible: () => true };
@@ -141,5 +142,86 @@ describe('open questions on a form', () => {
       status: 'match',
       field: 'email',
     });
+  });
+});
+
+describe('confirmDraft', () => {
+  function setUp(attributes = '') {
+    document.body.innerHTML = `<form><label for="q">Describe your programming skills in two sentences.</label>
+      <textarea id="q" ${attributes}></textarea></form>`;
+    const fields = scanFields(document, visible);
+    const [report] = planFill(fields, null);
+    if (!report) throw new Error('No report');
+    return report;
+  }
+
+  const ANSWER = 'I write Python. I use SQL daily.';
+
+  it('plans the one field with the user’s final text', () => {
+    const report = setUp();
+
+    const checked = confirmDraft(
+      scanFields(document, visible),
+      report,
+      ` ${ANSWER} `,
+    );
+
+    expect(checked).toMatchObject({
+      ok: true,
+      plan: [{ status: 'fill', fillValue: ANSWER, chosen: true }],
+    });
+  });
+
+  it.each([
+    ['disabled', 'can no longer be written to'],
+    ['readonly', 'can no longer be written to'],
+    ['maxlength="10"', 'longer than this question allows'],
+  ])('writes nothing to a %s field', (attributes, message) => {
+    const report = setUp();
+    const element = document.getElementById('q') as HTMLTextAreaElement;
+    if (attributes === 'disabled') element.disabled = true;
+    if (attributes === 'readonly') element.readOnly = true;
+    if (attributes.startsWith('maxlength')) element.maxLength = 10;
+
+    const checked = confirmDraft(
+      [...scanFields(document, visible), report.field],
+      report,
+      ANSWER,
+    );
+
+    expect(checked).toMatchObject({ ok: false });
+    expect(checked.ok ? '' : checked.message).toContain(message);
+  });
+
+  it('writes nothing over the sentence limit or when empty', () => {
+    const report = setUp();
+    const fields = scanFields(document, visible);
+
+    expect(confirmDraft(fields, report, 'One. Two. Three.')).toMatchObject({
+      ok: false,
+    });
+    expect(confirmDraft(fields, report, '   ')).toMatchObject({ ok: false });
+  });
+
+  it('writes nothing to a field that left the page', () => {
+    const report = setUp();
+    document.getElementById('q')?.remove();
+
+    expect(
+      confirmDraft(scanFields(document, visible), report, ANSWER),
+    ).toMatchObject({
+      ok: false,
+      message:
+        'This question is no longer on the page. Rescan to see the form as it is now.',
+    });
+  });
+
+  it('never writes to a field that is not an open question', () => {
+    document.body.innerHTML = `<form><label for="e">Email</label><input id="e" type="email"></form>`;
+    const fields = scanFields(document, visible);
+    const [report] = planFill(fields, null);
+    if (!report) throw new Error('No report');
+
+    expect(confirmDraft(fields, report, ANSWER)).toMatchObject({ ok: false });
   });
 });

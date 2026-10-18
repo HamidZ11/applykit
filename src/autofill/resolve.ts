@@ -5,8 +5,9 @@ import {
   type EducationValue,
   type EmploymentValue,
 } from './fields';
-import { needsYou, planFill, type FieldReport } from './report';
-import type { ScannedField } from './scan';
+import { overLimits } from '@/ai/check';
+import { currentValue, needsYou, planFill, type FieldReport } from './report';
+import { isFormControl, type ScannedField } from './scan';
 
 /**
  * User-approved record choices. When several saved education records or
@@ -215,4 +216,86 @@ export function confirmAnswer(
     };
   }
   return { ok: true, plan: [{ ...current, status: 'fill', chosen: true }] };
+}
+
+/**
+ * Re-checks an AI draft the user reviewed and chose to insert (ADR 0019),
+ * against a fresh scan, just before writing: the field must still be on
+ * the page, still be the same open question, still be empty and
+ * writable, and the user's final text must fit the question's limits and
+ * the field's `maxlength`. Anything else writes nothing. The returned
+ * plan is the one field, for `fillFields`, which never submits.
+ */
+export function confirmDraft(
+  fields: readonly ScannedField[],
+  previewed: FieldReport,
+  text: string,
+): ChoiceCheck {
+  const { element, support } = previewed.field;
+  const current = fields.find((field) => field.element === element);
+  if (!element.isConnected || !current) {
+    return {
+      ok: false,
+      message:
+        'This question is no longer on the page. Rescan to see the form as it is now.',
+    };
+  }
+  if (
+    support.status !== 'open' ||
+    current.support.status !== 'open' ||
+    current.label !== previewed.field.label ||
+    current.support.question.question !== support.question.question
+  ) {
+    return {
+      ok: false,
+      message:
+        'This question has changed since the draft was written. Nothing was inserted.',
+    };
+  }
+  const [report] = planFill([current], null);
+  if (!report || !isFormControl(element)) {
+    return { ok: false, message: 'This field cannot be written to.' };
+  }
+  if (element.disabled || ('readOnly' in element && element.readOnly)) {
+    return {
+      ok: false,
+      message: 'This field can no longer be written to. Nothing was inserted.',
+    };
+  }
+  if (currentValue(current) !== null) {
+    return {
+      ok: false,
+      message: 'You entered an answer here, so ApplyKit left it as it is.',
+    };
+  }
+  const answer = text.trim();
+  if (answer === '') {
+    return { ok: false, message: 'The answer is empty. Nothing was inserted.' };
+  }
+  const maxLength =
+    'maxLength' in element && element.maxLength > 0 ? element.maxLength : null;
+  if (
+    overLimits(answer, current.support.question.limits).length > 0 ||
+    (maxLength !== null && answer.length > maxLength)
+  ) {
+    return {
+      ok: false,
+      message:
+        'The answer is longer than this question allows. Shorten it, then insert it.',
+    };
+  }
+  return {
+    ok: true,
+    plan: [
+      {
+        ...report,
+        status: 'fill',
+        value: answer,
+        fillValue: answer,
+        chosen: true,
+        reason: null,
+        note: 'Drafted with AI, reviewed and inserted by you.',
+      },
+    ],
+  };
 }

@@ -19,6 +19,7 @@ import {
 import {
   confirmAnswer,
   confirmChoice,
+  confirmDraft,
   previewChoice,
   type ChoiceCheck,
   type ChoicePreview,
@@ -48,8 +49,10 @@ import {
   CONTEXT_LOST,
   isExtensionContextValid,
   openProfile,
+  requestAiDraft,
   requestAutofillValues,
   requestDiversityChoices,
+  requestDraftPreview,
   requestPanelSettings,
 } from './profile-access';
 import { plural } from './vocabulary';
@@ -114,7 +117,33 @@ export interface PanelModel extends PanelState {
   problem: string | null;
   /** Show how each field was recognised (Developer diagnostics). */
   diagnostics: boolean;
+  /** Whether AI drafting is connected (ADR 0019); off until known. */
+  ai: boolean;
+  /** What drafting could share for an open question, from the background. */
+  previewDraft: Drafting['preview'];
+  /** Asks for one draft; aborting the signal cancels it. */
+  draftAnswer: Drafting['draft'];
+  /**
+   * Inserts the user's final text into the open question it was drafted
+   * for, after re-checking the field. Never submits.
+   */
+  insertDraft: (previewed: FieldReport, text: string) => Promise<ChoiceResult>;
+  /** Opens the skills and projects; failures as for the profile. */
+  openSkills: () => void;
+  /** Opens the AI Assistant settings; failures as for the profile. */
+  openAiSettings: () => void;
 }
+
+/** The panel's way to the background for AI drafting; replaced in tests. */
+export interface Drafting {
+  preview: typeof requestDraftPreview;
+  draft: typeof requestAiDraft;
+}
+
+const browserDrafting: Drafting = {
+  preview: requestDraftPreview,
+  draft: requestAiDraft,
+};
 
 /**
  * The panel's state and actions, shared by the compact and expanded modes.
@@ -136,9 +165,11 @@ export function usePanel(
   ) => Promise<boolean> = openProfile,
   loadSettings: () => Promise<PanelSettings> = requestPanelSettings,
   chooseDiversity: typeof requestDiversityChoices = requestDiversityChoices,
+  drafting: Drafting = browserDrafting,
 ): PanelModel {
   // Off until the background says otherwise, and off if it cannot.
   const [diagnostics, setDiagnostics] = useState(false);
+  const [ai, setAi] = useState(false);
   /** Why an action failed, shown in the panel; cleared on the next try. */
   const [problem, setProblem] = useState<string | null>(null);
   const [state, dispatch] = useReducer(panelReducer, root, (r) =>
@@ -173,6 +204,12 @@ export function usePanel(
   const openDiversityAction = useCallback(() => {
     openPage('diversity');
   }, [openPage]);
+  const openSkillsAction = useCallback(() => {
+    openPage('skills');
+  }, [openPage]);
+  const openAiAction = useCallback(() => {
+    openPage('ai');
+  }, [openPage]);
 
   const refreshValues = useCallback(async () => {
     const request = ++latestRequest.current;
@@ -184,6 +221,7 @@ export function usePanel(
     void refreshValues();
     void loadSettings().then((settings) => {
       setDiagnostics(settings.diagnostics);
+      setAi(settings.ai);
     });
   });
   useEffect(() => {
@@ -318,6 +356,40 @@ export function usePanel(
     [confirmAndFill],
   );
 
+  const insertDraft = useCallback(
+    async (previewed: FieldReport, text: string): Promise<ChoiceResult> => {
+      if (filling.current) {
+        return { ok: false, message: 'ApplyKit is still filling. Try again.' };
+      }
+      filling.current = true;
+      try {
+        const checked = confirmDraft(scanFields(root), previewed, text);
+        if (!checked.ok) return checked;
+        const outcomes = await fillFields(checked.plan);
+        const filled = outcomes.filter(
+          (r) => r.status === 'filled' || r.status === 'reformatted',
+        ).length;
+        dispatch({
+          type: 'resolved',
+          outcomes,
+          notice:
+            filled === 1
+              ? 'Inserted your answer. Nothing was submitted.'
+              : 'The page did not accept your answer. Nothing was submitted.',
+        });
+        return { ok: true, filled, total: outcomes.length };
+      } catch {
+        return {
+          ok: false,
+          message: 'Something went wrong. Nothing was inserted.',
+        };
+      } finally {
+        filling.current = false;
+      }
+    },
+    [root],
+  );
+
   const goTo = useCallback(
     (element: FieldElement) =>
       goToField(element, new Set(state.fields.map((field) => field.element))),
@@ -401,6 +473,12 @@ export function usePanel(
     openProfile: openProfileAction,
     openAnswers: openAnswersAction,
     openDiversity: openDiversityAction,
+    openSkills: openSkillsAction,
+    openAiSettings: openAiAction,
+    ai,
+    previewDraft: drafting.preview,
+    draftAnswer: drafting.draft,
+    insertDraft,
     // An old panel left on the page after ApplyKit was reloaded can no
     // longer reach it; "Try again" cannot help, so say what will.
     problem:
