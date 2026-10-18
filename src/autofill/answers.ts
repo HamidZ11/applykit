@@ -1,13 +1,19 @@
-import type {
-  ApplicationAnswers,
-  Currency,
-  NoticePeriod,
-  NoticeUnit,
-  Relocation,
-  Salary,
-  SalaryPeriod,
-  Willingness,
-  WorkArrangement,
+import {
+  ARRANGEMENT_TEXT,
+  MONTH_NAMES,
+  WILLINGNESS_TEXT,
+  longDate,
+  noticeText,
+  salaryText,
+  type ApplicationAnswers,
+  type Currency,
+  type NoticePeriod,
+  type NoticeUnit,
+  type Relocation,
+  type Salary,
+  type SalaryPeriod,
+  type Willingness,
+  type WorkArrangement,
 } from '@/domain/application-answers';
 import { normalise } from './detect';
 import type { AnswerField, AutofillValues } from './fields';
@@ -177,11 +183,6 @@ function asked(units: NoticeUnit[], saved: NoticeUnit): AnswerPlan | null {
   return null;
 }
 
-export function noticeText({ amount, unit }: NoticePeriod): string {
-  if (amount === 0) return 'None';
-  return `${String(amount)} ${amount === 1 ? unit.slice(0, -1) : unit}`;
-}
-
 const NUMBER_WORDS = [
   'zero',
   'one',
@@ -282,12 +283,6 @@ function namesHome(
   );
 }
 
-export const WILLINGNESS_TEXT: Record<Willingness, string> = {
-  yes: 'Yes',
-  no: 'No',
-  depends: 'It depends',
-};
-
 /** The saved willingness that answers this relocation question. */
 function relocationAnswer(
   text: string,
@@ -359,13 +354,6 @@ function planRelocation(
 }
 
 // Working arrangement
-
-export const ARRANGEMENT_TEXT: Record<WorkArrangement, string> = {
-  remote: 'Remote',
-  hybrid: 'Hybrid',
-  'on-site': 'On-site',
-  flexible: 'Flexible',
-};
 
 const ARRANGEMENT_OPTIONS: Record<WorkArrangement, RegExp> = {
   remote:
@@ -446,27 +434,6 @@ function localDate(now: Date): string {
   return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-/** "4 January 2027". */
-export function longDate(value: string): string {
-  const [year, month, day] = value.split('-');
-  return `${String(Number(day))} ${MONTHS[Number(month) - 1] ?? ''} ${year ?? ''}`;
-}
-
 /** A full date format a text field states: "DD/MM/YYYY", "YYYY-MM-DD". */
 const DAY_FIRST = /\bdd([/.-])mm\1yyyy\b/i;
 const MONTH_FIRST = /\bmm([/.-])dd\1yyyy\b/i;
@@ -487,7 +454,7 @@ function planStartDate(
   }
   if (element instanceof HTMLInputElement && element.type === 'month') {
     return {
-      display: `${MONTHS[Number(month) - 1] ?? ''} ${year}`,
+      display: `${MONTH_NAMES[Number(month) - 1] ?? ''} ${year}`,
       fillValue: `${year}-${month}`,
     };
   }
@@ -552,12 +519,6 @@ const CURRENCY_WORDS: [Currency, RegExp][] = [
   ['SGD', /\b(?:sgd|singapore dollars?)\b|s\$/i],
 ];
 
-const SYMBOL: Partial<Record<Currency, string>> = {
-  GBP: '£',
-  EUR: '€',
-  INR: '₹',
-};
-
 /** Raw label text: symbols such as "£" do not survive normalising. */
 function rawQuestion(field: ScannedField): string {
   const placeholder =
@@ -584,16 +545,6 @@ function salaryUnits(field: ScannedField): {
     currencies,
     dollar: currencies.length === 0 && /\$|\bdollars?\b/i.test(raw),
   };
-}
-
-export function salaryText({ amount, currency, period }: Salary): string {
-  const number = amount.toLocaleString('en-GB', {
-    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
-  const symbol = SYMBOL[currency];
-  const money = symbol ? `${symbol}${number}` : `${currency} ${number}`;
-  return `${money} ${{ year: 'a year', month: 'a month', day: 'a day', hour: 'an hour' }[period]}`;
 }
 
 /**

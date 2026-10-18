@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 /**
  * Saved answers to common application questions: notice period,
  * relocation, working arrangement, earliest start date and salary
@@ -114,94 +112,59 @@ export function isCalendarDate(value: string): boolean {
   );
 }
 
-const willingness = z.enum(WILLINGNESS).nullable();
+// How saved answers read, in the editor, the panel and on forms.
 
-/** The rules each category must meet, when saving and when read back. */
-const CATEGORY_SCHEMAS = {
-  noticePeriod: z.object({
-    amount: z
-      .number()
-      .int('Enter a whole number')
-      .min(0, 'Enter 0 or more')
-      .max(365, 'Enter a shorter notice period'),
-    unit: z.enum(NOTICE_UNITS),
-  }),
-  relocation: z
-    .object({ withinCountry: willingness, abroad: willingness })
-    .refine(
-      (value) => value.withinCountry !== null || value.abroad !== null,
-      'Answer at least one of the two questions',
-    ),
-  workArrangement: z.enum(WORK_ARRANGEMENTS),
-  startDate: z
-    .string()
-    .refine(isCalendarDate, 'Enter a date, for example 2027-01-04'),
-  salary: z.object({
-    amount: z
-      .number()
-      .positive('Enter an amount above 0')
-      .max(10_000_000, 'Enter a smaller amount')
-      .refine(
-        (value) => Number.isInteger(value * 100),
-        'Use at most two decimal places',
-      ),
-    currency: z.enum(CURRENCIES),
-    period: z.enum(SALARY_PERIODS),
-  }),
-} satisfies Record<AnswerCategory, z.ZodType>;
-
-/** Why a category's value cannot be saved, or null when it can. */
-export function answerProblem(
-  category: AnswerCategory,
-  value: unknown,
-): string | null {
-  const result = CATEGORY_SCHEMAS[category].safeParse(value);
-  return result.success
-    ? null
-    : (result.error.issues[0]?.message ?? 'Check this answer');
+export function noticeText({ amount, unit }: NoticePeriod): string {
+  if (amount === 0) return 'None';
+  return `${String(amount)} ${amount === 1 ? unit.slice(0, -1) : unit}`;
 }
 
-const storedSchema = z.object({
-  schemaVersion: z.literal(ANSWERS_SCHEMA_VERSION),
-  answers: z.record(z.string(), z.unknown()),
-  updatedAt: z.iso.datetime(),
-});
+export const WILLINGNESS_TEXT: Record<Willingness, string> = {
+  yes: 'Yes',
+  no: 'No',
+  depends: 'It depends',
+};
 
-export interface StoredAnswersRead {
-  saved: SavedAnswers;
-  /**
-   * Categories whose stored value could not be read. They are treated as
-   * not saved, and the original data is backed up before it is replaced.
-   */
-  damaged: AnswerCategory[];
+export const ARRANGEMENT_TEXT: Record<WorkArrangement, string> = {
+  remote: 'Remote',
+  hybrid: 'Hybrid',
+  'on-site': 'On-site',
+  flexible: 'Flexible',
+};
+
+export const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** "4 January 2027". */
+export function longDate(value: string): string {
+  const [year, month, day] = value.split('-');
+  return `${String(Number(day))} ${MONTH_NAMES[Number(month) - 1] ?? ''} ${year ?? ''}`;
 }
 
-/**
- * Reads stored answers. Each category is read on its own, so one damaged
- * answer never makes the others unusable. Null when the data is not saved
- * answers at all, or comes from an unknown schema version.
- */
-export function parseStoredAnswers(value: unknown): StoredAnswersRead | null {
-  const stored = storedSchema.safeParse(value);
-  if (!stored.success) return null;
-  const answers = emptyAnswers();
-  const damaged: AnswerCategory[] = [];
-  for (const category of ANSWER_CATEGORIES) {
-    const raw = stored.data.answers[category];
-    if (raw === null || raw === undefined) continue;
-    const parsed = CATEGORY_SCHEMAS[category].safeParse(raw);
-    if (parsed.success) {
-      (answers as Record<AnswerCategory, unknown>)[category] = parsed.data;
-    } else {
-      damaged.push(category);
-    }
-  }
-  return {
-    saved: {
-      schemaVersion: ANSWERS_SCHEMA_VERSION,
-      answers,
-      updatedAt: stored.data.updatedAt,
-    },
-    damaged,
-  };
+const SYMBOL: Partial<Record<Currency, string>> = {
+  GBP: '£',
+  EUR: '€',
+  INR: '₹',
+};
+
+export function salaryText({ amount, currency, period }: Salary): string {
+  const number = amount.toLocaleString('en-GB', {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+  const symbol = SYMBOL[currency];
+  const money = symbol ? `${symbol}${number}` : `${currency} ${number}`;
+  return `${money} ${{ year: 'a year', month: 'a month', day: 'a day', hour: 'an hour' }[period]}`;
 }

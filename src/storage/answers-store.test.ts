@@ -4,6 +4,7 @@ import { emptyAnswers } from '@/domain/application-answers';
 import { savedAnswers } from '@/test/answer-fixtures';
 import { validProfile } from '@/test/profile-fixtures';
 import { browserAnswersStore } from './answers-store';
+import { loadAutofillValues } from './autofill-source';
 import { browserProfileStore } from './profile-store';
 
 const FIRST = new Date('2026-10-18T12:00:00.000Z');
@@ -75,6 +76,7 @@ describe('browserAnswersStore', () => {
         answers: otherTab,
         updatedAt: SECOND.toISOString(),
       },
+      damaged: [],
     });
     expect(await browserAnswersStore.load()).toMatchObject({
       answers: otherTab,
@@ -94,7 +96,9 @@ describe('browserAnswersStore', () => {
 
     await browserAnswersStore.save(savedAnswers(), null, FIRST);
 
-    expect(await stored('applicationAnswersBackup')).toEqual(corrupt);
+    expect(await stored('applicationAnswersBackup')).toEqual([
+      { backedUpAt: FIRST.toISOString(), data: corrupt },
+    ]);
     expect(await browserAnswersStore.load()).toMatchObject({
       answers: savedAnswers(),
     });
@@ -118,7 +122,9 @@ describe('browserAnswersStore', () => {
       SECOND,
     );
 
-    expect(await stored('applicationAnswersBackup')).toEqual(raw);
+    expect(await stored('applicationAnswersBackup')).toEqual([
+      { backedUpAt: SECOND.toISOString(), data: raw },
+    ]);
   });
 
   it('reports storage failures instead of throwing', async () => {
@@ -148,6 +154,123 @@ describe('browserAnswersStore', () => {
     expect(await browserAnswersStore.load()).toMatchObject({
       answers: savedAnswers(),
       updatedAt: FIRST.toISOString(),
+    });
+  });
+});
+
+describe('answers from a newer ApplyKit', () => {
+  const newer = {
+    schemaVersion: 2,
+    answers: { noticePeriod: { weeks: 4 }, commute: { minutes: 45 } },
+    updatedAt: '2027-03-01T09:00:00.000Z',
+    device: 'example',
+  };
+
+  it('reports them as unsupported instead of unreadable', async () => {
+    await fakeBrowser.storage.local.set({ applicationAnswers: newer });
+
+    expect(await browserAnswersStore.load()).toEqual({
+      status: 'unsupported',
+    });
+  });
+
+  it('never writes over them, and keeps them exactly', async () => {
+    await fakeBrowser.storage.local.set({ applicationAnswers: newer });
+
+    expect(await browserAnswersStore.save(savedAnswers(), null, FIRST)).toEqual(
+      { status: 'unsupported' },
+    );
+    expect(await stored('applicationAnswers')).toEqual(newer);
+    expect(await stored('applicationAnswersBackup')).toBeUndefined();
+  });
+
+  it('sends no answers to the panel rather than empty ones', async () => {
+    await fakeBrowser.storage.local.set({ applicationAnswers: newer });
+    await browserProfileStore.save(validProfile(), null);
+
+    const response = await loadAutofillValues(
+      browserProfileStore,
+      browserAnswersStore,
+    );
+
+    expect(response).toMatchObject({
+      status: 'ready',
+      values: { answers: null },
+    });
+  });
+});
+
+describe('fields this version does not know', () => {
+  it('keeps them when saving', async () => {
+    const stored1 = {
+      schemaVersion: 1,
+      answers: { ...savedAnswers(), commute: { minutes: 45 } },
+      updatedAt: FIRST.toISOString(),
+      note: 'kept',
+    };
+    await fakeBrowser.storage.local.set({ applicationAnswers: stored1 });
+
+    await browserAnswersStore.save(
+      { ...savedAnswers(), workArrangement: 'remote' },
+      FIRST.toISOString(),
+      SECOND,
+    );
+
+    expect(await stored('applicationAnswers')).toEqual({
+      schemaVersion: 1,
+      answers: {
+        ...savedAnswers(),
+        workArrangement: 'remote',
+        commute: { minutes: 45 },
+      },
+      updatedAt: SECOND.toISOString(),
+      note: 'kept',
+    });
+  });
+});
+
+describe('backups of damaged answers', () => {
+  it('keeps every damaged copy, not only the latest', async () => {
+    await fakeBrowser.storage.local.set({ applicationAnswers: { first: 1 } });
+    await browserAnswersStore.save(savedAnswers(), null, FIRST);
+    await fakeBrowser.storage.local.set({ applicationAnswers: 'second' });
+    await browserAnswersStore.save(savedAnswers(), null, SECOND);
+
+    expect(await stored('applicationAnswersBackup')).toEqual([
+      { backedUpAt: FIRST.toISOString(), data: { first: 1 } },
+      { backedUpAt: SECOND.toISOString(), data: 'second' },
+    ]);
+  });
+
+  it('keeps a backup written by the earlier format', async () => {
+    await fakeBrowser.storage.local.set({
+      applicationAnswersBackup: { older: true },
+      applicationAnswers: 'damaged',
+    });
+
+    await browserAnswersStore.save(savedAnswers(), null, FIRST);
+
+    expect(await stored('applicationAnswersBackup')).toEqual([
+      { backedUpAt: null, data: { older: true } },
+      { backedUpAt: FIRST.toISOString(), data: 'damaged' },
+    ]);
+  });
+
+  it.each([
+    ['a string', 'answers'],
+    ['a missing version', { answers: {}, updatedAt: FIRST.toISOString() }],
+    ['a version that is not a number', { schemaVersion: 'two', answers: {} }],
+    ['a version below 1', { schemaVersion: 0, answers: {} }],
+    [
+      'answers that are not an object',
+      { schemaVersion: 1, answers: 'x', updatedAt: FIRST.toISOString() },
+    ],
+  ])('treats %s as damaged, not newer', async (_, value) => {
+    await fakeBrowser.storage.local.set({ applicationAnswers: value });
+
+    expect(await browserAnswersStore.load()).toMatchObject({
+      status: 'loaded',
+      damaged: 'all',
     });
   });
 });

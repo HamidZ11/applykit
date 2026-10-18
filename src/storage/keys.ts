@@ -14,5 +14,8 @@ export const DRAFT_BACKUP_KEY = 'local:profileDraftBackup';
 /** Saved answers to common application questions (ADR 0016). */
 export const ANSWERS_KEY = 'local:applicationAnswers';
 
-/** Where unreadable saved answers are kept before they are overwritten. */
+/**
+ * Every unreadable copy of the saved answers, kept before it was
+ * overwritten (a list, oldest first).
+ */
 export const ANSWERS_BACKUP_KEY = 'local:applicationAnswersBackup';

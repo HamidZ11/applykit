@@ -30,7 +30,7 @@ import {
   SecondaryButton,
 } from '@/components/ui/primitives';
 import { readCv, type CvFile, type CvReadResult } from '@/cv/read';
-import { AnswersView } from './AnswersView';
+import { AnswersView, type AnswerDrafts } from './AnswersView';
 import { CvImport } from './CvImport';
 import { formatSavedAt } from './format';
 import { LinksStep } from './LinksStep';
@@ -128,6 +128,19 @@ export function OnboardingApp({
   const [answering, setAnswering] = useState(
     () => window.location.hash === '#answers',
   );
+  /** Unsaved answer edits, kept while the user moves around the page. */
+  const [answerDrafts, setAnswerDrafts] = useState<AnswerDrafts>({});
+  const answersDirty = Object.keys(answerDrafts).length > 0;
+  useEffect(() => {
+    if (!answersDirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => {
+      window.removeEventListener('beforeunload', warn);
+    };
+  }, [answersDirty]);
   /** How many CV details were just added, until the user moves on. */
   const [imported, setImported] = useState<number | null>(null);
   const main = useRef<HTMLElement>(null);
@@ -329,7 +342,13 @@ export function OnboardingApp({
       <div className="min-h-screen bg-canvas text-ink md:grid md:grid-cols-[248px_minmax(0,1fr)]">
         {rail}
         <main ref={main} className="flex min-h-screen flex-col">
-          <AnswersView store={answersStore} now={now} heading={heading} />
+          <AnswersView
+            store={answersStore}
+            now={now}
+            heading={heading}
+            drafts={answerDrafts}
+            onDraftsChange={setAnswerDrafts}
+          />
         </main>
       </div>
     );

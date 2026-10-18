@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { savedAnswers } from '@/test/answer-fixtures';
-import {
-  answerProblem,
-  emptyAnswers,
-  isCalendarDate,
-  parseStoredAnswers,
-} from './application-answers';
+import { emptyAnswers, isCalendarDate } from './application-answers';
+import { answerProblem, parseStoredAnswers } from './answers-schema';
 
 const stored = (answers: Record<string, unknown>) => ({
   schemaVersion: 1,

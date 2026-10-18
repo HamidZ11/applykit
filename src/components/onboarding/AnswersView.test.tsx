@@ -13,7 +13,11 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { setInputValue, setSelectValue } from '@/autofill/fill';
 import { emptyAnswers } from '@/domain/application-answers';
 import type { LoadResult, ProfileStore } from '@/storage/profile-store';
-import { browserAnswersStore } from '@/storage/answers-store';
+import {
+  browserAnswersStore,
+  type AnswersSaveResult,
+  type AnswersStore,
+} from '@/storage/answers-store';
 import { savedAnswers } from '@/test/answer-fixtures';
 import { validProfile } from '@/test/profile-fixtures';
 import { AnswersView } from './AnswersView';
@@ -155,7 +159,7 @@ describe('AnswersView', () => {
 
     await click('Add notice period');
     await click('Save answer');
-    expect(host.textContent).toContain('Enter a number');
+    expect(host.textContent).toContain('Enter a whole number');
 
     await click('Cancel');
     await click('Add relocation');
@@ -168,7 +172,9 @@ describe('AnswersView', () => {
     await click('Add salary expectation');
     enter('Amount', '32,000.505');
     await click('Save answer');
-    expect(host.textContent).toContain('Use at most two decimal places');
+    expect(host.textContent).toContain(
+      'Enter an amount such as 32000 or 15.50',
+    );
     expect(await stored()).toMatchObject({ updatedAt: null });
   });
 
@@ -343,5 +349,340 @@ describe('the answers section of the profile page', () => {
     expect(await stored()).toMatchObject({
       answers: { workArrangement: 'hybrid' },
     });
+  });
+});
+
+/**
+ * A store whose saves wait until released, to reproduce what happens
+ * while a save is in flight. `fail` makes the next released save fail.
+ */
+function heldStore() {
+  const pending: (() => void)[] = [];
+  let fail = false;
+  const store: AnswersStore = {
+    load: () => browserAnswersStore.load(),
+    save: (answers, basedOn, at) =>
+      new Promise<AnswersSaveResult>((resolve) => {
+        pending.push(() => {
+          if (fail) {
+            fail = false;
+            resolve({ status: 'error' });
+          } else {
+            void browserAnswersStore.save(answers, basedOn, at).then(resolve);
+          }
+        });
+      }),
+  };
+  return {
+    store,
+    failNext: () => {
+      fail = true;
+    },
+    release: async () => {
+      pending.shift()?.();
+      await flush();
+    },
+  };
+}
+
+function press(key: string, target: Element | null = document.activeElement) {
+  act(() => {
+    target?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  });
+}
+
+describe('editor cases found in review', () => {
+  it.each(['10.20', '0.29', '10.03'])(
+    'accepts %s, which floating point does not hold exactly',
+    async (amount) => {
+      await render(<AnswersView now={() => NOW} />);
+      await click('Add salary expectation');
+      enter('Amount', amount);
+      enter('Pay period', 'hour');
+
+      await click('Save answer');
+
+      expect(await stored()).toMatchObject({
+        answers: { salary: { amount: Number(amount), period: 'hour' } },
+      });
+    },
+  );
+
+  it.each(['0x10', '0b11', '1e3', '1,5', '45000,50', '1e999', '£32,000'])(
+    'never saves “%s” as a different number',
+    async (typed) => {
+      await render(<AnswersView now={() => NOW} />);
+      await click('Add salary expectation');
+
+      enter('Amount', typed);
+      await click('Save answer');
+
+      expect(host.textContent).toContain(
+        'Enter an amount such as 32000 or 15.50',
+      );
+      expect(await stored()).toMatchObject({ updatedAt: null });
+    },
+  );
+
+  it('still reads “32,000” and “32 000” as thirty-two thousand', async () => {
+    await render(<AnswersView now={() => NOW} />);
+    await click('Add salary expectation');
+    enter('Amount', '32 000');
+    await click('Save answer');
+
+    expect(await stored()).toMatchObject({
+      answers: { salary: { amount: 32000 } },
+    });
+  });
+
+  it('keeps an unsaved edit when another answer is opened', async () => {
+    await render(<AnswersView now={() => NOW} />);
+    await click('Add notice period');
+    enter('Notice', '6');
+
+    await click('Add salary expectation');
+
+    expect(row('Notice period').textContent).toContain('Unsaved changes');
+    await click('Add notice period');
+    expect(control('Notice').value).toBe('6');
+  });
+
+  it('never closes another answer’s editor when one is removed', async () => {
+    await browserAnswersStore.save(savedAnswers(), null, NOW);
+    await render(<AnswersView now={() => NOW} />);
+    await click('Edit notice period');
+    enter('Notice', '9');
+
+    await click('Remove salary expectation');
+    await click('Remove', row('Salary expectation'));
+
+    expect(row('Salary expectation').textContent).toContain('Not saved');
+    expect(control('Notice').value).toBe('9');
+  });
+
+  it('lets other answers wait while one is saving', async () => {
+    const held = heldStore();
+    await render(<AnswersView store={held.store} now={() => NOW} />);
+    await click('Add notice period');
+    enter('Notice', '5');
+    await click('Save answer');
+
+    expect(button('Add salary expectation').disabled).toBe(true);
+
+    await held.release();
+    expect(button('Add salary expectation').disabled).toBe(false);
+    expect(await stored()).toMatchObject({
+      answers: { noticePeriod: { amount: 5 } },
+    });
+  });
+
+  it('keeps the editor open while saving, even on Escape', async () => {
+    const held = heldStore();
+    await render(<AnswersView store={held.store} now={() => NOW} />);
+    await click('Add notice period');
+    enter('Notice', '5');
+    await click('Save answer');
+
+    press('Escape', control('Notice'));
+    held.failNext();
+    await held.release();
+
+    expect(control('Notice').value).toBe('5');
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'ApplyKit could not save this answer. Your change is still here; try again.',
+    );
+  });
+
+  it('cannot cancel a removal that is already under way', async () => {
+    await browserAnswersStore.save(savedAnswers(), null, NOW);
+    const held = heldStore();
+    await render(<AnswersView store={held.store} now={() => NOW} />);
+    await click('Remove salary expectation');
+    await click('Remove', row('Salary expectation'));
+
+    expect(button('Cancel', row('Salary expectation')).disabled).toBe(true);
+    await held.release();
+    expect(row('Salary expectation').textContent).toContain('Not saved');
+  });
+
+  it('moves focus through the removal question and back', async () => {
+    await browserAnswersStore.save(savedAnswers(), null, NOW);
+    await render(<AnswersView now={() => NOW} />);
+
+    await click('Remove salary expectation');
+    expect(document.activeElement).toBe(
+      button('Cancel', row('Salary expectation')),
+    );
+
+    press('Escape');
+    await flush();
+    expect(document.activeElement).toBe(button('Remove salary expectation'));
+    expect(row('Salary expectation').textContent).toContain('£32,000');
+  });
+
+  it('focuses the field a check rejected', async () => {
+    await render(<AnswersView now={() => NOW} />);
+    await click('Add notice period');
+    act(() => {
+      button('Save answer').focus();
+    });
+
+    await click('Save answer');
+
+    expect(document.activeElement).toBe(control('Notice'));
+    expect(control('Notice').getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('says a removal failed, not that a change is kept', async () => {
+    await browserAnswersStore.save(savedAnswers(), null, NOW);
+    const held = heldStore();
+    await render(<AnswersView store={held.store} now={() => NOW} />);
+    await click('Remove salary expectation');
+    await click('Remove', row('Salary expectation'));
+    held.failNext();
+    await held.release();
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+      'ApplyKit could not remove this answer. Try again.',
+    );
+    expect(row('Salary expectation').textContent).not.toContain(
+      'Remove this answer?',
+    );
+  });
+
+  it('never removes a value the user did not see', async () => {
+    await browserAnswersStore.save(savedAnswers(), null, NOW);
+    await render(<AnswersView now={() => NOW} />);
+    await click('Remove salary expectation');
+    await browserAnswersStore.save(
+      {
+        ...savedAnswers(),
+        salary: { amount: 50000, currency: 'GBP', period: 'year' },
+      },
+      NOW.toISOString(),
+      new Date('2026-10-18T13:00:00.000Z'),
+    );
+
+    await click('Remove', row('Salary expectation'));
+
+    expect(row('Salary expectation').textContent).toContain('£50,000');
+    expect(row('Salary expectation').textContent).not.toContain(
+      'Remove this answer?',
+    );
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      'so nothing was removed',
+    );
+    expect(await stored()).toMatchObject({
+      answers: { salary: { amount: 50000 } },
+    });
+  });
+
+  it('keeps warning about a damaged answer after a conflict', async () => {
+    await fakeBrowser.storage.local.set({
+      applicationAnswers: {
+        schemaVersion: 1,
+        answers: { ...savedAnswers(), salary: { amount: 'lots' } },
+        updatedAt: NOW.toISOString(),
+      },
+    });
+    await render(<AnswersView now={() => NOW} />);
+    await fakeBrowser.storage.local.set({
+      applicationAnswers: {
+        schemaVersion: 1,
+        answers: { ...savedAnswers(), salary: { amount: 'lots' } },
+        updatedAt: '2026-10-18T13:00:00.000Z',
+      },
+    });
+
+    await click('Edit notice period');
+    await click('Save answer');
+
+    expect(host.textContent).toContain(
+      'Some saved answers could not be read (Salary expectation)',
+    );
+  });
+
+  it('returns focus to the page after trying again', async () => {
+    vi.spyOn(fakeBrowser.storage.local, 'get').mockRejectedValueOnce(
+      new Error('unavailable'),
+    );
+    await render(<AnswersView now={() => NOW} />);
+    act(() => {
+      button('Try again').focus();
+    });
+
+    await click('Try again');
+
+    expect(document.activeElement).toBe(host.querySelector('h1'));
+  });
+});
+
+describe('answers saved by a newer ApplyKit', () => {
+  const newer = {
+    schemaVersion: 2,
+    answers: { noticePeriod: { weeks: 4 } },
+    updatedAt: '2027-03-01T09:00:00.000Z',
+  };
+
+  it('explains why they cannot be edited, and offers nothing that writes', async () => {
+    await fakeBrowser.storage.local.set({ applicationAnswers: newer });
+    await render(<AnswersView now={() => NOW} />);
+
+    expect(host.textContent).toContain(
+      'saved by a newer version of ApplyKit, so this version cannot show or change them',
+    );
+    expect(host.querySelector('li')).toBeNull();
+    expect(host.querySelectorAll('button')).toHaveLength(0);
+    expect(
+      (await fakeBrowser.storage.local.get('applicationAnswers'))
+        .applicationAnswers,
+    ).toEqual(newer);
+  });
+
+  it('stops a save when a newer version wrote meanwhile', async () => {
+    await render(<AnswersView now={() => NOW} />);
+    await click('Add notice period');
+    enter('Notice', '4');
+    await fakeBrowser.storage.local.set({ applicationAnswers: newer });
+
+    await click('Save answer');
+
+    expect(host.textContent).toContain('saved by a newer version of ApplyKit');
+    expect(
+      (await fakeBrowser.storage.local.get('applicationAnswers'))
+        .applicationAnswers,
+    ).toEqual(newer);
+  });
+});
+
+describe('unsaved answer edits on the profile page', () => {
+  it('survive a visit to the profile and back', async () => {
+    window.location.hash = '#answers';
+    await render(
+      <OnboardingApp
+        store={{
+          load: () =>
+            Promise.resolve({
+              status: 'loaded',
+              profile: validProfile(),
+              unmatchedCountry: null,
+            }),
+          save: (profile) => Promise.resolve({ status: 'saved', profile }),
+          loadDraft: () => Promise.resolve({ status: 'none' }),
+          saveDraft: () => Promise.resolve(true),
+          clearDraft: () => Promise.resolve(true),
+        }}
+        now={() => NOW}
+      />,
+    );
+    await click('Add notice period');
+    enter('Notice', '7');
+
+    await click('Personal details');
+    await click('Application answers');
+
+    expect(row('Notice period').textContent).toContain('Unsaved changes');
+    await click('Add notice period');
+    expect(control('Notice').value).toBe('7');
   });
 });
