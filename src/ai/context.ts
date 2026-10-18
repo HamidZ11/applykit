@@ -77,11 +77,22 @@ export function contextItems(
       project.technologies.length > 0
         ? ` Technologies: ${project.technologies.join(', ')}.`
         : '';
+    const details = [
+      ['My part', project.contribution],
+      ['Challenge', project.challenge],
+      ['Result', project.result],
+    ]
+      .filter(([, text]) => text?.trim())
+      .map(
+        ([label, text]) =>
+          ` ${label ?? ''}: ${clip(text ?? '', MAX_DESCRIPTION)}`,
+      )
+      .join('');
     items.push({
       id: `project:${project.id}`,
       group: 'project',
       label: `Project: ${project.name}`,
-      text: `${project.name}: ${clip(project.description, MAX_DESCRIPTION)}${technologies}`,
+      text: `${project.name}: ${clip(project.description, MAX_DESCRIPTION)}${technologies}${details}`,
     });
   }
   const jobs = [...(profile?.employment ?? [])]

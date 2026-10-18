@@ -28,7 +28,7 @@ describe('contextItems', () => {
         id: 'project:inventory',
         group: 'project',
         label: 'Project: Inventory Dashboard',
-        text: 'Inventory Dashboard: Built a dashboard for tracking stock and generating reports. Technologies: Python, PostgreSQL.',
+        text: 'Inventory Dashboard: Built a dashboard for tracking stock and generating reports. Technologies: Python, PostgreSQL. My part: Wrote the data import and the weekly report. Challenge: Duplicate stock records broke the totals. Result: Stock counts matched the warehouse again.',
       },
       {
         id: 'project:timetable',

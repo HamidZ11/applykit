@@ -195,7 +195,7 @@ describe('SkillsProjectsView', () => {
 
   it('is read-only for data from a newer version', async () => {
     await fakeBrowser.storage.local.set({
-      skillsProjects: { schemaVersion: 2, content: {}, updatedAt: '' },
+      skillsProjects: { schemaVersion: 3, content: {}, updatedAt: '' },
     });
 
     await render();

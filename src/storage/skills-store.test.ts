@@ -115,7 +115,7 @@ describe('skills store', () => {
 
   it('never writes over data from a newer version', async () => {
     const newer = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       content: {},
       updatedAt: NOW.toISOString(),
     };
@@ -177,5 +177,107 @@ describe('skills and projects rules', () => {
     });
 
     expect(errors.skills).toBe('List at most 60 skills.');
+  });
+});
+
+describe('skills store migration', () => {
+  const v1 = {
+    schemaVersion: 1,
+    content: {
+      skills: ['Go'],
+      projects: [
+        {
+          id: 'old',
+          name: 'Example Old Tool',
+          description: 'Saved before project details existed.',
+          technologies: ['Go'],
+          link: '',
+        },
+      ],
+    },
+    updatedAt: NOW.toISOString(),
+  };
+
+  it('reads version 1 projects with empty details', async () => {
+    await fakeBrowser.storage.local.set({ skillsProjects: v1 });
+
+    expect(await store.load()).toEqual({
+      status: 'loaded',
+      content: {
+        skills: ['Go'],
+        projects: [
+          {
+            ...v1.content.projects[0],
+            contribution: '',
+            challenge: '',
+            result: '',
+          },
+        ],
+      },
+      updatedAt: NOW.toISOString(),
+      damaged: false,
+    });
+  });
+
+  it('saves as version 2, keeping everything', async () => {
+    await fakeBrowser.storage.local.set({ skillsProjects: v1 });
+    const loaded = await store.load();
+    if (loaded.status !== 'loaded') throw new Error('not loaded');
+    const [project] = loaded.content.projects;
+    if (!project) throw new Error('no project');
+
+    await store.save(
+      {
+        ...loaded.content,
+        projects: [{ ...project, result: 'Still in use.' }],
+      },
+      NOW.toISOString(),
+      LATER,
+    );
+
+    expect(await raw()).toMatchObject({
+      schemaVersion: 2,
+      content: {
+        skills: ['Go'],
+        projects: [
+          { id: 'old', name: 'Example Old Tool', result: 'Still in use.' },
+        ],
+      },
+    });
+  });
+
+  it('round-trips project details', async () => {
+    await store.save(savedSkills(), null, NOW);
+
+    expect(await store.load()).toMatchObject({
+      content: {
+        projects: [
+          {
+            contribution: 'Wrote the data import and the weekly report.',
+            challenge: 'Duplicate stock records broke the totals.',
+            result: 'Stock counts matched the warehouse again.',
+          },
+          {},
+        ],
+      },
+    });
+  });
+
+  it('treats a damaged detail as a damaged project', async () => {
+    await fakeBrowser.storage.local.set({
+      skillsProjects: {
+        ...v1,
+        schemaVersion: 2,
+        content: {
+          skills: [],
+          projects: [{ ...v1.content.projects[0], result: 42 }],
+        },
+      },
+    });
+
+    expect(await store.load()).toMatchObject({
+      content: { projects: [] },
+      damaged: true,
+    });
   });
 });

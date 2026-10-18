@@ -292,6 +292,41 @@ export function SkillsProjectsView({
                     changeProject(project.id, { description });
                   }}
                 />
+                <TextAreaField
+                  label="What did you personally work on?"
+                  optional
+                  value={project.contribution}
+                  rows={2}
+                  maxLength={LIMITS.detail}
+                  error={errors[`${key}.contribution`]}
+                  onValueChange={(contribution) => {
+                    changeProject(project.id, { contribution });
+                  }}
+                />
+                <TextAreaField
+                  label="A challenge you met"
+                  optional
+                  hint="And what you did about it."
+                  value={project.challenge}
+                  rows={2}
+                  maxLength={LIMITS.detail}
+                  error={errors[`${key}.challenge`]}
+                  onValueChange={(challenge) => {
+                    changeProject(project.id, { challenge });
+                  }}
+                />
+                <TextAreaField
+                  label="What was the result?"
+                  optional
+                  hint="In your own words; no numbers needed."
+                  value={project.result}
+                  rows={2}
+                  maxLength={LIMITS.detail}
+                  error={errors[`${key}.result`]}
+                  onValueChange={(result) => {
+                    changeProject(project.id, { result });
+                  }}
+                />
                 <TechnologiesField
                   initial={project.technologies}
                   error={errors[`${key}.technologies`]}

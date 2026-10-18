@@ -5,7 +5,12 @@
  * user chooses to (ADR 0019). Nothing here is filled into forms.
  */
 
-export const SKILLS_SCHEMA_VERSION = 1;
+/**
+ * 2 adds the optional `contribution`, `challenge` and `result` of each
+ * project. Version 1 data is read with them empty; an older ApplyKit
+ * treats version 2 as newer and never writes over it.
+ */
+export const SKILLS_SCHEMA_VERSION = 2;
 
 export const LIMITS = {
   skills: 60,
@@ -16,6 +21,7 @@ export const LIMITS = {
   technologies: 20,
   technologyLength: 60,
   link: 300,
+  detail: 600,
 } as const;
 
 export interface Project {
@@ -26,6 +32,12 @@ export interface Project {
   technologies: string[];
   /** Optional; an http or https address. */
   link: string;
+  /** Optional: what the applicant personally did. */
+  contribution: string;
+  /** Optional: a challenge they met, and how they handled it. */
+  challenge: string;
+  /** Optional: what came of it, in their own words. */
+  result: string;
 }
 
 export interface SkillsProjects {
@@ -51,6 +63,9 @@ export function newProject(): Project {
     description: '',
     technologies: [],
     link: '',
+    contribution: '',
+    challenge: '',
+    result: '',
   };
 }
 
@@ -76,7 +91,10 @@ export function isBlankProject(project: Project): boolean {
     project.name.trim() === '' &&
     project.description.trim() === '' &&
     project.technologies.length === 0 &&
-    project.link.trim() === ''
+    project.link.trim() === '' &&
+    project.contribution.trim() === '' &&
+    project.challenge.trim() === '' &&
+    project.result.trim() === ''
   );
 }
 
@@ -124,6 +142,12 @@ export function skillsProjectsErrors(
       errors[`${key}.technologies`] =
         `List at most ${String(LIMITS.technologies)} short technologies.`;
     }
+    for (const field of ['contribution', 'challenge', 'result'] as const) {
+      if (project[field].length > LIMITS.detail) {
+        errors[`${key}.${field}`] =
+          `Keep this under ${String(LIMITS.detail)} characters.`;
+      }
+    }
     if (project.link !== '' && !isWebAddress(project.link)) {
       errors[`${key}.link`] = 'Enter a full web address, starting https://.';
     }
@@ -170,7 +194,7 @@ export function parseStoredSkillsProjects(
 ): StoredSkillsProjectsRead | null {
   if (typeof value !== 'object' || value === null) return null;
   const stored = value as Record<string, unknown>;
-  if (stored.schemaVersion !== SKILLS_SCHEMA_VERSION) return null;
+  if (stored.schemaVersion !== 1 && stored.schemaVersion !== 2) return null;
   if (
     !isString(stored.updatedAt) ||
     Number.isNaN(Date.parse(stored.updatedAt))
@@ -205,10 +229,16 @@ export function parseStoredSkillsProjects(
 
 function readProject(value: unknown): Project | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { id, name, description, technologies, link } = value as Record<
-    string,
-    unknown
-  >;
+  const {
+    id,
+    name,
+    description,
+    technologies,
+    link,
+    contribution,
+    challenge,
+    result,
+  } = value as Record<string, unknown>;
   if (!isString(id) || !isString(name) || !isString(description)) return null;
   const techs =
     technologies === undefined
@@ -217,7 +247,28 @@ function readProject(value: unknown): Project | null {
         ? technologies
         : null;
   if (techs === null) return null;
-  const address = link === undefined ? '' : isString(link) ? link : null;
-  if (address === null) return null;
-  return { id, name, description, technologies: techs, link: address };
+  const optional = (text: unknown) =>
+    text === undefined ? '' : isString(text) ? text : null;
+  const address = optional(link);
+  const part = optional(contribution);
+  const hurdle = optional(challenge);
+  const outcome = optional(result);
+  if (
+    address === null ||
+    part === null ||
+    hurdle === null ||
+    outcome === null
+  ) {
+    return null;
+  }
+  return {
+    id,
+    name,
+    description,
+    technologies: techs,
+    link: address,
+    contribution: part,
+    challenge: hurdle,
+    result: outcome,
+  };
 }
