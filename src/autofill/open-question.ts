@@ -43,20 +43,40 @@ export interface OpenQuestion {
  */
 const AI =
   '(?:artificial intelligence|generative ai|gen ?ai|chat ?gpt|large language models?|llms?|ai(?:[- ]powered)? tools?|ai)\\b';
+const REFUSED =
+  '(?:not\\s+(?:be\\s+)?(?:accepted|permitted|allowed|considered)|(?:be\\s+)?(?:unacceptable|prohibited|forbidden|rejected|disqualified)|(?:result in|lead to)\\s+(?:your application being rejected|rejection|disqualification))';
+const ANSWERS =
+  '(?:answers?|responses?|content|text|applications?|submissions?|statements?)';
+
 const AI_PROHIBITED = new RegExp(
   [
     `\\b(?:do not|don't|must not|should not|may not|cannot|never|please do not|refrain from|avoid)\\s+(?:use|using|rely on|relying on|submit|submitting)\\s+(?:any\\s+)?(?:content\\s+(?:generated|written)\\s+(?:by|with)\\s+)?${AI}`,
-    `\\b${AI}[- ](?:generated|written|assisted|produced)\\s+(?:answers?|responses?|content|text|applications?|submissions?)\\s+(?:are|is|will|may)\\s+(?:not\\s+(?:be\\s+)?(?:accepted|permitted|allowed|considered)|(?:be\\s+)?(?:unacceptable|prohibited|forbidden|rejected|disqualified))`,
+    `\\b${AI}[- ](?:generated|written|assisted|produced)\\s+${ANSWERS}\\s+(?:are|is|will|may)\\s+${REFUSED}`,
+    `\\b${ANSWERS}\\s+(?:written|generated|produced|created)\\s+(?:by|with|using)\\s+${AI}\\s+(?:are|is|will|may)\\s+${REFUSED}`,
     `\\bwithout (?:the )?(?:use|help|assistance|aid) of ${AI}`,
-    `\\b(?:use of|using) ${AI} (?:is|are) (?:not permitted|not allowed|prohibited|forbidden)`,
+    `\\bwithout (?:using|relying on) ${AI}`,
+    `\\b(?:use of|using) ${AI} (?:is|are) (?:strictly )?(?:not permitted|not allowed|prohibited|forbidden)`,
+    `\\bnot (?:be )?(?:generated|written|produced|created) (?:by|with|using) ${AI}`,
     `\\bno ${AI}[- ]?(?:generated|written|assisted)\\b`,
   ].join('|'),
-  'i',
+  'gi',
 );
 
-/** Whether `text` clearly forbids using AI for an answer. */
+/**
+ * The employer describing its own process ("We never use AI to screen
+ * applications") is not an instruction to the applicant.
+ */
+const EMPLOYER_SUBJECT =
+  /\b(?:we|we'll|we will|we do|our (?:team|recruiters|company|organi[sz]ation|process)|the (?:company|employer|recruiters?|organi[sz]ation))\s*$/i;
+
+/** Whether `text` clearly tells the applicant not to use AI. */
 export function prohibitsAi(text: string): boolean {
-  return AI_PROHIBITED.test(text.replace(/[’‘]/g, "'"));
+  const plain = text.replace(/[’‘]/g, "'");
+  for (const match of plain.matchAll(AI_PROHIBITED)) {
+    const before = plain.slice(Math.max(0, match.index - 40), match.index);
+    if (!EMPLOYER_SUBJECT.test(before)) return true;
+  }
+  return false;
 }
 
 /** Longer "questions" are instructions or whole sections, not a question. */

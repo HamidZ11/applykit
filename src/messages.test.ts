@@ -252,7 +252,12 @@ describe('AI drafting messages', () => {
 
   it('accepts draft requests naming items only by id', () => {
     expect(
-      isAiDraftRequest({ ...request, selected: ['skills'], approve: true }),
+      isAiDraftRequest({
+        ...request,
+        selected: ['skills'],
+        previewed: '',
+        approve: true,
+      }),
     ).toBe(true);
     expect(
       isAiDraftRequest({
@@ -266,6 +271,7 @@ describe('AI drafting messages', () => {
       isAiDraftRequest({
         ...request,
         selected: Array.from({ length: 41 }, (_, i) => String(i)),
+        previewed: '',
         approve: false,
       }),
     ).toBe(false);

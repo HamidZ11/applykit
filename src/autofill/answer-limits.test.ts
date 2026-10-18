@@ -166,3 +166,33 @@ describe('describing requirements', () => {
     ).toBe('Has 3 sentences; the question asks for exactly 2 sentences.');
   });
 });
+
+describe('limits found in review', () => {
+  it.each([
+    ['Tell us in a sentence or two.', { sentences: { min: 1, max: 2 } }],
+    ['In one sentence or two, why us?', { sentences: { min: 1, max: 2 } }],
+    ['Write between 3 and 5 sentences.', { sentences: { min: 3, max: 5 } }],
+    ['Between 150 and 200 words.', { words: { min: 150, max: 200 } }],
+  ])('reads “%s”', (text, expected) => {
+    expect(readLimits(text, null)).toEqual(limits(expected));
+  });
+
+  it('keeps the maximum when requirements contradict', () => {
+    expect(
+      readLimits('At least 300 words (max 250 words)', null).words,
+    ).toEqual(atMost(250));
+    // 400 words cannot fit in 300 characters.
+    expect(readLimits('At least 400 words.', 300)).toEqual(
+      limits({ characters: atMost(300) }),
+    );
+  });
+
+  it.each([
+    ['I worked at Example Co. Then I left.', 2],
+    ['I built plan B. It worked.', 2],
+    ['J. R. Example supervised me. I learnt a lot.', 2],
+    ['Dr. Example J. Smith agreed. We shipped.', 2],
+  ])('counts “%s” as %i sentences', (text, count) => {
+    expect(countSentences(text)).toBe(count);
+  });
+});

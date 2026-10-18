@@ -17,6 +17,7 @@ import type {
   DraftMode,
   SharedItem,
 } from '@/messages';
+import { MAX_ORIGINAL_LENGTH, previewDigest } from '@/messages';
 import { Icon } from '@/components/ui/icons';
 import {
   GhostButton,
@@ -42,8 +43,13 @@ type Preview = Extract<AiPrepareResponse, { status: 'ready' }>;
 /** What the card works on: a new answer, or the applicant's own text. */
 interface Job {
   mode: DraftMode;
-  /** The answer on the page when improving it; empty for a new one. */
+  /** The answer on the page when improving it, trimmed; empty for a new one. */
   original: string;
+  /**
+   * The field's exact value when the user asked, spaces and all: the only
+   * text a replacement may write over.
+   */
+  expected: string;
 }
 
 type Stage =
@@ -74,6 +80,8 @@ type Stage =
       link: 'skills' | 'ai' | null;
       retry: Job | null;
     };
+
+const TOO_LONG = `Your answer is longer than ApplyKit sends for improving (${MAX_ORIGINAL_LENGTH.toLocaleString('en-GB')} characters). Shorten it first.`;
 
 const UNREACHABLE =
   'ApplyKit could not reach its background. Close the panel and open it again.';
@@ -179,12 +187,17 @@ export function DraftAssistant({
       previous: revise,
     });
     const asking: Job =
-      revise === null ? job : { mode: 'improve', original: revise };
+      revise === null
+        ? job
+        : { mode: 'improve', original: revise, expected: job.expected };
     void model
       .draftAnswer(
         {
           ...request(asking),
           selected: [...selected],
+          previewed: previewDigest(
+            current.items.filter((item) => selected.has(item.id)),
+          ),
           approve: approve || asking.mode === 'improve',
         },
         abort.signal,
@@ -207,7 +220,9 @@ export function DraftAssistant({
             });
             return;
           case 'needs-approval':
-            setStage({ kind: 'preview', preview: current, full: true, job });
+            // Approval needed, or saved data changed since the preview:
+            // show what would be sent now, in full.
+            preview(job, true);
             return;
           case 'unavailable':
             setStage(problem(NOT_CONNECTED, 'ai'));
@@ -242,10 +257,18 @@ export function DraftAssistant({
         <SecondaryButton
           size="sm"
           onClick={() => {
+            if (answered !== null && answered.length > MAX_ORIGINAL_LENGTH) {
+              setStage(problem(TOO_LONG));
+              return;
+            }
             preview(
               answered === null
-                ? { mode: 'draft', original: '' }
-                : { mode: 'improve', original: answered },
+                ? { mode: 'draft', original: '', expected: '' }
+                : {
+                    mode: 'improve',
+                    original: answered,
+                    expected: rawValue(report.field.element) ?? answered,
+                  },
               false,
             );
           }}
@@ -386,7 +409,7 @@ export function DraftAssistant({
                   report,
                   text,
                   stage.asked,
-                  stage.job.original,
+                  stage.job.expected,
                 )
               : model.insertDraft(report, text, stage.asked)
           }
@@ -396,6 +419,14 @@ export function DraftAssistant({
         />
       );
   }
+}
+
+/** A text field's exact value, or null for anything else. */
+function rawValue(element: Element): string | null {
+  return element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLInputElement
+    ? element.value
+    : null;
 }
 
 function problem(
@@ -770,7 +801,7 @@ function DraftReview({
                 ? 'Replace your answer…'
                 : 'Insert answer'}
           </PrimaryButton>
-          {violations.length > 0 && (
+          {violations.length > 0 && text.length <= MAX_ORIGINAL_LENGTH && (
             <SecondaryButton size="sm" disabled={busy} onClick={onRevise}>
               Revise to fit
             </SecondaryButton>

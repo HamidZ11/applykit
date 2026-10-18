@@ -1,11 +1,12 @@
 import { describeViolation, limitViolations } from '@/autofill/answer-limits';
 import { openQuestionKind } from '@/autofill/open-question';
 import { emptySkillsProjects } from '@/domain/skills-projects';
-import type {
-  AiDraftRequest,
-  AiDraftResponse,
-  AiPrepareResponse,
-  DraftContextRequest,
+import {
+  previewDigest,
+  type AiDraftRequest,
+  type AiDraftResponse,
+  type AiPrepareResponse,
+  type DraftContextRequest,
 } from '@/messages';
 import type { ApprovalStore } from '@/storage/ai-approvals';
 import type { AiSettings } from '@/storage/ai-settings';
@@ -185,6 +186,10 @@ export async function draft(
   const facts = shared.filter((item) => item.group !== 'style');
   if (request.mode === 'draft' && facts.length === 0) {
     return { status: 'failed', failure: 'no-context', retryAfterSeconds: null };
+  }
+  // What the user saw must still be what would be sent.
+  if (previewDigest(shared) !== request.previewed) {
+    return { status: 'needs-approval' };
   }
   const fingerprint = await approvalFingerprint(
     settings.model,

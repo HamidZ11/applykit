@@ -2022,6 +2022,21 @@ describe('AI drafting', () => {
     expect(text).not.toContain('Fill 10');
   });
 
+  it('does not count questions the form forbids AI for as draftable', async () => {
+    await openWith(true, () => {
+      document
+        .getElementById('q-skills')
+        ?.insertAdjacentHTML(
+          'afterend',
+          '<p>Please do not use AI tools to write your answers.</p>',
+        );
+    });
+    click('Show summary');
+
+    // The notice is in the "Your application" section, with all 8.
+    expect(dialog().textContent).not.toContain('you can draft with AI');
+  });
+
   it('describes open questions plainly while AI drafting is off', async () => {
     await openWith(false);
     click('Show summary');
@@ -2377,6 +2392,40 @@ describe('AI drafting', () => {
 
       expect(field('q-answered').value).toBe(ORIGINAL);
       expect(findButton('Replace your answer…')).toBeDefined();
+    });
+
+    it('replaces an answer that ends with a space or new line', async () => {
+      await openWith();
+      field('q-answered').value = `${ORIGINAL}\n`;
+      previewReply = { ...ready(), selected: [], approved: false };
+      draftReply = { status: 'draft', text: IMPROVED };
+      click(/^What motivates you to apply/);
+      click('Improve my answer');
+      await settle();
+      await send();
+      expect(drafting.draft.mock.calls[0]?.[0]).toMatchObject({
+        original: ORIGINAL,
+      });
+
+      click('Replace your answer…');
+      click('Replace');
+      await settle();
+
+      expect(field('q-answered').value).toBe(IMPROVED);
+    });
+
+    it('explains an answer too long to send for improving', async () => {
+      await openWith();
+      field('q-answered').value = 'x'.repeat(4001);
+      click(/^What motivates you to apply/);
+
+      click('Improve my answer');
+      await settle();
+
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+        'longer than ApplyKit sends for improving',
+      );
+      expect(drafting.preview).not.toHaveBeenCalled();
     });
 
     it('never replaces an answer the user changed meanwhile', async () => {

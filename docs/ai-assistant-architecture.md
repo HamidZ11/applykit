@@ -331,8 +331,9 @@ both read on 2026-10-18.
   items.
 - Output: plain text only.
 
-**Budgets.** `max_tokens` from the stated limit (about 1.6 tokens per
-word, plus margin; 400 by default, 1,000 maximum). Input capped by the
+**Budgets.** `max_tokens` from the stated limit: twice the expected
+length plus 128, at least 384 (Haiku 5.5) or 512 (Sonnet 5.5), at most
+2,048 (see ADR 0019; a tighter budget cut real drafts off). Input capped by the
 background before sending (question 1,000 characters; facts 6,000
 characters).
 

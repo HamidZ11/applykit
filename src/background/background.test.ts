@@ -359,6 +359,7 @@ describe('AI drafting port', () => {
     mode: 'draft',
     original: '',
     selected: ['skills'],
+    previewed: '',
     approve: true,
   };
 

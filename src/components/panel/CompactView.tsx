@@ -56,11 +56,22 @@ function ReadyBody({ model }: { model: PanelModel }) {
  * for a draft of each.
  */
 function Plan({ model }: { model: PanelModel }) {
-  const { reports, summary, queue, expand } = model;
+  const { reports, queue, expand } = model;
   const willFill = reports.filter((r) => r.status === 'fill').length;
   const willKeep = reports.filter((r) => r.status === 'keep').length;
-  const open = queue.filter((r) => r.status === 'open').length;
+  // With AI drafting, only questions the form does not forbid it for.
+  const isOpen = (r: (typeof queue)[number]) =>
+    r.status === 'open' &&
+    !(
+      model.ai &&
+      r.field.support.status === 'open' &&
+      r.field.support.question.aiProhibited
+    );
+  const open = queue.filter(isOpen).length;
   const others = queue.length - open;
+  const requiredOthers = queue.filter(
+    (r) => !isOpen(r) && r.field.required,
+  ).length;
 
   return (
     <ul className="-mx-1.5 mt-2.5">
@@ -101,8 +112,8 @@ function Plan({ model }: { model: PanelModel }) {
               : `Leave ${String(others)} for you`
           }
           meta={
-            summary.requiredNeedsYou > 0
-              ? `${String(summary.requiredNeedsYou)} required`
+            requiredOthers > 0
+              ? `${String(requiredOthers)} required`
               : undefined
           }
           filter="you"

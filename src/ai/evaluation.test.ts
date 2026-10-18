@@ -6,7 +6,11 @@ import {
   readLimits,
 } from '@/autofill/answer-limits';
 import { openQuestionKind } from '@/autofill/open-question';
-import type { DraftContextRequest } from '@/messages';
+import {
+  previewDigest,
+  type AiDraftRequest,
+  type DraftContextRequest,
+} from '@/messages';
 import { browserApprovalStore } from '@/storage/ai-approvals';
 import { browserCredentialStore } from '@/storage/ai-credential';
 import {
@@ -21,7 +25,7 @@ import {
 import type { Fetch } from './anthropic';
 import { flagDraft } from './check';
 import { contextItems, rankContext } from './context';
-import { draft, type DraftingDeps } from './drafting';
+import { draft, prepare, type DraftingDeps } from './drafting';
 
 /**
  * A small evaluation of AI drafting with fictional applicants and mocked
@@ -30,6 +34,23 @@ import { draft, type DraftingDeps } from './drafting';
  * compliant, a fabricated and an over-long reply. It says nothing about
  * writing quality, which mocked replies cannot show.
  */
+
+/**
+ * Sends a draft request as the panel does: with the digest of the items
+ * the user saw, from a preview of the same request.
+ */
+async function send(
+  d: DraftingDeps,
+  request: Omit<AiDraftRequest, 'previewed'>,
+  signal?: AbortSignal,
+) {
+  const seen = await prepare(d, request);
+  const previewed =
+    seen.status === 'ready'
+      ? previewDigest(seen.items.filter((i) => request.selected.includes(i.id)))
+      : '';
+  return draft(d, { ...request, previewed }, signal);
+}
 
 const KEY = 'sk-ant-test-not-a-real-key-0000000000';
 const NOW = new Date(2026, 9, 18, 12);
@@ -138,7 +159,7 @@ describe('1. technical skills in two sentences', () => {
       'I write Python and SQL. I built a Flask rota planner.',
     );
 
-    await draft({ ...deps, fetch }, { ...request, selected, approve: true });
+    await send({ ...deps, fetch }, { ...request, selected, approve: true });
 
     const prompt = sentPrompt(fetch);
     expect(prompt).toContain('<limits>Exactly 2 sentences.');
@@ -187,7 +208,7 @@ describe('2. a project with a word limit', () => {
     const deps = await setUp(applicant);
     const fetch = reply('I built the scheduling logic for a rota planner.');
 
-    await draft({ ...deps, fetch }, { ...request, selected, approve: true });
+    await send({ ...deps, fetch }, { ...request, selected, approve: true });
 
     const prompt = sentPrompt(fetch);
     expect(prompt).toContain('My part: Built the scheduling logic');
@@ -219,7 +240,7 @@ describe('3. company motivation with sparse context', () => {
     const fetch = reply('unused');
 
     expect(
-      await draft(
+      await send(
         { ...deps, fetch },
         { ...request, selected: [], approve: true },
       ),
@@ -231,7 +252,7 @@ describe('3. company motivation with sparse context', () => {
     const deps = await setUp(applicant);
     const fetch = reply('INSUFFICIENT_CONTEXT');
 
-    const result = await draft(
+    const result = await send(
       { ...deps, fetch },
       { ...request, selected: ['job:shop'], approve: true },
     );
@@ -273,7 +294,7 @@ describe('4. a behavioural question without a real story', () => {
     const deps = await setUp(withoutChallenge);
     const fetch = reply('INSUFFICIENT_CONTEXT');
 
-    const result = await draft(
+    const result = await send(
       { ...deps, fetch },
       { ...request, selected: ['project:notes'], approve: true },
     );
@@ -298,7 +319,7 @@ describe('5. improving a rough draft', () => {
       'I built an app for the café rota, and the café used it.',
     );
 
-    await draft(
+    await send(
       { ...deps, fetch },
       { ...improving, selected: [], approve: true },
     );

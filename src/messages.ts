@@ -524,6 +524,11 @@ export type AiPrepareResponse =
 
 export interface AiDraftRequest extends DraftContextRequest {
   selected: string[];
+  /**
+   * `previewDigest` of the selected items as the user saw them: saved
+   * data changed since (in another tab) is never sent unseen.
+   */
+  previewed: string;
   /** The user approved this request in the full preview. */
   approve: boolean;
 }
@@ -598,7 +603,9 @@ export function isAiDraftRequest(message: unknown): message is AiDraftRequest {
     Array.isArray(selected) &&
     selected.length <= MAX_SELECTED &&
     selected.every((id) => typeof id === 'string' && id.length <= 200) &&
-    typeof approve === 'boolean'
+    typeof approve === 'boolean' &&
+    typeof message.previewed === 'string' &&
+    message.previewed.length <= 16
   );
 }
 
@@ -647,4 +654,24 @@ export function isAiDraftResponse(value: unknown): value is AiDraftResponse {
     default:
       return false;
   }
+}
+
+/**
+ * A short digest of shared items' texts (FNV-1a), to notice a change
+ * between the preview and the request. Change detection, not security:
+ * the background builds every text itself.
+ */
+export function previewDigest(
+  items: readonly { id: string; text: string }[],
+): string {
+  let hash = 0x811c9dc5;
+  const content = [...items]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map((item) => `${item.id}\u0000${item.text}`)
+    .join('\u0001');
+  for (let i = 0; i < content.length; i++) {
+    hash ^= content.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
 }

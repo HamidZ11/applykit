@@ -100,7 +100,20 @@ function boundOf(text: string, kind: LimitUnit): Bound {
         rest.slice(match.index + match[0].length);
     }
   };
-  read(`${n}\\s*(?:-|–|—|to|or)\\s*${n}${sep}${unit}\\b`, (m) => {
+  // "One or two sentences", "between 3 and 5 sentences", "150–200 words".
+  read(
+    `(?:between\\s+)?${n}\\s*(?:-|–|—|to|or|and)\\s*${n}${sep}${unit}\\b`,
+    (m) => {
+      const a = numberOf(m[1]);
+      const b = numberOf(m[2]);
+      if (a !== null && b !== null) {
+        mins.push(Math.min(a, b));
+        maxes.push(Math.max(a, b));
+      }
+    },
+  );
+  // "A sentence or two", "one sentence or two".
+  read(`${n}${sep}${unit}\\s+or\\s+${n}\\b`, (m) => {
     const a = numberOf(m[1]);
     const b = numberOf(m[2]);
     if (a !== null && b !== null) {
@@ -168,11 +181,46 @@ export function readLimits(
     characters.max =
       characters.max === null ? maxLength : Math.min(characters.max, maxLength);
   }
-  return {
+  return satisfiable({
     words: boundOf(lower, 'words'),
     characters,
     sentences: boundOf(lower, 'sentences'),
+  });
+}
+
+/**
+ * Requirements a text can meet. Where they contradict ("At least 300
+ * words (max 250 words)", or more words than `maxlength` can hold), the
+ * minimum is dropped and the maximum kept: a maximum is what the form
+ * enforces, and an impossible target would block every answer.
+ */
+function satisfiable(limits: AnswerLimits): AnswerLimits {
+  const { words, characters, sentences } = limits;
+  const fixed = (bound: Bound): Bound =>
+    bound.min !== null && bound.max !== null && bound.min > bound.max
+      ? { min: null, max: bound.max }
+      : bound;
+  const result = {
+    words: fixed(words),
+    characters: fixed(characters),
+    sentences: fixed(sentences),
   };
+  // A word needs at least two characters with its space.
+  if (
+    result.words.min !== null &&
+    result.characters.max !== null &&
+    result.words.min * 2 > result.characters.max
+  ) {
+    result.words = { ...result.words, min: null };
+  }
+  if (
+    result.sentences.min !== null &&
+    result.words.max !== null &&
+    result.sentences.min > result.words.max
+  ) {
+    result.sentences = { ...result.sentences, min: null };
+  }
+  return result;
 }
 
 /** Abbreviations whose full stop does not end a sentence. */
@@ -190,9 +238,6 @@ const ABBREVIATIONS = new Set([
   'prof',
   'st',
   'approx',
-  'inc',
-  'ltd',
-  'co',
   'jr',
   'sr',
   'no',
@@ -227,9 +272,17 @@ export function countSentences(text: string): number {
     const next = trimmed.slice(end).trimStart();
     if (next !== '' && !/^[A-Z0-9"“‘'(]/.test(next)) continue;
     if (match[0].startsWith('.')) {
-      const word = /([A-Za-z.]+)$/.exec(trimmed.slice(0, match.index))?.[1];
-      const plain = (word ?? '').toLowerCase().replace(/^\.+/, '');
-      if (ABBREVIATIONS.has(plain) || /^[a-z]$/.test(plain)) continue;
+      const before = trimmed.slice(0, match.index);
+      const word = /([A-Za-z.]+)$/.exec(before)?.[1] ?? '';
+      const plain = word.toLowerCase().replace(/^\.+/, '');
+      if (ABBREVIATIONS.has(plain)) continue;
+      // An initial ("J. R. Example"), not the end of "plan B.": a single
+      // capital that starts the text or follows another capitalised word
+      // or initial.
+      if (/^[A-Z]$/.test(word)) {
+        const previous = /(\S+)\s+[A-Z]$/.exec(before)?.[1];
+        if (previous === undefined || /^[A-Z]/.test(previous)) continue;
+      }
     }
     count++;
     lastEnd = end;

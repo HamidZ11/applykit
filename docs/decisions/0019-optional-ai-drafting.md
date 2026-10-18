@@ -73,8 +73,8 @@ omit`, `redirect: error`, a 25-second timeout (Chrome stops a worker
 - **Models.** `claude-haiku-5-5` with `thinking: {type: "disabled"}`
   ("Fast", default) and `claude-sonnet-5-5` with `thinking: {type:
 "between_tools"}` ("Higher quality"), the lowest setting each accepts;
-  thinking tokens are billed as output. Output tokens are capped by the
-  question's stated length (80 to 1,000).
+  thinking tokens are billed as output. Output tokens are capped from
+  the question's stated length (384 or 512 to 2,048; see below).
 - **Connecting** checks the key with the free token-counting endpoint.
   Keys that span several workspaces get a clear error (they need an
   `anthropic-workspace-id` header, which ApplyKit does not send).
@@ -84,7 +84,10 @@ omit`, `redirect: error`, a 25-second timeout (Chrome stops a worker
   detection found nothing else; a strict exclusion list applies again,
   and the background re-checks the question text before sending.
 - **Approval** is a session-only SHA-256 fingerprint of the provider,
-  model, question, limits, role, employer and each shared item's text.
+  model, question, limits, role, employer, mode, the applicant's own
+  text and each shared item's text. Every request also carries a digest
+  of the items as previewed; if saved data changed since (in another
+  tab), nothing is sent and the preview is shown again.
 - **Daily limit** of 1 to 50 requests (default 50), counted under a lock
   before sending; a damaged counter allows none.
 - **Insertion** goes through `confirmDraft` (same field, same question,
@@ -105,8 +108,10 @@ omit`, `redirect: error`, a 25-second timeout (Chrome stops a worker
   words" at least, "150–200 words" the range, `maxlength` a character
   maximum. Sentences are counted without splitting on abbreviations,
   initials, decimals or names such as Node.js. A draft that misses any
-  requirement says how, cannot be written, and can be sent back once,
-  explicitly ("Revise to fit").
+  requirement says how and cannot be written. "Revise to fit" sends it
+  back, each time the user asks; each is a request against the daily
+  limit. Contradictory requirements keep the maximum and drop the
+  minimum, so no answer is impossible.
 - **Default context** is chosen by a small deterministic ranking per
   kind of question (technical signal, recorded challenge, detail, words
   shared with the question, role and employer). Unrelated jobs are not
@@ -133,3 +138,10 @@ omit`, `redirect: error`, a 25-second timeout (Chrome stops a worker
   deleted.
 - **Project details** (what the applicant did, a challenge, a result)
   are optional; skills schema 2, read from version 1.
+
+Known limits of these refinements: sentence counting is heuristic
+(abbreviations and initials), detecting a ban on AI covers common
+English wording near the question only, a key already remembered in
+Safari stays on disk until the user moves or removes it in AI
+Assistant, and a draft in progress is lost if a rescan moves its
+question to another group in the full list.
