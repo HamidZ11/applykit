@@ -1,134 +1,38 @@
 import { MONTH_NAMES } from '@/domain/application-answers';
 import type { AnswerPlan } from './answers';
-import { currentMonthIndex, monthIndex, parseYearMonth } from './dates';
+import {
+  currentMonthIndex,
+  dateFormatOf,
+  monthIndex,
+  parseYearMonth,
+} from './dates';
 import { normalise } from './detect';
-import { qualificationType, requestedLevel } from './education';
+import {
+  qualificationType,
+  requestedLevel,
+  type QualificationType,
+} from './education';
 import type { EducationValue } from './fields';
+import {
+  daysIn,
+  readGraduationQuestion,
+  type Deadline,
+  type Relation,
+} from './graduation-question';
 import { comparable, usableOptions } from './options';
 import type { ControlField, ScannedField } from './scan';
 
 /**
- * Graduation questions answered from saved education (ADR 0017): "Will
- * you graduate before October 2027?", "… by September 2027?", "… in
- * 2027?", "What year do you expect to graduate?", "Have you already
- * graduated?". Pure rules: which saved degree the question is about, what
- * its saved end date says, and whether that settles the question.
+ * Graduation questions answered from saved education (ADR 0017): which
+ * saved degree a question is about, what its saved end date says, and
+ * whether that settles the question (the questions themselves are
+ * defined in `graduation-question`).
  *
  * A saved end date is month-precise and means "ended, or expected to".
  * Only a date still to come is read as an expected graduation; a past one
  * never proves a degree was awarded, so it answers nothing. Answers are
  * only suggested and filled when the user confirms them.
  */
-
-export type Relation = 'before' | 'by' | 'in';
-
-/** A deadline as precise as the question states it, never more. */
-export interface Deadline {
-  year: number;
-  /** 1–12, or null for a year alone. */
-  month: number | null;
-  /** 1–31, or null when no day is given. */
-  day: number | null;
-}
-
-export type GraduationQuestion =
-  | { kind: 'deadline'; relation: Relation; deadline: Deadline }
-  /** "What year do you expect to graduate?" */
-  | { kind: 'year' }
-  /** "Have you already graduated?" */
-  | { kind: 'completed' }
-  | { kind: 'unclear'; reason: string };
-
-/** Month names and their usual short forms ("Sep", "Sept"), numbered. */
-const MONTHS = new Map<string, number>([['sept', 9]]);
-MONTH_NAMES.forEach((name, index) => {
-  const lower = name.toLowerCase();
-  MONTHS.set(lower, index + 1);
-  MONTHS.set(lower.slice(0, 3), index + 1);
-});
-const MONTH_WORD = [...MONTHS.keys()].join('|');
-
-/** "15 September 2027", "15th of Sept 2027", "October 2027", "2027". */
-const DATE = new RegExp(
-  `\\b(?:(\\d{1,2})(?:st|nd|rd|th)? (?:of )?(${MONTH_WORD}) |(${MONTH_WORD}) )?((?:19|20)\\d{2})\\b`,
-  'g',
-);
-
-/** The words just before the date, and what they make of it. */
-const RELATIONS: [RegExp, Relation][] = [
-  [/\b(?:by|before) the end of $/, 'by'],
-  [/\bno later than $/, 'by'],
-  [/\b(?:before|prior to) $/, 'before'],
-  [/\bby $/, 'by'],
-  [/\b(?:in|during) $/, 'in'],
-];
-
-const HAVE_GRADUATED =
-  /\b(?:have|did) you (?:already |yet )?(?:graduated|completed|finished)\b|\balready graduated\b/;
-
-/** Days in a month, from the calendar. */
-function daysIn(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-
-/**
- * What a recognised graduation question asks, from its normalised text.
- * Only one stated date, with "before", "by" or "in" right before it, is
- * read; a missing year is never filled in.
- */
-export function parseGraduationQuestion(text: string): GraduationQuestion {
-  const dates = [...text.matchAll(DATE)];
-  if (dates.length > 1) {
-    return {
-      kind: 'unclear',
-      reason: 'This question mentions more than one date.',
-    };
-  }
-  const [date] = dates;
-  if (!date) {
-    if (/\b(?:what|which) year\b/.test(text)) return { kind: 'year' };
-    if (HAVE_GRADUATED.test(text)) return { kind: 'completed' };
-    return {
-      kind: 'unclear',
-      reason: 'This question gives no date with a year to compare with.',
-    };
-  }
-  const before = text.slice(0, date.index);
-  const relation = RELATIONS.find(([pattern]) => pattern.test(before))?.[1];
-  if (!relation) {
-    return {
-      kind: 'unclear',
-      reason:
-        'ApplyKit cannot tell how the date in this question relates to your graduation.',
-    };
-  }
-  const [, day, dayMonth, monthOnly, year] = date;
-  const monthWord = dayMonth ?? monthOnly;
-  const deadline: Deadline = {
-    year: Number(year),
-    month: monthWord ? (MONTHS.get(monthWord) ?? null) : null,
-    day: day ? Number(day) : null,
-  };
-  if (
-    deadline.day !== null &&
-    (deadline.month === null ||
-      deadline.day < 1 ||
-      deadline.day > daysIn(deadline.year, deadline.month))
-  ) {
-    return {
-      kind: 'unclear',
-      reason: 'The date in this question is not valid.',
-    };
-  }
-  if (relation === 'in' && deadline.day !== null) {
-    return {
-      kind: 'unclear',
-      reason:
-        'ApplyKit compares graduation with a month or a year, not a single day.',
-    };
-  }
-  return { kind: 'deadline', relation, deadline };
-}
 
 export type Comparison = 'yes' | 'no' | 'unknown';
 
@@ -169,43 +73,66 @@ function monthYear(year: number, month: number): string {
   return `${MONTH_NAMES[month - 1] ?? ''} ${String(year)}`;
 }
 
+type NoAnswer = Exclude<AnswerPlan, { display: string }>;
+
 type Derived =
   | {
       /** "yes", "no", or a year for "What year…?". */
       answer: string;
       basis: string;
     }
-  | Exclude<AnswerPlan, { display: string }>;
+  | NoAnswer;
 
-/** The degree a question can be about: university-level records only. */
+/** Kinds of degree "undergraduate" and "postgraduate" mean. */
+const STUDY_LEVELS: [RegExp, QualificationType[]][] = [
+  [/\bundergraduate\b/, ['bachelor', 'foundation', 'hnd', 'hnc']],
+  [/\bpostgraduate\b/, ['master', 'doctorate']],
+];
+
+/**
+ * The degree a question can be about. University-level records, and
+ * records whose level ApplyKit cannot tell (which might be the degree),
+ * narrowed by any kind of degree the question names. Never school
+ * qualifications, never chosen by order or recency.
+ */
 function degreeFor(
-  text: string,
+  question: string,
+  section: string,
   records: readonly EducationValue[],
-): EducationValue | Exclude<AnswerPlan, { display: string }> {
-  if (requestedLevel(text) === 'school') {
+): EducationValue | NoAnswer {
+  if (
+    requestedLevel(question) === 'school' ||
+    requestedLevel(section) === 'school'
+  ) {
     return {
       status: 'manual',
       reason: 'This asks about school qualifications, not a degree.',
     };
   }
-  const type = qualificationType(text);
-  const degrees = records.filter((r) => r.level === 'higher');
-  const fitting = type
-    ? degrees.filter((r) => qualificationType(r.qualification) === type)
-    : degrees;
+  const named = qualificationType(question);
+  const level = STUDY_LEVELS.find(([pattern]) => pattern.test(question))?.[1];
+  const possible = records.filter((r) => r.level !== 'school');
+  const fitting = possible.filter((r) => {
+    const type = qualificationType(r.qualification);
+    if (named) return type === named;
+    if (level) return type !== null && level.includes(type);
+    return true;
+  });
   const [only] = fitting;
-  if (fitting.length === 1 && only) return only;
-  if (fitting.length > 1) {
+  if (fitting.length === 1 && only?.level === 'higher') return only;
+  if (only) {
     return {
       status: 'ambiguous',
       reason:
-        'Several of your saved degrees could be the one this asks about, so ApplyKit does not suggest an answer.',
+        fitting.length > 1
+          ? 'Several of your saved qualifications could be the one this asks about, so ApplyKit does not suggest an answer.'
+          : 'ApplyKit cannot tell whether your saved qualification is a degree, so it does not suggest an answer.',
     };
   }
   return {
     status: 'no-value',
     reason:
-      degrees.length > 0
+      possible.length > 0
         ? 'None of your saved degrees is the kind this question asks about.'
         : 'None of your saved education is clearly a university degree.',
   };
@@ -220,24 +147,26 @@ function derive(
   records: readonly EducationValue[],
   now: Date,
 ): Derived {
-  const placeholder =
-    field.element instanceof HTMLInputElement ? field.element.placeholder : '';
-  const text = normalise(`${field.label} ${placeholder}`);
-  const question = parseGraduationQuestion(text);
-  if (question.kind === 'unclear') {
+  // The question itself, without hints such as "(Yes or no)".
+  const text = normalise(field.label.replace(/\([^)]*\)/g, ' '));
+  const question = readGraduationQuestion(text);
+  if (!question) {
+    return {
+      status: 'manual',
+      reason: 'ApplyKit cannot answer this question from your profile.',
+    };
+  }
+  if (question.kind === 'invalid') {
     return {
       status: 'manual',
       reason: `${question.reason} Answer it yourself.`,
     };
   }
-  const degree = degreeFor(text, records);
+  const degree = degreeFor(text, field.context, records);
   if ('status' in degree) return degree;
   const end = parseYearMonth(degree.endDate);
   if (!end) {
-    return {
-      status: 'no-value',
-      reason: 'Your saved degree has no end date.',
-    };
+    return { status: 'no-value', reason: 'Your saved degree has no end date.' };
   }
   const saved = { year: Number(end.year), month: Number(end.month) };
   const ended = monthYear(saved.year, saved.month);
@@ -272,12 +201,11 @@ function derive(
   }
 }
 
-const SAYS: Record<'yes' | 'no', RegExp> = { yes: /^yes$/, no: /^no$/ };
-
 /**
- * The answer as one control takes it. Yes or No only into a list offering
- * exactly that option; a year into a text, number or list field. A text
- * field is never given "Yes": its expected format is not stated.
+ * The answer as one control takes it. Yes or No only into a list whose
+ * choices are exactly Yes and No; a year into a number, list or text
+ * field that does not ask for another format. A text field is never
+ * given "Yes": its expected format is not stated.
  */
 export function planGraduation(
   field: ControlField,
@@ -296,15 +224,15 @@ export function planGraduation(
         reason: `The likely answer is ${words}, based on your expected graduation. ApplyKit fills Yes or No only into a list offering them; answer it yourself.`,
       };
     }
-    const matching = usableOptions(element).filter((o) =>
-      SAYS[answer].test(comparable(o.text)),
-    );
-    const [only] = matching;
-    return matching.length === 1 && only
-      ? { display: only.text.trim(), fillValue: only.value, basis }
+    const options = usableOptions(element);
+    const choices = options.map((o) => comparable(o.text)).sort();
+    const chosen = options.find((o) => comparable(o.text) === answer);
+    return choices.join('|') === 'no|yes' && chosen
+      ? { display: chosen.text.trim(), fillValue: chosen.value, basis }
       : {
           status: 'no-option',
-          reason: `None of the options is simply “${words}”.`,
+          reason:
+            'This list does not offer just Yes and No, so ApplyKit leaves the choice to you.',
         };
   }
   if (element instanceof HTMLSelectElement) {
@@ -315,6 +243,14 @@ export function planGraduation(
     return matching.length === 1 && only
       ? { display: only.text.trim(), fillValue: only.value, basis }
       : { status: 'no-option', reason: `None of the options is ${answer}.` };
+  }
+  const format = dateFormatOf(element, field.label);
+  if (format.kind !== 'year' && format.kind !== 'unknown') {
+    return {
+      status: 'unusable',
+      reason:
+        'This field asks for a date in another format, and your answer is a year.',
+    };
   }
   return { display: answer, fillValue: answer, basis };
 }

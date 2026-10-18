@@ -44,7 +44,6 @@ export function FieldActions({
     suggestion?.kind === 'missing';
   const [choosing, setChoosing] = useState(false);
   const canChoose = records.length > 1;
-  // Saved application answers are edited apart from the profile.
   // Saved application answers are edited apart from the profile; a
   // graduation answer is worked out from the saved education.
   const graduation = report.target === 'graduation';

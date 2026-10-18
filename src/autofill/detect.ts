@@ -1,3 +1,4 @@
+import { readGraduationQuestion } from './graduation-question';
 import {
   isAnswerField,
   isEducationField,
@@ -422,7 +423,7 @@ const SALARY_EXPECTATION =
  * received, relocation support, a particular place, salary history.
  */
 const ANSWER_RULES: Record<
-  AnswerField,
+  Exclude<AnswerField, 'graduation'>,
   { include: RegExp[]; exclude: RegExp | null }
 > = {
   noticePeriod: {
@@ -474,17 +475,6 @@ const ANSWER_RULES: Record<
   salaryExpectation: {
     include: [SALARY_EXPECTATION],
     exclude: null,
-  },
-  graduation: {
-    // The applicant graduating or completing their degree.
-    include: [
-      /\byou\b.*\bgraduat(?:e|ing|ed)\b/,
-      /\byou\b.*\b(?:complet|finish)\w* (?:your |the |a )?(?:\w+ s |\w+ )?(?:degree|university studies|studies)\b/,
-    ],
-    // Not the ceremony, eligibility, a programme's requirements, proof
-    // of a degree, or how well it went.
-    exclude:
-      /\b(?:ceremon\w*|attend\w*|eligib\w*|qualif(?:y|ies|ied) for|requirements?|require[sd]?|transcripts?|certificates?|proof|documents?|evidence|classification|grades?|results?|gpa|programmes?|programs?|schemes?|placement|internship|recruit\w*)\b|\bgraduate (?:roles?|jobs?|positions?|opportunit\w*|level|entry|intake|vacanc\w*)\b/,
   },
 };
 
@@ -724,8 +714,8 @@ export function detectControl(control: DetectableControl): Detection {
       add(field, { signal, text: raw });
     }
   }
-  for (const { signal, raw, normalised } of questions) {
-    for (const field of matchAnswer(normalised)) {
+  for (const { signal, raw, normalised, core } of questions) {
+    for (const field of matchAnswer(normalised, core)) {
       if (inWorkHistory && !ANSWERS_IN_JOB_SECTIONS.has(field)) continue;
       add(field, { signal, text: raw });
     }
@@ -915,7 +905,7 @@ function matchEducation(text: string, inEducation: boolean): EducationField[] {
 function questionTexts(
   control: DetectableControl,
   texts: TextSignal[],
-): { signal: Signal; raw: string; normalised: string }[] {
+): { signal: Signal; raw: string; normalised: string; core: string }[] {
   const questions = texts.filter(
     (t) => t.signal === 'label' || t.signal === 'placeholder',
   );
@@ -926,15 +916,29 @@ function questionTexts(
     control.closest('fieldset')?.querySelector(':scope > legend')
       ?.textContent ?? '';
   const raw = legend.replace(/\s+/g, ' ').trim();
-  return raw ? [{ signal: 'label', raw, normalised: normalise(raw) }] : [];
+  return raw
+    ? [
+        {
+          signal: 'label',
+          raw,
+          normalised: normalise(raw),
+          core: normalise(raw.replace(/\([^)]*\)/g, ' ')),
+        },
+      ]
+    : [];
 }
 
-/** The saved-answer questions a piece of question text asks. */
-function matchAnswer(text: string): AnswerField[] {
+/**
+ * The saved-answer questions a piece of question text asks. `core` is the
+ * text without parenthesised hints; a graduation question must be exactly
+ * one of the supported questions (ADR 0017).
+ */
+function matchAnswer(text: string, core: string): AnswerField[] {
   if (text.split(' ').length > MAX_QUESTION_WORDS) return [];
-  const matches: AnswerField[] = [];
+  const matches: AnswerField[] =
+    readGraduationQuestion(core) === null ? [] : ['graduation'];
   for (const [field, rules] of Object.entries(ANSWER_RULES) as [
-    AnswerField,
+    Exclude<AnswerField, 'graduation'>,
     { include: RegExp[]; exclude: RegExp | null },
   ][]) {
     if (!rules.include.some((pattern) => pattern.test(text))) continue;

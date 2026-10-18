@@ -5,11 +5,8 @@ import { educationRecords, fullProfile } from '@/test/autofill-fixtures';
 import { loadFixture, loadHtml } from '@/test/load-fixture';
 import { detectControl, normalise, type DetectableControl } from './detect';
 import { fillFields } from './fill';
-import {
-  compareGraduation,
-  parseGraduationQuestion,
-  type Deadline,
-} from './graduation';
+import { compareGraduation } from './graduation';
+import { readGraduationQuestion, type Deadline } from './graduation-question';
 import { autofillValuesFrom } from './profile-values';
 import { planFill, summarise, type FieldReport } from './report';
 import { confirmAnswer } from './resolve';
@@ -73,7 +70,7 @@ function detected(html: string): string {
 }
 
 describe('reading the question', () => {
-  const parse = (text: string) => parseGraduationQuestion(normalise(text));
+  const read = (text: string) => readGraduationQuestion(normalise(text));
 
   it.each([
     [
@@ -96,32 +93,44 @@ describe('reading the question', () => {
       'Will you complete your degree no later than 1 June 2027?',
       { relation: 'by', deadline: { year: 2027, month: 6, day: 1 } },
     ],
+    [
+      'Will you graduate in or before June 2027?',
+      { relation: 'by', deadline: { year: 2027, month: 6, day: null } },
+    ],
+    [
+      'Is your expected graduation date before October 2027?',
+      { relation: 'before', deadline: { year: 2027, month: 10, day: null } },
+    ],
   ])('reads “%s”', (text, expected) => {
-    expect(parse(text)).toEqual({ kind: 'deadline', ...expected });
+    expect(read(text)).toEqual({ kind: 'deadline', ...expected });
   });
 
   it('reads year and already-graduated questions', () => {
-    expect(parse('What year do you expect to graduate?')).toEqual({
+    expect(read('What year do you expect to graduate?')).toEqual({
       kind: 'year',
     });
-    expect(parse('Have you already graduated?')).toEqual({
+    expect(read('Have you already graduated?')).toEqual({ kind: 'completed' });
+    expect(read('Have you completed your degree?')).toEqual({
       kind: 'completed',
     });
   });
 
   it.each([
-    ['Will you graduate before October?', 'no date with a year'],
-    [
-      'Will you graduate between June 2027 and September 2027?',
-      'more than one date',
-    ],
+    'Will you graduate before October?',
+    'Will you graduate between June 2027 and September 2027?',
+    'Will you graduate on 15 June 2027?',
+    'Will you graduate before 2027-09-30?',
+  ])('does not take “%s” for a supported question', (text) => {
+    expect(read(text)).toBeNull();
+  });
+
+  it.each([
     ['Will you graduate before 31 February 2027?', 'not valid'],
-    ['Will you graduate on 15 June 2027?', 'cannot tell how the date'],
     ['Are you graduating in 15 June 2027?', 'not a single day'],
-  ])('never guesses from “%s”', (text, reason) => {
-    const question = parse(text);
-    expect(question.kind).toBe('unclear');
-    expect(question.kind === 'unclear' && question.reason).toContain(reason);
+  ])('says why “%s” cannot be answered', (text, reason) => {
+    const question = read(text);
+    expect(question?.kind).toBe('invalid');
+    expect(question?.kind === 'invalid' && question.reason).toContain(reason);
   });
 });
 
@@ -535,5 +544,134 @@ describe('confirming a graduation answer', () => {
     expect(select('grad-done').value).toBe('n');
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onClick).not.toHaveBeenCalled();
+  });
+});
+
+describe('cases found in review', () => {
+  it.each([
+    // The date belongs to another clause.
+    'Will you have graduated by the time you start in September 2027?',
+    'Will you have completed your degree before starting in September 2027?',
+    'Will you graduate before the role starts in September 2027?',
+    'Will you graduate before applications close in July 2027?',
+    'Will you graduate from a course that started in 2024?',
+    'Will you be available full-time after you graduate in 2027?',
+    'Will you be available to start work before you graduate in June 2027?',
+    'Do you plan to study further after you graduate in 2027?',
+    // Words after the date, or negation.
+    'Will you graduate in 2026 or later?',
+    'Will you graduate in 2028 or earlier?',
+    'Will you graduate before May 2027 or after?',
+    'Will you not graduate before October 2027?',
+    // Grades.
+    'Will you graduate with a first-class degree by June 2027?',
+    'Will you graduate with a 2:1 or above by June 2027?',
+    'Will you graduate with a minimum 2.1 before October 2027?',
+    'Are you on track to graduate with honours in 2027?',
+    // Someone else.
+    'Will the student you are mentoring graduate before October 2027?',
+    'Will the person you nominate graduate before October 2027?',
+    // Other years, declarations and conditions.
+    'What year of study are you in? Final year students graduating this year enter Final.',
+    'What year did you graduate?',
+    'Please confirm you will graduate before October 2027',
+    'Will you graduate before October 2027, subject to passing your exams?',
+    'Have you completed your degree in the UK?',
+  ])('does not answer “%s”', (question) => {
+    const report = ask(question);
+    expect(report.status).not.toBe('suggest');
+    expect(report.fillValue).toBeNull();
+  });
+
+  it('reads “in or before” as including the month', () => {
+    expect(ask('Will you graduate in or before June 2027?').fillValue).toBe(
+      'y',
+    );
+    expect(ask('Will you graduate on or before 2027?').fillValue).toBe('y');
+  });
+
+  it.each(['High school', 'Secondary school', 'A levels'])(
+    'never answers from the degree in a “%s” section',
+    (section) => {
+      loadHtml(
+        `<form><fieldset><legend>${section}</legend><label>Have you already graduated? ${YES_NO}</label></fieldset></form>`,
+      );
+      expect(byId(plan(), 'q').fillValue).toBeNull();
+      loadHtml(
+        `<form><h2>${section}</h2><label>Will you graduate before June 2027? ${YES_NO}</label></form>`,
+      );
+      expect(byId(plan(), 'q').fillValue).toBeNull();
+    },
+  );
+
+  it.each([
+    'Year you graduated',
+    'Date you graduated',
+    'Graduation date (if you have graduated)',
+    'Graduation year (or year you expect to graduate)',
+  ])('still fills “%s” from the saved end date', (label) => {
+    loadHtml(
+      `<form><fieldset><legend>University</legend><label>${label} <select id="q"><option value="">Year</option><option>2026</option><option>2027</option></select></label></fieldset></form>`,
+    );
+    expect(byId(plan(), 'q')).toMatchObject({
+      status: 'fill',
+      target: 'educationEnd',
+      fillValue: '2027',
+    });
+  });
+
+  it('narrows undergraduate and postgraduate degrees', () => {
+    expect(
+      ask('Will you complete your undergraduate degree before October 2027?', [
+        masters,
+      ]),
+    ).toMatchObject({ status: 'no-value', fillValue: null });
+    expect(
+      ask('Will you complete your postgraduate degree by October 2028?', [
+        degree,
+      ]),
+    ).toMatchObject({ status: 'no-value', fillValue: null });
+    expect(
+      ask('Will you complete your undergraduate degree before October 2027?', [
+        degree,
+        masters,
+      ]).fillValue,
+    ).toBe('y');
+  });
+
+  it('treats a record of unclear level as possibly the degree', () => {
+    const unclear: EducationRecord = {
+      id: 'licenciatura',
+      institution: 'Escuela de Ejemplo',
+      qualification: 'Licenciatura en Economía',
+      fieldOfStudy: 'Economía',
+      startDate: '2019-09',
+      endDate: '2023-06',
+      grade: '',
+    };
+
+    expect(
+      ask('Have you already graduated?', [masters, unclear]),
+    ).toMatchObject({ status: 'ambiguous', fillValue: null });
+  });
+
+  it('writes Yes or No only into a list offering just those', () => {
+    loadHtml(
+      `<form><label>Will you graduate before October 2027? <select id="q"><option value="">Select…</option><option value="y">Yes</option><option value="n">No</option><option value="a">Already graduated</option></select></label></form>`,
+    );
+    expect(byId(plan(), 'q')).toMatchObject({
+      status: 'no-option',
+      fillValue: null,
+    });
+  });
+
+  it('never writes a year into a field formatted for a month', () => {
+    loadHtml(
+      '<form><label>What year do you expect to graduate? <input id="q" placeholder="MM/YYYY"></label></form>',
+    );
+    expect(byId(plan(), 'q')).toMatchObject({
+      status: 'unusable',
+      fillValue: null,
+    });
   });
 });
