@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Graduate Consultant · Example Harbourline Consulting Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional graduate application for graduation reasoning. Questions
+      about graduating before, by and in a month or year, the expected
+      graduation year, before a particular day, already having graduated,
+      and completing a bachelor's or master's degree; as lists, a number
+      field, a text field, radio buttons and a custom dropdown, with one
+      already answered. Also: a graduation ceremony, programme eligibility,
+      a declaration, right to work, visa sponsorship, consent and equal
+      opportunities questions. "Change intake" changes one question's
+      deadline. Every name is invented. Used by unit tests and manual
+      testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #1d4f91;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 19px;
+        margin: 32px 0 0;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+      }
+      h3 {
+        font-size: 15px;
+        margin: 20px 0 0;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      section {
+        margin-top: 8px;
+        padding: 4px 16px 16px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 16px;
+      }
+      label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      .req {
+        color: #cf222e;
+      }
+      input:not([type='checkbox'], [type='radio']),
+      select,
+      textarea,
+      .combo {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      input:disabled {
+        background: #f6f8fa;
+        color: var(--muted);
+      }
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+      .choice {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 400;
+        margin-top: 10px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 4px 0 0;
+      }
+      [role='listbox'] {
+        margin: 4px 0 0;
+        padding: 4px 0;
+        list-style: none;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      [role='option'] {
+        padding: 4px 10px;
+      }
+      button.link {
+        margin: 6px 0 0;
+        padding: 0;
+        color: var(--brand);
+        background: none;
+        font-weight: 500;
+      }
+      button {
+        margin-top: 28px;
+        padding: 10px 18px;
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--brand);
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      output {
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar">
+        <span class="logo"></span>Example Harbourline Consulting
+      </div>
+    </header>
+    <main>
+      <h1>Graduate Consultant, 2027 intake</h1>
+      <p class="meta">Manchester · Starts October 2027</p>
+
+      <form id="application" action="/submitted" method="post">
+        <h2>Your details</h2>
+        <div class="row">
+          <div>
+            <label for="first">First name <span class="req">*</span></label>
+            <input id="first" name="firstName" required />
+          </div>
+          <div>
+            <label for="last">Last name <span class="req">*</span></label>
+            <input id="last" name="lastName" required />
+          </div>
+        </div>
+
+        <fieldset>
+          <legend>Your degree</legend>
+          <label for="university">University</label>
+          <input id="university" name="university" />
+          <label for="graduation">Expected graduation date (MM/YYYY)</label>
+          <input id="graduation" name="graduationDate" />
+          <label for="grad-before" id="grad-before-label"
+            >Will you graduate before October 2027?</label
+          >
+          <select id="grad-before" name="graduateBefore">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <button type="button" id="change-intake" class="link">
+            Change intake
+          </button>
+          <label for="grad-by"
+            >Will you have completed your degree by June 2027?</label
+          >
+          <select id="grad-by" name="completedBy">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <label for="grad-in">Are you graduating in 2027?</label>
+          <select id="grad-in" name="graduatingIn">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <label for="grad-year">What year do you expect to graduate?</label>
+          <input id="grad-year" name="graduationYear" type="number" />
+          <label for="grad-day">Will you graduate before 15 June 2027?</label>
+          <select id="grad-day" name="graduateBeforeDay">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <label for="grad-done">Have you already graduated?</label>
+          <select id="grad-done" name="alreadyGraduated">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <label for="grad-bachelor"
+            >Will you have completed your bachelor’s degree by September
+            2027?</label
+          >
+          <select id="grad-bachelor" name="bachelorBy">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <label for="grad-masters"
+            >Will you have completed your master’s degree by September
+            2027?</label
+          >
+          <select id="grad-masters" name="mastersBy">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <label for="grad-text"
+            >Will you graduate before December 2027? (Yes or no)</label
+          >
+          <input id="grad-text" name="graduateBeforeText" />
+          <fieldset>
+            <legend>Do you expect to graduate before September 2027?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="grad-radio-yes"
+                name="gradRadio"
+                value="yes"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" name="gradRadio" value="no" /> No</label
+            >
+          </fieldset>
+          <label for="grad-custom" id="grad-custom-label"
+            >Will you graduate by December 2027?</label
+          >
+          <input
+            id="grad-custom"
+            class="combo"
+            name="graduateByCustom"
+            role="combobox"
+            aria-controls="grad-custom-options"
+            aria-expanded="false"
+            aria-autocomplete="list"
+            placeholder="Choose…"
+          />
+          <ul
+            id="grad-custom-options"
+            role="listbox"
+            aria-labelledby="grad-custom-label"
+            hidden
+          >
+            <li role="option" id="grad-custom-yes">Yes</li>
+            <li role="option" id="grad-custom-no">No</li>
+          </ul>
+          <label for="grad-answered"
+            >Will you graduate before September 2028?</label
+          >
+          <select id="grad-answered" name="graduateBefore2028">
+            <option value="">Select…</option>
+            <option value="y" selected>Yes</option>
+            <option value="n">No</option>
+          </select>
+        </fieldset>
+
+        <fieldset>
+          <legend>About the programme</legend>
+          <label for="ceremony">When is your graduation ceremony?</label>
+          <input id="ceremony" name="ceremony" />
+          <label for="eligible"
+            >Are you eligible for our graduate programme?</label
+          >
+          <select id="eligible" name="eligibleForProgramme">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+        </fieldset>
+
+        <fieldset>
+          <legend>Eligibility to work</legend>
+          <fieldset>
+            <legend>Do you have the right to work in the UK?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="rtw-yes"
+                name="rightToWork"
+                value="yes"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" name="rightToWork" value="no" /> No</label
+            >
+          </fieldset>
+          <label for="sponsorship"
+            >Will you now or in the future require visa sponsorship?</label
+          >
+          <select id="sponsorship" name="sponsorship">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+        </fieldset>
+
+        <fieldset>
+          <legend>Equal opportunities monitoring</legend>
+          <label for="gender">Gender</label>
+          <select id="gender" name="gender">
+            <option value="">Prefer not to say</option>
+            <option>Woman</option>
+            <option>Man</option>
+            <option>Non-binary</option>
+          </select>
+          <label for="ethnicity">Ethnic group</label>
+          <select id="ethnicity" name="ethnicity">
+            <option value="">Prefer not to say</option>
+            <option>Asian or Asian British</option>
+            <option>White</option>
+            <option>Another ethnic group</option>
+          </select>
+        </fieldset>
+
+        <h2>Declaration</h2>
+        <label class="choice"
+          ><input
+            type="checkbox"
+            id="declaration"
+            name="declaration"
+            required
+          />
+          I declare that I meet all eligibility requirements, including
+          graduation before October 2027.</label
+        >
+        <label class="choice"
+          ><input type="checkbox" id="privacy" name="privacy" required /> I
+          agree to my data being processed for this application.</label
+        >
+
+        <button type="submit">Submit application</button>
+      </form>
+
+      <output id="status">Fixture · submitted: no · input events: 0</output>
+    </main>
+
+    <script>
+      // Lets reviewers confirm what the page observed.
+      const form = document.getElementById('application');
+      const status = document.getElementById('status');
+      let submitted = false;
+      let inputEvents = 0;
+      const render = () => {
+        status.textContent = `Fixture · submitted: ${submitted ? 'YES' : 'no'} · input events: ${inputEvents}`;
+      };
+      form.addEventListener('input', () => {
+        inputEvents += 1;
+        render();
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitted = true;
+        render();
+      });
+
+      // A different intake moves the deadline, as some forms do.
+      document.getElementById('change-intake').addEventListener('click', () => {
+        document.getElementById('grad-before-label').textContent =
+          'Will you graduate before March 2027?';
+      });
+    </script>
+  </body>
+</html>

@@ -145,6 +145,7 @@ const SELECT_FIELDS = new Set<AutofillField>([
   'workArrangement',
   'startDate',
   'salaryExpectation',
+  'graduation',
 ]);
 
 /**
@@ -166,7 +167,7 @@ const DATE_FIELDS = new Set<AutofillField>([
 const ANSWER_INPUTS: Record<string, ReadonlySet<AutofillField>> = {
   date: new Set(['startDate']),
   month: new Set(['startDate']),
-  number: new Set(['noticePeriod', 'salaryExpectation']),
+  number: new Set(['noticePeriod', 'salaryExpectation', 'graduation']),
 };
 
 /** Long answers ApplyKit may fill: only a saved description of a job. */

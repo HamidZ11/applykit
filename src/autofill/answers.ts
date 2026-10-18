@@ -34,7 +34,12 @@ import type { ControlField, ScannedField } from './scan';
 
 /** A value to suggest, or why the saved answer cannot answer the field. */
 export type AnswerPlan =
-  | { display: string; fillValue: string }
+  | {
+      display: string;
+      fillValue: string;
+      /** The saved fact a derived answer rests on, shown with it. */
+      basis?: string;
+    }
   | {
       status: 'no-value' | 'no-option' | 'unusable' | 'ambiguous' | 'manual';
       reason: string;
@@ -61,7 +66,7 @@ function question(field: ScannedField): string {
  */
 export function planAnswer(
   field: ControlField,
-  target: AnswerField,
+  target: Exclude<AnswerField, 'graduation'>,
   answers: ApplicationAnswers | null,
   now: Date,
   home: readonly string[] = [],
@@ -93,7 +98,7 @@ export function planAnswer(
  */
 export function answerGuidance(
   field: ScannedField,
-  target: AnswerField,
+  target: Exclude<AnswerField, 'graduation'>,
   answers: ApplicationAnswers | null,
   now: Date,
   home: readonly string[] = [],

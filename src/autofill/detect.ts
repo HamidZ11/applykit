@@ -475,6 +475,17 @@ const ANSWER_RULES: Record<
     include: [SALARY_EXPECTATION],
     exclude: null,
   },
+  graduation: {
+    // The applicant graduating or completing their degree.
+    include: [
+      /\byou\b.*\bgraduat(?:e|ing|ed)\b/,
+      /\byou\b.*\b(?:complet|finish)\w* (?:your |the |a )?(?:\w+ s |\w+ )?(?:degree|university studies|studies)\b/,
+    ],
+    // Not the ceremony, eligibility, a programme's requirements, proof
+    // of a degree, or how well it went.
+    exclude:
+      /\b(?:ceremon\w*|attend\w*|eligib\w*|qualif(?:y|ies|ied) for|requirements?|require[sd]?|transcripts?|certificates?|proof|documents?|evidence|classification|grades?|results?|gpa|programmes?|programs?|schemes?|placement|internship|recruit\w*)\b|\bgraduate (?:roles?|jobs?|positions?|opportunit\w*|level|entry|intake|vacanc\w*)\b/,
+  },
 };
 
 /**
@@ -755,6 +766,8 @@ export function detectControl(control: DetectableControl): Detection {
     for (const [field, found] of [...candidates]) {
       if (
         !isEducationField(field) &&
+        // Graduation questions often sit with the education they ask about.
+        field !== 'graduation' &&
         !found.some((e) => e.signal === 'autocomplete')
       ) {
         candidates.delete(field);
@@ -816,6 +829,10 @@ export function detectControl(control: DetectableControl): Detection {
   }
   // "Preferred first name" is the preferred name, not the first name.
   if (candidates.has('preferredName')) candidates.delete('firstName');
+  // A question about graduating says more than a field named for an end
+  // date ("graduationYear"): it is asked as a question, and never filled
+  // without the user's confirmation.
+  if (candidates.has('graduation')) candidates.delete('educationEnd');
 
   const fields = [...candidates.keys()];
   const [only] = fields;

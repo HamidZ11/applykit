@@ -12,6 +12,7 @@ import {
   type EmploymentValue,
 } from './fields';
 import { answerGuidance, homeNames } from './answers';
+import { graduationGuidance } from './graduation';
 import { asksExpectedEnd, employmentTypeLabel } from './plan-employment';
 import type { RecordChoice } from './records';
 import type { ScannedField } from './scan';
@@ -51,15 +52,15 @@ export function suggestionFor(
   { values, education, employment, now }: SuggestionContext,
 ): Suggestion {
   if (isAnswerField(target)) {
-    const plan = answerGuidance(
-      field,
-      target,
-      values.answers,
-      now,
-      homeNames(values),
-    );
+    const plan =
+      target === 'graduation'
+        ? graduationGuidance(field, values.education, now)
+        : answerGuidance(field, target, values.answers, now, homeNames(values));
     if ('display' in plan) {
-      return value(plan.display, 'From your saved application answers.');
+      return value(
+        plan.display,
+        plan.basis ?? 'From your saved application answers.',
+      );
     }
     if (plan.status === 'no-value') return missing(plan.reason);
     return plan.status === 'ambiguous'

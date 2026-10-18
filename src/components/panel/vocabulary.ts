@@ -51,7 +51,9 @@ export function explain(report: FieldReport): string {
     case 'fill':
       return withNote(`ApplyKit will fill this with your ${target}.`, report);
     case 'suggest':
-      return 'Your saved answer fits this question. ApplyKit fills it only if you choose to use it.';
+      return report.target === 'graduation'
+        ? 'Worked out from your expected graduation date. ApplyKit fills it only if you choose to use it.'
+        : 'Your saved answer fits this question. ApplyKit fills it only if you choose to use it.';
     case 'filled':
       return withNote(
         `Filled with your ${target}. The site accepted it.`,

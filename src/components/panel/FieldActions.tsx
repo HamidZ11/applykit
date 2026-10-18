@@ -45,15 +45,28 @@ export function FieldActions({
   const [choosing, setChoosing] = useState(false);
   const canChoose = records.length > 1;
   // Saved application answers are edited apart from the profile.
-  const answer = report.target !== null && isAnswerField(report.target);
-  const source = answer ? 'From your saved answers' : 'From your saved profile';
+  // Saved application answers are edited apart from the profile; a
+  // graduation answer is worked out from the saved education.
+  const graduation = report.target === 'graduation';
+  const answer =
+    report.target !== null && isAnswerField(report.target) && !graduation;
+  const source = answer
+    ? 'From your saved answers'
+    : graduation
+      ? 'Based on your saved education'
+      : 'From your saved profile';
 
   return (
     <>
       {suggestion && <Guidance suggestion={suggestion} source={source} />}
       {status === 'suggest' && report.value !== null && (
         <Guidance
-          suggestion={{ kind: 'value', value: report.value, note: null }}
+          suggestion={{
+            kind: 'value',
+            value: report.value,
+            // The fact a derived answer rests on.
+            note: graduation ? report.note : null,
+          }}
           source={source}
         />
       )}

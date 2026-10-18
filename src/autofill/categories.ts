@@ -79,6 +79,7 @@ const BY_TARGET: Record<AutofillField, FieldCategory> = {
   workArrangement: 'questions',
   startDate: 'questions',
   salaryExpectation: 'questions',
+  graduation: 'questions',
 };
 
 /** Equality, diversity and social-mobility questions. */

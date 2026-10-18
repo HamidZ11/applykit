@@ -1511,6 +1511,71 @@ describe('developer diagnostics', () => {
   });
 });
 
+describe('graduation answers', () => {
+  beforeEach(async () => {
+    loadFixture('graduation-application.html');
+    document.body.append(host);
+    const saved = fullProfile();
+    saved.education = educationRecords();
+    await open(ready(autofillValuesFrom(saved)));
+  });
+
+  function rowOf(name: RegExp): HTMLLIElement | null {
+    return button(name).closest('li');
+  }
+
+  it('counts the answers the saved degree settles', () => {
+    expect(
+      host.querySelector('section[aria-label="Suggested answers"]')
+        ?.textContent,
+    ).toContain('6 available');
+  });
+
+  it('shows the answer with the saved fact it rests on', async () => {
+    click('Review answers');
+    await settle();
+
+    const row = rowOf(/^Will you graduate before October 2027/);
+    expect(row?.textContent).toContain('Based on your saved education');
+    expect(row?.textContent).toContain('Expected graduation: June 2027');
+    expect(row?.textContent).toContain(
+      'Worked out from your expected graduation date.',
+    );
+    expect(row?.textContent).not.toContain('From your saved answers');
+  });
+
+  it('fills a graduation answer only when the user uses it', async () => {
+    const field = document.getElementById('grad-before') as HTMLSelectElement;
+    await autofill();
+    expect(field.value).toBe('');
+    click('Show all fields');
+    click(/^Will you graduate before October 2027/);
+
+    const use = [
+      ...(rowOf(/^Will you graduate before October 2027/)?.querySelectorAll(
+        'button',
+      ) ?? []),
+    ].find((b) => b.textContent.trim() === 'Use this answer');
+    act(() => {
+      use?.click();
+    });
+    await settle();
+
+    expect(field.value).toBe('y');
+    expect(
+      (document.getElementById('grad-by') as HTMLSelectElement).value,
+    ).toBe('');
+  });
+
+  it('links a degree question with no matching degree to the profile', () => {
+    click('Show all fields');
+    click(/^Will you have completed your master/);
+
+    expect(findButton(/Edit your profile$/)).toBeDefined();
+    expect(findButton('Edit application answers')).toBeUndefined();
+  });
+});
+
 describe('missing profile details', () => {
   it('links to the profile editor', async () => {
     const values = sampleValues();

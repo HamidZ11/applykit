@@ -1,5 +1,6 @@
 import type { Evidence } from './detect';
 import { homeNames, planAnswer } from './answers';
+import { planGraduation } from './graduation';
 import {
   AUTOFILL_FIELD_LABEL,
   type AnswerField,
@@ -286,13 +287,15 @@ function planField(
   if (isAnswerField(support.field)) {
     return planSuggestion(
       matched,
-      planAnswer(
-        field,
-        support.field,
-        context.values.answers,
-        context.now,
-        homeNames(context.values),
-      ),
+      support.field === 'graduation'
+        ? planGraduation(field, context.values.education, context.now)
+        : planAnswer(
+            field,
+            support.field,
+            context.values.answers,
+            context.now,
+            homeNames(context.values),
+          ),
     );
   }
 
@@ -357,7 +360,7 @@ function planSuggestion(
     status: 'suggest',
     value: plan.display,
     fillValue: plan.fillValue,
-    note: 'From your saved application answers.',
+    note: plan.basis ?? 'From your saved application answers.',
   };
 }
 

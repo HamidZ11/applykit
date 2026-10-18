@@ -61,6 +61,8 @@ export const ANSWER_FIELDS = [
   'workArrangement',
   'startDate',
   'salaryExpectation',
+  // Derived from saved education rather than saved answers (ADR 0017).
+  'graduation',
 ] as const;
 
 export type AnswerField = (typeof ANSWER_FIELDS)[number];
@@ -113,6 +115,7 @@ export const AUTOFILL_FIELD_LABEL: Record<AutofillField, string> = {
   workArrangement: 'Working arrangement',
   startDate: 'Earliest start date',
   salaryExpectation: 'Salary expectation',
+  graduation: 'Graduation timing',
 };
 
 export function isEducationField(
