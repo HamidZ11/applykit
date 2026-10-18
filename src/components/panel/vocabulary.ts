@@ -1,5 +1,5 @@
 import { describeEvidence } from '@/autofill/detect';
-import { AUTOFILL_FIELD_LABEL } from '@/autofill/fields';
+import { AUTOFILL_FIELD_LABEL, isDiversityField } from '@/autofill/fields';
 import type { FieldReport, FieldStatus } from '@/autofill/report';
 import type { FieldKind, ScannedField } from '@/autofill/scan';
 
@@ -47,6 +47,15 @@ export function explain(report: FieldReport): string {
   const target = report.target
     ? AUTOFILL_FIELD_LABEL[report.target].toLowerCase()
     : 'value';
+  // Monitoring answers are never named in the panel.
+  if (report.target !== null && isDiversityField(report.target)) {
+    if (report.status === 'fill') {
+      return 'When you autofill, ApplyKit fills this from your saved diversity preferences if one of the choices says the same as your answer.';
+    }
+    if (report.status === 'filled' || report.status === 'reformatted') {
+      return 'Filled from your saved diversity preferences. The site accepted it.';
+    }
+  }
   switch (report.status) {
     case 'fill':
       return withNote(`ApplyKit will fill this with your ${target}.`, report);

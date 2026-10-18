@@ -1,5 +1,9 @@
 import { TEXT_FIELDS, type AutofillValues } from '@/autofill/fields';
 import {
+  DIVERSITY_CATEGORIES,
+  type DiversityCategory,
+} from '@/domain/diversity';
+import {
   CURRENCIES,
   NOTICE_UNITS,
   SALARY_PERIODS,
@@ -133,11 +137,12 @@ export function isAutofillValuesResponse(
   ) {
     return false;
   }
-  const { phone, education, employment, answers } = values as {
+  const { phone, education, employment, answers, diversity } = values as {
     phone?: unknown;
     education?: unknown;
     employment?: unknown;
     answers?: unknown;
+    diversity?: unknown;
   };
   return (
     isCountry(country) &&
@@ -146,7 +151,8 @@ export function isAutofillValuesResponse(
     education.every(isEducation) &&
     Array.isArray(employment) &&
     employment.every(isEmployment) &&
-    isAnswers(answers)
+    isAnswers(answers) &&
+    isDiversityStatus(diversity)
   );
 }
 
@@ -185,6 +191,20 @@ function isEmployment(record: unknown): boolean {
   return (
     EMPLOYMENT_TEXT.every((key) => typeof r[key] === 'string') &&
     typeof r.current === 'boolean'
+  );
+}
+
+/** Reuse and saved categories only; never an answer. */
+function isDiversityStatus(value: unknown): boolean {
+  if (value === null) return true;
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value).sort().join(',');
+  return (
+    keys === 'reuse,saved' &&
+    typeof value.reuse === 'boolean' &&
+    Array.isArray(value.saved) &&
+    value.saved.every((c) => oneOf(DIVERSITY_CATEGORIES, c)) &&
+    (value.reuse || value.saved.length === 0)
   );
 }
 
@@ -250,5 +270,82 @@ function isPhone(phone: unknown): boolean {
     typeof p.nationalNumber === 'string' &&
     /^\d{2,17}$/.test(p.nationalNumber) &&
     isStringArray(p.regionNames)
+  );
+}
+
+/**
+ * Asks the background which option of each monitoring question says the
+ * user's saved answer (ADR 0018). The panel sends only the category and
+ * the page's own options; the reply names one of those options, or why
+ * none. Saved answers never leave the background.
+ */
+export interface DiversityRequest {
+  category: DiversityCategory;
+  options: { value: string; text: string }[];
+}
+
+export interface ResolveDiversityMessage {
+  type: 'applykit:resolve-diversity';
+  requests: DiversityRequest[];
+}
+
+export type DiversityResult =
+  | { value: string }
+  /** Reuse is off, nothing is saved for it, or no option says it. */
+  | { reason: 'reuse-off' | 'not-saved' | 'no-option' };
+
+export interface ResolveDiversityResponse {
+  results: DiversityResult[];
+}
+
+export const RESOLVE_DIVERSITY_TYPE = 'applykit:resolve-diversity';
+
+const MAX_REQUESTS = 20;
+const MAX_OPTIONS = 400;
+const MAX_TEXT = 300;
+
+const isOptionList = (options: unknown): boolean =>
+  Array.isArray(options) &&
+  options.length <= MAX_OPTIONS &&
+  options.every(
+    (o) =>
+      isRecord(o) &&
+      typeof o.value === 'string' &&
+      typeof o.text === 'string' &&
+      o.value.length <= MAX_TEXT &&
+      o.text.length <= MAX_TEXT,
+  );
+
+export function isResolveDiversityMessage(
+  message: unknown,
+): message is ResolveDiversityMessage {
+  if (!hasType(message, RESOLVE_DIVERSITY_TYPE)) return false;
+  const { requests } = message as { requests?: unknown };
+  return (
+    Array.isArray(requests) &&
+    requests.length > 0 &&
+    requests.length <= MAX_REQUESTS &&
+    requests.every(
+      (r) =>
+        isRecord(r) &&
+        oneOf(DIVERSITY_CATEGORIES, r.category) &&
+        isOptionList(r.options),
+    )
+  );
+}
+
+export function isResolveDiversityResponse(
+  value: unknown,
+  expected: number,
+): value is ResolveDiversityResponse {
+  if (!isRecord(value) || !Array.isArray(value.results)) return false;
+  return (
+    value.results.length === expected &&
+    value.results.every(
+      (r) =>
+        isRecord(r) &&
+        (typeof r.value === 'string' ||
+          oneOf(['reuse-off', 'not-saved', 'no-option'], r.reason)),
+    )
   );
 }

@@ -80,6 +80,11 @@ const BY_TARGET: Record<AutofillField, FieldCategory> = {
   startDate: 'questions',
   salaryExpectation: 'questions',
   graduation: 'questions',
+  diversityGender: 'sensitive',
+  diversityEthnicity: 'sensitive',
+  diversityDisability: 'sensitive',
+  diversityReligion: 'sensitive',
+  diversitySexualOrientation: 'sensitive',
 };
 
 /** Equality, diversity and social-mobility questions. */

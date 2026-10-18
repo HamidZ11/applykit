@@ -47,6 +47,7 @@ describe('autofillValuesFrom', () => {
         startDate: null,
         salary: null,
       },
+      diversity: { reuse: false, saved: [] },
     });
   });
 
@@ -154,6 +155,7 @@ describe('autofillValuesFrom', () => {
       'education',
       'employment',
       'answers',
+      'diversity',
     ]);
   });
 });

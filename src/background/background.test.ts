@@ -6,7 +6,9 @@ import {
   GET_PANEL_SETTINGS,
   OPEN_PROFILE,
 } from '@/messages';
+import { browserDiversityStore } from '@/storage/diversity-store';
 import { browserSettingsStore } from '@/storage/settings-store';
+import { savedDiversity } from '@/test/diversity-fixtures';
 import { browserProfileStore } from '@/storage/profile-store';
 import { fullProfile } from '@/test/autofill-fixtures';
 import background from '@/entrypoints/background';
@@ -127,6 +129,95 @@ describe('background messages', () => {
     await browserSettingsStore.saveDiagnostics(true);
     expect(await send(GET_PANEL_SETTINGS)).toEqual({ diagnostics: true });
     expect(await send(GET_PANEL_SETTINGS, 'another-extension')).toBeUndefined();
+  });
+
+  describe('saved diversity answers', () => {
+    const resolve = {
+      type: 'applykit:resolve-diversity',
+      requests: [
+        {
+          category: 'disability',
+          options: [
+            { value: 'y', text: 'Yes' },
+            { value: 'n', text: 'No' },
+          ],
+        },
+      ],
+    };
+
+    it('sends the panel only reuse and saved categories, never answers', async () => {
+      await browserProfileStore.save(fullProfile(), null);
+      await browserDiversityStore.save(
+        savedDiversity(),
+        null,
+        new Date('2026-10-18T12:00:00.000Z'),
+      );
+
+      const reply = JSON.stringify(await send(GET_AUTOFILL_VALUES));
+
+      expect(reply).toContain('"diversity":{"reuse":true,"saved":');
+      for (const answer of ['non-binary', 'other-mixed', 'prefer-not-to-say']) {
+        expect(reply).not.toContain(answer);
+      }
+    });
+
+    it('lists no categories while reuse is off', async () => {
+      await browserProfileStore.save(fullProfile(), null);
+      await browserDiversityStore.save(
+        { ...savedDiversity(), reuse: false },
+        null,
+        new Date('2026-10-18T12:00:00.000Z'),
+      );
+
+      expect(await send(GET_AUTOFILL_VALUES)).toMatchObject({
+        values: { diversity: { reuse: false, saved: [] } },
+      });
+    });
+
+    it('names the option that says the saved answer, only with reuse on', async () => {
+      expect(await send(resolve)).toEqual({
+        results: [{ reason: 'reuse-off' }],
+      });
+
+      await browserDiversityStore.save(
+        savedDiversity(),
+        null,
+        new Date('2026-10-18T12:00:00.000Z'),
+      );
+      expect(await send(resolve)).toEqual({ results: [{ value: 'n' }] });
+    });
+
+    it('answers only ApplyKit in a tab’s top frame', async () => {
+      await browserDiversityStore.save(
+        savedDiversity(),
+        null,
+        new Date('2026-10-18T12:00:00.000Z'),
+      );
+
+      expect(await send(resolve, 'another-extension')).toBeUndefined();
+      expect(
+        await send(resolve, fakeBrowser.runtime.id, {
+          tab: { id: 7 },
+          frameId: 2,
+        }),
+      ).toBeUndefined();
+    });
+
+    it('ignores malformed requests', async () => {
+      for (const message of [
+        { type: 'applykit:resolve-diversity', requests: [] },
+        {
+          type: 'applykit:resolve-diversity',
+          requests: [{ category: 'age', options: [] }],
+        },
+        {
+          type: 'applykit:resolve-diversity',
+          requests: [{ category: 'gender', options: 'Woman' }],
+        },
+      ]) {
+        expect(await send(message)).toBeUndefined();
+      }
+    });
   });
 
   it('ignores unknown messages', async () => {

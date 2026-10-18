@@ -8,6 +8,7 @@ import {
 } from '@/domain/application-answers';
 import { isNewerAnswers, parseStoredAnswers } from '@/domain/answers-schema';
 import { ANSWERS_BACKUP_KEY, ANSWERS_KEY } from './keys';
+import { keepBackup, keepingUnknown } from './backups';
 import { withLock } from './lock';
 
 /**
@@ -109,11 +110,11 @@ export const browserAnswersStore: AnswersStore = {
         if (read && read.saved.updatedAt !== basedOn) return read;
         if (existing !== null && (read === null || read.damaged.length > 0)) {
           // Never silently discard data we could not read.
-          await keepBackup(existing, now);
+          await keepBackup(ANSWERS_BACKUP_KEY, existing, now);
         }
         await storage.setItem(
           ANSWERS_KEY,
-          read ? keepingUnknown(existing, saved) : saved,
+          read ? keepingUnknown(existing, saved, 'answers') : saved,
         );
         return null;
       });
@@ -131,47 +132,3 @@ export const browserAnswersStore: AnswersStore = {
     return { status: 'saved', saved };
   },
 };
-
-/**
- * The new answers, with anything this version does not know (fields of
- * the stored object, categories in its answers) kept as it was.
- */
-function keepingUnknown(existing: unknown, saved: SavedAnswers): unknown {
-  const stored = existing as Record<string, unknown>;
-  const answers = stored.answers as Record<string, unknown>;
-  return {
-    ...stored,
-    ...saved,
-    answers: { ...answers, ...saved.answers },
-  };
-}
-
-interface Backup {
-  /** When it was backed up; null for a backup kept by an earlier format. */
-  backedUpAt: string | null;
-  data: unknown;
-}
-
-function isBackup(value: unknown): value is Backup {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'backedUpAt' in value &&
-    'data' in value
-  );
-}
-
-/** Adds a copy of unreadable data to the backups, keeping every earlier one. */
-async function keepBackup(data: unknown, now: Date): Promise<void> {
-  const current = await storage.getItem<unknown>(ANSWERS_BACKUP_KEY);
-  const backups: Backup[] =
-    current === null
-      ? []
-      : Array.isArray(current) && current.every(isBackup)
-        ? current
-        : [{ backedUpAt: null, data: current }];
-  await storage.setItem(ANSWERS_BACKUP_KEY, [
-    ...backups,
-    { backedUpAt: now.toISOString(), data },
-  ]);
-}

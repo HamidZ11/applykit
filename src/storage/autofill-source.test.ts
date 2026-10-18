@@ -5,6 +5,7 @@ import { fullProfile } from '@/test/autofill-fixtures';
 import { validDraft } from '@/test/profile-fixtures';
 import { loadAutofillValues } from './autofill-source';
 import { browserAnswersStore } from './answers-store';
+import { browserDiversityStore } from './diversity-store';
 import { browserProfileStore } from './profile-store';
 
 beforeEach(() => {
@@ -18,6 +19,7 @@ describe('loadAutofillValues', () => {
     const response = await loadAutofillValues(
       browserProfileStore,
       browserAnswersStore,
+      browserDiversityStore,
     );
 
     expect(response.status).toBe('ready');
@@ -28,7 +30,11 @@ describe('loadAutofillValues', () => {
 
   it('reports a missing profile instead of using any other data', async () => {
     expect(
-      await loadAutofillValues(browserProfileStore, browserAnswersStore),
+      await loadAutofillValues(
+        browserProfileStore,
+        browserAnswersStore,
+        browserDiversityStore,
+      ),
     ).toEqual({
       status: 'missing',
     });
@@ -47,7 +53,11 @@ describe('loadAutofillValues', () => {
     });
 
     expect(
-      await loadAutofillValues(browserProfileStore, browserAnswersStore),
+      await loadAutofillValues(
+        browserProfileStore,
+        browserAnswersStore,
+        browserDiversityStore,
+      ),
     ).toEqual({
       status: 'missing',
     });
@@ -69,6 +79,7 @@ describe('loadAutofillValues', () => {
     const response = await loadAutofillValues(
       browserProfileStore,
       browserAnswersStore,
+      browserDiversityStore,
     );
 
     expect(response).toMatchObject({
@@ -83,7 +94,11 @@ describe('loadAutofillValues', () => {
     });
 
     expect(
-      await loadAutofillValues(browserProfileStore, browserAnswersStore),
+      await loadAutofillValues(
+        browserProfileStore,
+        browserAnswersStore,
+        browserDiversityStore,
+      ),
     ).toEqual({
       status: 'invalid',
     });
@@ -95,7 +110,11 @@ describe('loadAutofillValues', () => {
     );
 
     expect(
-      await loadAutofillValues(browserProfileStore, browserAnswersStore),
+      await loadAutofillValues(
+        browserProfileStore,
+        browserAnswersStore,
+        browserDiversityStore,
+      ),
     ).toEqual({
       status: 'error',
     });
@@ -103,13 +122,21 @@ describe('loadAutofillValues', () => {
 
   it('reads the latest saved profile on every request', async () => {
     await browserProfileStore.save(fullProfile(), null);
-    await loadAutofillValues(browserProfileStore, browserAnswersStore);
+    await loadAutofillValues(
+      browserProfileStore,
+      browserAnswersStore,
+      browserDiversityStore,
+    );
     const updated = fullProfile('2026-11-01T09:00:00.000Z');
     updated.personal.email = 'alex.updated@example.com';
     await browserProfileStore.save(updated, '2026-10-17T12:00:00.000Z');
 
     expect(
-      await loadAutofillValues(browserProfileStore, browserAnswersStore),
+      await loadAutofillValues(
+        browserProfileStore,
+        browserAnswersStore,
+        browserDiversityStore,
+      ),
     ).toMatchObject({
       values: { text: { email: 'alex.updated@example.com' } },
     });

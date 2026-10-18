@@ -1,4 +1,9 @@
-import { isAnswerField, isRecordField, type AutofillField } from './fields';
+import {
+  isAnswerField,
+  isDiversityField,
+  isRecordField,
+  type AutofillField,
+} from './fields';
 import {
   controlContext,
   detectControl,
@@ -127,6 +132,11 @@ const TEXT_INPUT_TYPES = new Set(['text', 'email', 'tel', 'url', 'search']);
 
 /** Fields a native select may be filled for, by exact option match. */
 const SELECT_FIELDS = new Set<AutofillField>([
+  'diversityGender',
+  'diversityEthnicity',
+  'diversityDisability',
+  'diversityReligion',
+  'diversitySexualOrientation',
   'country',
   'phoneCountryCode',
   'institution',
@@ -483,9 +493,16 @@ function supportOf(element: FieldElement): FieldSupport {
   // scripts; typing into them would not select anything. Checkboxes and
   // radio buttons are only guided: many sites register them only from a
   // real click.
+  // Monitoring questions are written only into a native list allowing one
+  // choice (ADR 0018); as text, several choices, boxes or buttons they are
+  // guided.
+  const monitoring =
+    detection.kind === 'match' && isDiversityField(detection.field);
   if (
     !isFormControl(element) ||
     isCustomDropdown(element) ||
+    (monitoring &&
+      !(element instanceof HTMLSelectElement && !element.multiple)) ||
     (detection.kind === 'match' &&
       (detection.field === 'currentlyEmployed' ||
         // Radio groups are never answered, only guided.

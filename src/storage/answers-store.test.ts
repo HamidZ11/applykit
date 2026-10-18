@@ -4,6 +4,7 @@ import { emptyAnswers } from '@/domain/application-answers';
 import { savedAnswers } from '@/test/answer-fixtures';
 import { validProfile } from '@/test/profile-fixtures';
 import { browserAnswersStore } from './answers-store';
+import { browserDiversityStore } from './diversity-store';
 import { loadAutofillValues } from './autofill-source';
 import { browserProfileStore } from './profile-store';
 
@@ -191,6 +192,7 @@ describe('answers from a newer ApplyKit', () => {
     const response = await loadAutofillValues(
       browserProfileStore,
       browserAnswersStore,
+      browserDiversityStore,
     );
 
     expect(response).toMatchObject({

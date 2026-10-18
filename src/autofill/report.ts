@@ -5,7 +5,11 @@ import {
   AUTOFILL_FIELD_LABEL,
   type AnswerField,
   type AutofillField,
+  type DiversityField,
+  type DiversityStatus,
+  DIVERSITY_CATEGORY,
   isAnswerField,
+  isDiversityField,
   isEducationField,
   isEmploymentField,
   type AutofillValues,
@@ -221,6 +225,17 @@ function planField(
     case 'unrecognised':
       return { ...base, status: 'unrecognised', reason: REASON.unrecognised };
     case 'unsupported':
+      if (support.custom?.field && isDiversityField(support.custom.field)) {
+        // Guided without the saved answer: it is read only to fill a list.
+        return {
+          ...base,
+          status: 'unsupported',
+          target: support.custom.field,
+          evidence: support.custom.evidence,
+          reason:
+            'ApplyKit fills these questions only when they are a list on the page. Choose your answer yourself.',
+        };
+      }
       if (support.custom) {
         const target = support.custom.field;
         return {
@@ -284,6 +299,9 @@ function planField(
     };
   }
 
+  if (isDiversityField(support.field)) {
+    return planDiversity(matched, support.field, context.values.diversity);
+  }
   if (isAnswerField(support.field)) {
     return planSuggestion(
       matched,
@@ -335,6 +353,48 @@ function planField(
 }
 
 /**
+ * An equal-opportunities question (ADR 0018). Filled only when the user
+ * turned on reuse and saved an answer for it; the option to choose is
+ * worked out by the background when autofill runs (`fillValue` stays null
+ * until then), so the saved answer is never in the page's process before.
+ */
+function planDiversity(
+  matched: Omit<FieldReport, 'status'>,
+  target: DiversityField,
+  diversity: DiversityStatus | null,
+): FieldReport {
+  if (!diversity) {
+    return {
+      ...matched,
+      status: 'manual',
+      reason:
+        'Your saved diversity answers could not be read, so ApplyKit leaves this to you.',
+    };
+  }
+  if (!diversity.reuse) {
+    return {
+      ...matched,
+      status: 'manual',
+      reason:
+        'Reuse of your saved diversity answers is off, so ApplyKit leaves this to you.',
+    };
+  }
+  if (!diversity.saved.includes(DIVERSITY_CATEGORY[target])) {
+    return {
+      ...matched,
+      status: 'no-value',
+      reason: 'You have not saved an answer to this question.',
+    };
+  }
+  return {
+    ...matched,
+    status: 'fill',
+    fillValue: null,
+    note: 'From your saved diversity preferences.',
+  };
+}
+
+/**
  * A saved answer, offered for the user to confirm: never `fill`, so
  * autofill never writes it.
  */
@@ -366,7 +426,7 @@ function planSuggestion(
 
 function planValue(
   field: ControlField,
-  target: Exclude<AutofillField, AnswerField>,
+  target: Exclude<AutofillField, AnswerField | DiversityField>,
   { values, splitPhone, education, employment, now }: FormContext,
 ): Planned {
   if (isEmploymentField(target)) {

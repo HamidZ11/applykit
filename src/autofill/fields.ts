@@ -1,4 +1,5 @@
 import type { ApplicationAnswers } from '@/domain/application-answers';
+import type { DiversityCategory } from '@/domain/diversity';
 import type { EducationLevel } from './education';
 
 /**
@@ -67,6 +68,36 @@ export const ANSWER_FIELDS = [
 
 export type AnswerField = (typeof ANSWER_FIELDS)[number];
 
+/**
+ * Equal-opportunities monitoring questions, filled only when the user
+ * turned on reuse of their saved diversity answers (ADR 0018).
+ */
+export const DIVERSITY_FIELDS = [
+  'diversityGender',
+  'diversityEthnicity',
+  'diversityDisability',
+  'diversityReligion',
+  'diversitySexualOrientation',
+] as const;
+
+export type DiversityField = (typeof DIVERSITY_FIELDS)[number];
+
+export const DIVERSITY_CATEGORY: Record<DiversityField, DiversityCategory> = {
+  diversityGender: 'gender',
+  diversityEthnicity: 'ethnicity',
+  diversityDisability: 'disability',
+  diversityReligion: 'religion',
+  diversitySexualOrientation: 'sexualOrientation',
+};
+
+export const DIVERSITY_FIELD: Record<DiversityCategory, DiversityField> = {
+  gender: 'diversityGender',
+  ethnicity: 'diversityEthnicity',
+  disability: 'diversityDisability',
+  religion: 'diversityReligion',
+  sexualOrientation: 'diversitySexualOrientation',
+};
+
 export const AUTOFILL_FIELDS = [
   ...TEXT_FIELDS,
   'country',
@@ -75,6 +106,7 @@ export const AUTOFILL_FIELDS = [
   ...EDUCATION_FIELDS,
   ...EMPLOYMENT_FIELDS,
   ...ANSWER_FIELDS,
+  ...DIVERSITY_FIELDS,
 ] as const;
 
 export type AutofillField = (typeof AUTOFILL_FIELDS)[number];
@@ -116,6 +148,11 @@ export const AUTOFILL_FIELD_LABEL: Record<AutofillField, string> = {
   startDate: 'Earliest start date',
   salaryExpectation: 'Salary expectation',
   graduation: 'Graduation timing',
+  diversityGender: 'Gender',
+  diversityEthnicity: 'Ethnic group',
+  diversityDisability: 'Disability',
+  diversityReligion: 'Religion or belief',
+  diversitySexualOrientation: 'Sexual orientation',
 };
 
 export function isEducationField(
@@ -128,6 +165,12 @@ export function isEmploymentField(
   field: AutofillField,
 ): field is EmploymentField {
   return (EMPLOYMENT_FIELDS as readonly string[]).includes(field);
+}
+
+export function isDiversityField(
+  field: AutofillField,
+): field is DiversityField {
+  return (DIVERSITY_FIELDS as readonly string[]).includes(field);
 }
 
 export function isAnswerField(field: AutofillField): field is AnswerField {
@@ -231,4 +274,16 @@ export interface AutofillValues {
    * without the user's confirmation. Null when they could not be read.
    */
   answers: ApplicationAnswers | null;
+  /**
+   * Whether the user turned on reuse of their diversity answers, and for
+   * which categories an answer is saved: never the answers themselves,
+   * which only the background reads, when a form is filled. No categories
+   * are listed while reuse is off. Null when they could not be read.
+   */
+  diversity: DiversityStatus | null;
+}
+
+export interface DiversityStatus {
+  reuse: boolean;
+  saved: DiversityCategory[];
 }

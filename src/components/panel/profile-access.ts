@@ -3,10 +3,14 @@ import {
   GET_AUTOFILL_VALUES,
   GET_PANEL_SETTINGS,
   OPEN_PROFILE,
+  RESOLVE_DIVERSITY_TYPE,
   isAutofillValuesResponse,
+  isResolveDiversityResponse,
   isOpenProfileResponse,
   isPanelSettings,
   type AutofillValuesResponse,
+  type DiversityRequest,
+  type ResolveDiversityResponse,
   type PanelSettings,
 } from '@/messages';
 
@@ -22,6 +26,26 @@ export async function requestAutofillValues(): Promise<AutofillValuesResponse> {
     return isAutofillValuesResponse(response) ? response : { status: 'error' };
   } catch {
     return { status: 'error' };
+  }
+}
+
+/**
+ * Which option of each monitoring question to choose, from the background,
+ * which alone reads the saved answers. Null when there is no valid reply.
+ */
+export async function requestDiversityChoices(
+  requests: DiversityRequest[],
+): Promise<ResolveDiversityResponse | null> {
+  try {
+    const response: unknown = await browser.runtime.sendMessage({
+      type: RESOLVE_DIVERSITY_TYPE,
+      requests,
+    });
+    return isResolveDiversityResponse(response, requests.length)
+      ? response
+      : null;
+  } catch {
+    return null;
   }
 }
 

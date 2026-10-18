@@ -95,10 +95,12 @@ describe('guidance for custom dropdowns', () => {
   });
 
   it('never offers guidance for sensitive or unrecognised questions', () => {
+    // A monitoring question in a custom dropdown: guided without its value.
     expect(report('gender')).toMatchObject({
-      status: 'manual',
+      status: 'unsupported',
       suggestion: null,
-      target: null,
+      target: 'diversityGender',
+      fillValue: null,
     });
     expect(report('start-month').suggestion).toBeNull();
   });

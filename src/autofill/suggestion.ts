@@ -2,6 +2,7 @@ import { parseYearMonth, currentMonthIndex, monthIndex } from './dates';
 import { PREDICTED } from './education';
 import {
   isAnswerField,
+  isDiversityField,
   isEducationField,
   isEmploymentField,
   type AutofillField,
@@ -51,6 +52,14 @@ export function suggestionFor(
   target: AutofillField,
   { values, education, employment, now }: SuggestionContext,
 ): Suggestion {
+  // Never reached for monitoring questions (report.ts guides them without
+  // their value); kept explicit so no saved value is ever looked up here.
+  if (isDiversityField(target)) {
+    return {
+      kind: 'unsuitable',
+      reason: 'Choose your answer yourself on this page.',
+    };
+  }
   if (isAnswerField(target)) {
     const plan =
       target === 'graduation'

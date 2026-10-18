@@ -1,13 +1,17 @@
+import type { DiversityCategory } from '@/domain/diversity';
 import { readGraduationQuestion } from './graduation-question';
 import {
   isAnswerField,
   isEducationField,
   isEmploymentField,
   type AnswerField,
+  DIVERSITY_FIELD,
   type AutofillField,
+  type DiversityField,
   type EducationField,
   type EmploymentField,
 } from './fields';
+import { diversityQuestion } from './diversity';
 
 /**
  * Field detection: decides what a form control asks for, with the evidence,
@@ -120,7 +124,10 @@ const AUTOCOMPLETE_NOT_PERSONAL = new Set(['work', 'fax', 'pager']);
  * spaces). Anchored patterns only match a whole label or attribute.
  */
 const TEXT_RULES: Record<
-  Exclude<AutofillField, EducationField | EmploymentField | AnswerField>,
+  Exclude<
+    AutofillField,
+    EducationField | EmploymentField | AnswerField | DiversityField
+  >,
   RegExp[]
 > = {
   fullName: [
@@ -554,7 +561,7 @@ function excluded(field: AutofillField, text: string): boolean {
 
 /** Never answered automatically. */
 const SENSITIVE =
-  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|pay|wage|disabilit\w*|disabled|gender|sex|ethnic\w*|race|religio\w*|belief|sexual\w*|orientation|age|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|origin|native|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*|authori[sz]ation|authori[sz]ed to work|eligib\w* to work|entitle\w* to work|permission to work|work eligibility|immigration)\b/;
+  /\b(?:reasonable adjustments?|access requirements?|right to work|work permit|visa|sponsor\w*|salary|compensation|pay|wage|disabilit\w*|disabled|gender|sex|ethnic\w*|race|religio\w*|belief|sexual\w*|orientation|age|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|origin|native|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*|authori[sz]ation|authori[sz]ed to work|eligib\w* to work|entitle\w* to work|permission to work|work eligibility|immigration)\b/;
 
 /**
  * The same, for technical `name` and `id` attributes of a labelled control.
@@ -563,7 +570,7 @@ const SENSITIVE =
  * appear in wording people read, or when the control has no label at all.
  */
 const SENSITIVE_IDENTIFIER =
-  /\b(?:right to work|work permit|visa|sponsor\w*|salary|compensation|disabilit\w*|disabled|gender|ethnic\w*|religio\w*|sexual\w*|orientation|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*|authori[sz]ation|authori[sz]ed to work|eligib\w* to work|entitle\w* to work|permission to work|work eligibility|immigration)\b/;
+  /\b(?:reasonable adjustments?|access requirements?|right to work|work permit|visa|sponsor\w*|salary|compensation|disabilit\w*|disabled|gender|ethnic\w*|religio\w*|sexual\w*|orientation|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*|authori[sz]ation|authori[sz]ed to work|eligib\w* to work|entitle\w* to work|permission to work|work eligibility|immigration)\b/;
 const CONSENT =
   /\b(?:consent|agree\w*|declar\w*|terms|privacy|acknowledg\w*|certify|newsletter|marketing|subscribe|opt in|signature|signed|sign here)\b/;
 const VERIFICATION = /captcha|turnstile|g-recaptcha/i;
@@ -652,6 +659,18 @@ export function detectControl(control: DetectableControl): Detection {
   const hasLabel = texts.some((t) => t.signal === 'label');
   // The question people read: labels, and a radio group's legend.
   const questions = questionTexts(control, texts);
+  // A supported equal-opportunities question, asked of the applicant in a
+  // section that is not a declaration or about someone else, is matched so
+  // that a user who turned on reuse can have it filled (ADR 0018). Every
+  // other sensitive question stays the user's alone.
+  const monitoring = monitoringQuestion(questions, `${context} ${heading}`);
+  if (monitoring) {
+    return {
+      kind: 'match',
+      field: DIVERSITY_FIELD[monitoring.category],
+      evidence: [{ signal: monitoring.signal, text: monitoring.raw }],
+    };
+  }
   // Asking what someone expects to earn is not sensitive in itself; any
   // other sensitive wording, or asking what they earn, still is.
   const salaryQuestion =
@@ -895,6 +914,34 @@ function matchEducation(text: string, inEducation: boolean): EducationField[] {
     matches.push(field);
   }
   return matches;
+}
+
+/** Sections about someone else, where "Gender" is not the applicant's. */
+const SOMEONE_ELSE =
+  /\b(?:references?|referees?|emergency|next of kin|guardian|parents?|spouse|partner|children|child|dependants?|dependents?|family|relatives?|contact person)\b/;
+
+/**
+ * The one supported monitoring question the control's question asks, if
+ * its whole wording is one, from a label or legend (never a placeholder or
+ * a technical name), outside declarations and other people's sections.
+ */
+function monitoringQuestion(
+  questions: { signal: Signal; raw: string; core: string }[],
+  surroundings: string,
+): { category: DiversityCategory; signal: Signal; raw: string } | null {
+  if (CONSENT.test(surroundings) || SOMEONE_ELSE.test(surroundings)) {
+    return null;
+  }
+  const found = questions
+    .filter((q) => q.signal === 'label')
+    .flatMap((q) => {
+      const category = diversityQuestion(q.core);
+      return category ? [{ category, signal: q.signal, raw: q.raw }] : [];
+    });
+  const [first] = found;
+  return first && found.every((f) => f.category === first.category)
+    ? first
+    : null;
 }
 
 /**

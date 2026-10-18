@@ -1,6 +1,8 @@
 import { autofillValuesFrom } from '@/autofill/profile-values';
 import type { AutofillValuesResponse } from '@/messages';
 import type { AnswersStore } from './answers-store';
+import { loadDiversityStatus } from './diversity-source';
+import type { DiversityStore } from './diversity-store';
 import type { ProfileStore } from './profile-store';
 
 /**
@@ -13,10 +15,12 @@ import type { ProfileStore } from './profile-store';
 export async function loadAutofillValues(
   store: Pick<ProfileStore, 'load'>,
   answersStore: Pick<AnswersStore, 'load'>,
+  diversityStore: Pick<DiversityStore, 'load'>,
 ): Promise<AutofillValuesResponse> {
-  const [result, saved] = await Promise.all([
+  const [result, saved, diversity] = await Promise.all([
     store.load(),
     answersStore.load(),
+    loadDiversityStatus(diversityStore),
   ]);
   switch (result.status) {
     case 'loaded':
@@ -27,6 +31,7 @@ export async function loadAutofillValues(
           saved.status === 'loaded' && saved.damaged !== 'all'
             ? saved.answers
             : null,
+          diversity,
         ),
       };
     case 'empty':

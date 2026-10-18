@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Housing Officer · Example Meridian Housing Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional UK application with an equal opportunities monitoring
+      section. Ethnic group and sexual orientation are lists ApplyKit can
+      fill when the user turned on reuse; the gender list offers Male and
+      Female (sex, not gender identity), so it does not fit; religion is
+      already answered; disability is radio buttons, gender identity a
+      custom dropdown and ethnic background a multiple-choice list, all
+      guided. Legal sex, sex registered at birth, a long-term health
+      condition, reasonable adjustments, right to work, visa sponsorship,
+      consent and a declaration are never answered. Every name is
+      invented. Used by unit tests and manual testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #1d4f91;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 19px;
+        margin: 32px 0 0;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+      }
+      h3 {
+        font-size: 15px;
+        margin: 20px 0 0;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      section {
+        margin-top: 8px;
+        padding: 4px 16px 16px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 16px;
+      }
+      label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      .req {
+        color: #cf222e;
+      }
+      input:not([type='checkbox'], [type='radio']),
+      select,
+      textarea,
+      .combo {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      input:disabled {
+        background: #f6f8fa;
+        color: var(--muted);
+      }
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+      .choice {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 400;
+        margin-top: 10px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 4px 0 0;
+      }
+      [role='listbox'] {
+        margin: 4px 0 0;
+        padding: 4px 0;
+        list-style: none;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      [role='option'] {
+        padding: 4px 10px;
+      }
+      button.link {
+        margin: 6px 0 0;
+        padding: 0;
+        color: var(--brand);
+        background: none;
+        font-weight: 500;
+      }
+      button {
+        margin-top: 28px;
+        padding: 10px 18px;
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--brand);
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      output {
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar"><span class="logo"></span>Example Meridian Housing</div>
+    </header>
+    <main>
+      <h1>Housing Officer</h1>
+      <p class="meta">Sheffield · Full-time · Closing 12 December</p>
+
+      <form id="application" action="/submitted" method="post">
+        <h2>Your details</h2>
+        <div class="row">
+          <div>
+            <label for="first">First name <span class="req">*</span></label>
+            <input id="first" name="firstName" required />
+          </div>
+          <div>
+            <label for="last">Last name <span class="req">*</span></label>
+            <input id="last" name="lastName" required />
+          </div>
+        </div>
+        <label for="email">Email address</label>
+        <input id="email" name="email" type="email" />
+
+        <fieldset>
+          <legend>Eligibility to work</legend>
+          <fieldset>
+            <legend>Do you have the right to work in the UK?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="rtw-yes"
+                name="rightToWork"
+                value="yes"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" name="rightToWork" value="no" /> No</label
+            >
+          </fieldset>
+          <label for="sponsorship"
+            >Will you now or in the future require visa sponsorship?</label
+          >
+          <select id="sponsorship" name="sponsorship">
+            <option value="">Select…</option>
+            <option>Yes</option>
+            <option>No</option>
+          </select>
+        </fieldset>
+
+        <fieldset>
+          <legend>Interview arrangements</legend>
+          <label for="adjustments"
+            >Do you require any reasonable adjustments?</label
+          >
+          <textarea id="adjustments" name="adjustments"></textarea>
+        </fieldset>
+
+        <fieldset>
+          <legend>Equal opportunities monitoring</legend>
+          <p class="hint">
+            Optional. Used only to monitor our recruitment; it is kept
+            separately from your application and never seen by the panel.
+          </p>
+          <label for="ethnicity">What is your ethnic group?</label>
+          <select id="ethnicity" name="ethnicity">
+            <option value="">Select…</option>
+            <option value="e1">Asian or Asian British - Indian</option>
+            <option value="e2">Asian or Asian British - Pakistani</option>
+            <option value="e3">Asian or Asian British - Bangladeshi</option>
+            <option value="e4">Asian or Asian British - Chinese</option>
+            <option value="e5">
+              Asian or Asian British - Any other Asian background
+            </option>
+            <option value="e6">
+              Black, Black British, Caribbean or African - Caribbean
+            </option>
+            <option value="e7">
+              Black, Black British, Caribbean or African - African
+            </option>
+            <option value="e8">
+              Black, Black British, Caribbean or African - Any other Black,
+              Black British or Caribbean background
+            </option>
+            <option value="e9">
+              Mixed or Multiple ethnic groups - White and Black Caribbean
+            </option>
+            <option value="e10">
+              Mixed or Multiple ethnic groups - White and Black African
+            </option>
+            <option value="e11">
+              Mixed or Multiple ethnic groups - White and Asian
+            </option>
+            <option value="e12">
+              Mixed or Multiple ethnic groups - Any other Mixed or Multiple
+              ethnic background
+            </option>
+            <option value="e13">
+              White - English, Welsh, Scottish, Northern Irish or British
+            </option>
+            <option value="e14">White - Irish</option>
+            <option value="e15">White - Gypsy or Irish Traveller</option>
+            <option value="e16">White - Roma</option>
+            <option value="e17">White - Any other White background</option>
+            <option value="e18">Other ethnic group - Arab</option>
+            <option value="e19">
+              Other ethnic group - Any other ethnic group
+            </option>
+            <option value="pnts">Prefer not to say</option>
+          </select>
+          <label for="orientation">What is your sexual orientation?</label>
+          <select id="orientation" name="orientation">
+            <option value="">Select…</option>
+            <option value="h">Heterosexual or straight</option>
+            <option value="g">Gay or lesbian</option>
+            <option value="b">Bisexual</option>
+            <option value="o">Other sexual orientation</option>
+            <option value="p">Prefer not to say</option>
+          </select>
+          <label for="gender">What is your gender?</label>
+          <select id="gender" name="gender">
+            <option value="">Select…</option>
+            <option>Male</option>
+            <option>Female</option>
+            <option>Other</option>
+            <option>Prefer not to say</option>
+          </select>
+          <label for="religion">Religion or belief</label>
+          <select id="religion" name="religion">
+            <option value="">Select…</option>
+            <option>No religion</option>
+            <option>Christian</option>
+            <option>Muslim</option>
+            <option>Any other religion or belief</option>
+            <option selected>Prefer not to say</option>
+          </select>
+          <fieldset>
+            <legend>Do you consider yourself to have a disability?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="disability-yes"
+                name="disability"
+                value="yes"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" name="disability" value="no" /> No</label
+            >
+            <label class="choice"
+              ><input type="radio" name="disability" value="pnts" /> Prefer not
+              to say</label
+            >
+          </fieldset>
+          <label for="identity" id="identity-label"
+            >How would you describe your gender identity?</label
+          >
+          <input
+            id="identity"
+            class="combo"
+            name="genderIdentity"
+            role="combobox"
+            aria-controls="identity-options"
+            aria-expanded="false"
+            aria-autocomplete="list"
+            placeholder="Choose…"
+          />
+          <ul
+            id="identity-options"
+            role="listbox"
+            aria-labelledby="identity-label"
+            hidden
+          >
+            <li role="option" id="identity-woman">Woman</li>
+            <li role="option" id="identity-man">Man</li>
+            <li role="option" id="identity-nb">Non-binary</li>
+          </ul>
+          <label for="background"
+            >Ethnic background (select all that apply)</label
+          >
+          <select id="background" name="background" multiple>
+            <option>Asian or Asian British</option>
+            <option>Black, Black British, Caribbean or African</option>
+            <option>Mixed or Multiple ethnic groups</option>
+            <option>White</option>
+            <option>Other ethnic group</option>
+          </select>
+          <label for="sex">What is your sex?</label>
+          <select id="sex" name="sex">
+            <option value="">Select…</option>
+            <option>Female</option>
+            <option>Male</option>
+          </select>
+          <label for="birth-sex"
+            >Is the gender you identify with the same as your sex registered at
+            birth?</label
+          >
+          <select id="birth-sex" name="birthSex">
+            <option value="">Select…</option>
+            <option>Yes</option>
+            <option>No</option>
+          </select>
+          <label for="health">Do you have a long-term health condition?</label>
+          <select id="health" name="health">
+            <option value="">Select…</option>
+            <option>Yes</option>
+            <option>No</option>
+          </select>
+        </fieldset>
+
+        <h2>Declaration</h2>
+        <label class="choice"
+          ><input type="checkbox" id="consent" name="consent" required /> I
+          consent to my monitoring answers being used to review
+          recruitment.</label
+        >
+        <label for="signature">Type your full name as your signature</label>
+        <input id="signature" name="signature" />
+
+        <button type="submit">Submit application</button>
+      </form>
+
+      <output id="status">Fixture · submitted: no · input events: 0</output>
+    </main>
+
+    <script>
+      // Lets reviewers confirm what the page observed.
+      const form = document.getElementById('application');
+      const status = document.getElementById('status');
+      let submitted = false;
+      let inputEvents = 0;
+      const render = () => {
+        status.textContent = `Fixture · submitted: ${submitted ? 'YES' : 'no'} · input events: ${inputEvents}`;
+      };
+      form.addEventListener('input', () => {
+        inputEvents += 1;
+        render();
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitted = true;
+        render();
+      });
+    </script>
+  </body>
+</html>

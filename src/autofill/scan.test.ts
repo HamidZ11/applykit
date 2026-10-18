@@ -349,7 +349,8 @@ describe('a heading-based internship form', () => {
       'job-start': 'employmentStart',
       'ref-name': 'other-person',
       'ref-email': 'other-person',
-      gender: 'manual:sensitive',
+      // A monitoring question: filled only if the user turned on reuse.
+      gender: 'diversityGender',
       'school-type': 'manual:sensitive',
       motivation: 'unsupported',
       privacy: 'manual:consent',
@@ -398,7 +399,7 @@ describe('custom controls', () => {
       ['grad-year', 'text', 'unsupported:educationEnd'],
       ['edu-1-inst', 'custom', 'unsupported:institution'],
       ['edu-2-inst', 'custom', 'unsupported:institution'],
-      ['gender', 'custom', 'manual:sensitive'],
+      ['gender', 'custom', 'unsupported:diversityGender'],
       ['start-month', 'custom', 'unsupported'],
     ]);
   });

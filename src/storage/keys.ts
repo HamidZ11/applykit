@@ -22,3 +22,9 @@ export const ANSWERS_BACKUP_KEY = 'local:applicationAnswersBackup';
 
 /** Whether the panel shows developer diagnostics; off unless `true`. */
 export const DIAGNOSTICS_KEY = 'local:developerDiagnostics';
+
+/** Optional diversity monitoring answers and whether reuse is on (ADR 0018). */
+export const DIVERSITY_KEY = 'local:diversityPreferences';
+
+/** Every unreadable copy of the diversity preferences, oldest first. */
+export const DIVERSITY_BACKUP_KEY = 'local:diversityPreferencesBackup';

@@ -10,7 +10,7 @@ import {
 import { countryDetails } from '@/domain/countries';
 import type { UserProfile } from '@/domain/user-profile';
 import { recordLevel } from './education';
-import type { AutofillValues, PhoneParts } from './fields';
+import type { AutofillValues, DiversityStatus, PhoneParts } from './fields';
 
 /**
  * The values autofill may use, derived from a confirmed, validated profile
@@ -21,6 +21,7 @@ import type { AutofillValues, PhoneParts } from './fields';
 export function autofillValuesFrom(
   profile: UserProfile,
   answers: ApplicationAnswers | null = emptyAnswers(),
+  diversity: DiversityStatus | null = { reuse: false, saved: [] },
 ): AutofillValues {
   const { personal, links } = profile;
   const country = countryDetails(personal.address.country);
@@ -79,6 +80,7 @@ export function autofillValuesFrom(
       description: record.description,
     })),
     answers,
+    diversity,
   };
 }
 

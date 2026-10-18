@@ -189,9 +189,9 @@ describe('detectControl', () => {
       '<label>Do you have the right to work in the UK? <input></label>',
       '<label>Will you require visa sponsorship? <input></label>',
       '<label>Current salary <input></label>',
-      '<label>Do you consider yourself to have a disability? <select></select></label>',
-      '<label>Gender <select></select></label>',
-      '<label>Ethnicity <input></label>',
+      '<label>Do you consider yourself to have a disability or long-term health condition? <select></select></label>',
+      '<label>What is your sex? <select></select></label>',
+      '<label>Do you require any reasonable adjustments? <input></label>',
       '<label>Date of birth <input></label>',
       '<label>Nationality <input></label>',
     ])('marks %s as sensitive', (html) => {

@@ -4,7 +4,10 @@ import {
   isGetAutofillValuesMessage,
   isGetPanelSettingsMessage,
   isOpenProfileMessage,
+  isResolveDiversityMessage,
 } from '@/messages';
+import { resolveDiversity } from '@/storage/diversity-source';
+import { browserDiversityStore } from '@/storage/diversity-store';
 import { browserAnswersStore } from '@/storage/answers-store';
 import { loadAutofillValues } from '@/storage/autofill-source';
 import { browserProfileStore } from '@/storage/profile-store';
@@ -75,13 +78,30 @@ export default defineBackground(() => {
       // Read on every request, so the panel always uses the latest saved
       // profile. Never logs values.
       if (isGetAutofillValuesMessage(message)) {
-        loadAutofillValues(browserProfileStore, browserAnswersStore)
+        loadAutofillValues(
+          browserProfileStore,
+          browserAnswersStore,
+          browserDiversityStore,
+        )
           .then(sendResponse)
           .catch(() => {
             sendResponse({ status: 'error' });
           });
         return true; // The response is sent asynchronously.
       }
+      // Saved diversity answers are read here, only to choose among the
+      // options a form offers, and only while the user has reuse on.
+      if (isResolveDiversityMessage(message)) {
+        resolveDiversity(browserDiversityStore, message.requests)
+          .then(sendResponse)
+          .catch(() => {
+            sendResponse({
+              results: message.requests.map(() => ({ reason: 'reuse-off' })),
+            });
+          });
+        return true; // The response is sent asynchronously.
+      }
+
       if (isGetPanelSettingsMessage(message)) {
         void browserSettingsStore.loadDiagnostics().then((diagnostics) => {
           sendResponse({ diagnostics });

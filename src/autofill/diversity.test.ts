@@ -1,0 +1,427 @@
+import { describe, expect, it, vi } from 'vitest';
+import { resolveDiversity } from '@/storage/diversity-source';
+import { fullProfile } from '@/test/autofill-fixtures';
+import { savedDiversity } from '@/test/diversity-fixtures';
+import { loadFixture, loadHtml } from '@/test/load-fixture';
+import { normalise } from './detect';
+import {
+  diversityQuestion,
+  matchDiversityOption,
+  withDiversityChoices,
+} from './diversity';
+import type { DiversityStatus } from './fields';
+import { fillFields } from './fill';
+import { autofillValuesFrom } from './profile-values';
+import { planFill, type FieldReport } from './report';
+import { scanFields } from './scan';
+
+const options = (...texts: string[]) =>
+  texts.map((text, index) => ({ value: `v${String(index)}`, text }));
+
+describe('diversityQuestion', () => {
+  it.each([
+    ['What is your gender?', 'gender'],
+    ['Gender (optional)', 'gender'],
+    ['Which of the following best describes your gender identity?', 'gender'],
+    ['What is your ethnic group?', 'ethnicity'],
+    ['Ethnic background', 'ethnicity'],
+    ['Ethnicity', 'ethnicity'],
+    ['Do you consider yourself to have a disability?', 'disability'],
+    ['Religion or belief', 'religion'],
+    ['What is your sexual orientation?', 'sexualOrientation'],
+  ])('recognises “%s”', (text, category) => {
+    expect(diversityQuestion(normalise(text.replace(/\([^)]*\)/g, ' ')))).toBe(
+      category,
+    );
+  });
+
+  it.each([
+    'What is your sex?',
+    'Is the gender you identify with the same as your sex registered at birth?',
+    'Do you consider yourself to have a disability or long-term health condition?',
+    'Do you require any reasonable adjustments?',
+    'Gender and ethnicity',
+    'Your partner’s gender',
+    'What is your national identity?',
+    'Which religion was your school affiliated with?',
+    'Do you identify as LGBTQ+?',
+    'Age',
+  ])('does not take “%s” for a supported question', (text) => {
+    expect(diversityQuestion(normalise(text))).toBeNull();
+  });
+});
+
+describe('matchDiversityOption', () => {
+  it('chooses the one option that says the saved answer', () => {
+    expect(
+      matchDiversityOption(
+        'gender',
+        'non-binary',
+        options('Woman', 'Man', 'Non-binary', 'Prefer not to say'),
+      ),
+    ).toEqual({ value: 'v2' });
+    expect(
+      matchDiversityOption(
+        'disability',
+        'no',
+        options('Yes', 'No', 'Prefer not to say'),
+      ),
+    ).toEqual({ value: 'v1' });
+    expect(
+      matchDiversityOption(
+        'religion',
+        'christian',
+        options('Christianity', 'Islam', 'None'),
+      ),
+    ).toEqual({ value: 'v0' });
+  });
+
+  it('chooses prefer not to say only when that is saved', () => {
+    const offered = options('Yes', 'No', 'I prefer not to say');
+    expect(
+      matchDiversityOption('disability', 'prefer-not-to-say', offered),
+    ).toEqual({ value: 'v2' });
+  });
+
+  it('never treats gender identity as sex', () => {
+    expect(
+      matchDiversityOption(
+        'gender',
+        'woman',
+        options('Female', 'Male', 'Prefer not to say'),
+      ),
+    ).toEqual({ reason: 'no-option' });
+  });
+
+  it('never chooses a nearby or broader answer', () => {
+    expect(
+      matchDiversityOption(
+        'sexualOrientation',
+        'gay-lesbian',
+        options('Gay man', 'Gay woman / lesbian', 'Bisexual'),
+      ),
+    ).toEqual({ reason: 'no-option' });
+    expect(
+      matchDiversityOption('religion', 'other', options('Other', 'None')),
+    ).toEqual({ reason: 'no-option' });
+    expect(
+      matchDiversityOption(
+        'sexualOrientation',
+        'other',
+        options('Any other religion', 'Other sexual orientation'),
+      ),
+    ).toEqual({ value: 'v1' });
+  });
+
+  it('reads ethnic categories written with their group', () => {
+    expect(
+      matchDiversityOption(
+        'ethnicity',
+        'indian',
+        options(
+          'Asian or Asian British - Indian',
+          'Asian or Asian British - Pakistani',
+          'White - Irish',
+        ),
+      ),
+    ).toEqual({ value: 'v0' });
+    expect(
+      matchDiversityOption(
+        'ethnicity',
+        'white-irish',
+        options('Irish (White)', 'Indian', 'White British'),
+      ),
+    ).toEqual({ value: 'v0' });
+  });
+
+  it('uses the broad group only when the form lists only broad groups', () => {
+    const broad = options(
+      'Asian or Asian British',
+      'Black or Black British',
+      'Mixed',
+      'White',
+      'Other ethnic group',
+      'Prefer not to say',
+    );
+    expect(matchDiversityOption('ethnicity', 'other-mixed', broad)).toEqual({
+      value: 'v2',
+    });
+    // A detailed list without the saved category is not a broad list.
+    expect(
+      matchDiversityOption(
+        'ethnicity',
+        'other-mixed',
+        options('White', 'Indian', 'Mixed'),
+      ),
+    ).toEqual({ reason: 'no-option' });
+  });
+
+  it('never chooses between two options that both fit', () => {
+    expect(
+      matchDiversityOption('religion', 'none', options('None', 'No religion')),
+    ).toEqual({ reason: 'no-option' });
+  });
+});
+
+describe('monitoring questions on a form', () => {
+  const NOW = new Date('2026-10-18T12:00:00Z');
+  const visible = { isVisible: (e: Element) => !e.closest('[hidden]') };
+  const ALL = [
+    'gender',
+    'ethnicity',
+    'disability',
+    'religion',
+    'sexualOrientation',
+  ] as const;
+
+  function plan(
+    status: DiversityStatus | null = { reuse: true, saved: [...ALL] },
+  ) {
+    return planFill(
+      scanFields(document, visible),
+      autofillValuesFrom(fullProfile(), undefined, status),
+      NOW,
+    );
+  }
+
+  function byId(reports: FieldReport[], id: string): FieldReport {
+    const found = reports.find((r) => r.field.element.id === id);
+    if (!found) throw new Error(`No field #${id}`);
+    return found;
+  }
+
+  /** The real background resolver over fictional saved preferences. */
+  function resolver(preferences = savedDiversity()) {
+    const store = {
+      load: () =>
+        Promise.resolve({
+          status: 'loaded' as const,
+          preferences,
+          updatedAt: '2026-10-18T12:00:00.000Z',
+          damaged: [],
+        }),
+    };
+    const calls: unknown[] = [];
+    return {
+      calls,
+      request: (requests: Parameters<typeof resolveDiversity>[1]) => {
+        calls.push(requests);
+        return resolveDiversity(store, requests);
+      },
+    };
+  }
+
+  function select(id: string): HTMLSelectElement {
+    return document.getElementById(id) as HTMLSelectElement;
+  }
+
+  it('recognises supported questions and nothing else', () => {
+    loadFixture('diversity-application.html');
+    const targets = Object.fromEntries(
+      plan().map((r) => [r.field.element.id, r.target]),
+    );
+
+    expect(targets).toMatchObject({
+      ethnicity: 'diversityEthnicity',
+      orientation: 'diversitySexualOrientation',
+      gender: 'diversityGender',
+      religion: 'diversityReligion',
+      'disability-yes': 'diversityDisability',
+      identity: 'diversityGender',
+      background: 'diversityEthnicity',
+      sex: null,
+      'birth-sex': null,
+      health: null,
+      adjustments: null,
+      sponsorship: null,
+      'rtw-yes': null,
+      consent: null,
+    });
+  });
+
+  it.each([
+    '<fieldset><legend>Emergency contact</legend><label>Gender <select><option>Woman</option></select></label></fieldset>',
+    '<fieldset><legend>Your partner</legend><label>Ethnicity <select><option>White</option></select></label></fieldset>',
+    '<h2>Declaration</h2><label>Gender <select><option>Woman</option></select></label>',
+    '<select name="gender" id="ethnicity"><option>Woman</option></select>',
+    '<input placeholder="Gender">',
+  ])('keeps a monitoring word in another setting protected: %s', (html) => {
+    loadHtml(`<form>${html}</form>`);
+    const [report] = plan();
+    expect(report?.target).toBeNull();
+    expect(report?.fillValue ?? null).toBeNull();
+  });
+
+  it('leaves every question to the user while reuse is off', () => {
+    loadFixture('diversity-application.html');
+    const reports = plan({ reuse: false, saved: [] });
+
+    for (const id of ['ethnicity', 'orientation', 'gender']) {
+      expect(byId(reports, id), id).toMatchObject({
+        status: 'manual',
+        fillValue: null,
+        reason:
+          'Reuse of your saved diversity answers is off, so ApplyKit leaves this to you.',
+      });
+    }
+  });
+
+  it('says when no answer is saved, and never treats it as prefer not to say', () => {
+    loadFixture('diversity-application.html');
+    expect(
+      byId(plan({ reuse: true, saved: ['gender'] }), 'ethnicity'),
+    ).toMatchObject({
+      status: 'no-value',
+      reason: 'You have not saved an answer to this question.',
+    });
+  });
+
+  it('leaves everything when the preferences could not be read', () => {
+    loadFixture('diversity-application.html');
+    expect(byId(plan(null), 'ethnicity')).toMatchObject({
+      status: 'manual',
+      fillValue: null,
+    });
+  });
+
+  it('plans no value until autofill asks the background', () => {
+    loadFixture('diversity-application.html');
+    expect(byId(plan(), 'ethnicity')).toMatchObject({
+      status: 'fill',
+      fillValue: null,
+      value: null,
+    });
+  });
+
+  it('fills the lists whose choices fit, and only those', async () => {
+    loadFixture('diversity-application.html');
+    const { request, calls } = resolver();
+    const changed: string[] = [];
+    document.addEventListener('input', (event) => {
+      changed.push((event.target as HTMLElement).id);
+    });
+
+    const outcomes = await fillFields(
+      await withDiversityChoices(plan(), request),
+    );
+
+    expect(select('ethnicity').selectedOptions[0]?.text).toBe(
+      'Mixed or Multiple ethnic groups - Any other Mixed or Multiple ethnic background',
+    );
+    expect(select('orientation').value).toBe('p');
+    expect(byId(outcomes, 'ethnicity')).toMatchObject({
+      status: 'filled',
+      value: null,
+    });
+    // Male and Female describe sex, not the saved gender identity.
+    expect(select('gender').value).toBe('');
+    expect(byId(outcomes, 'gender')).toMatchObject({
+      status: 'no-option',
+      reason:
+        'The choices here differ from your saved answer, so ApplyKit leaves this to you.',
+    });
+    expect(select('religion').selectedOptions[0]?.text).toBe(
+      'Prefer not to say',
+    );
+    expect(
+      [
+        ...document.querySelectorAll<HTMLInputElement>(
+          '[type="radio"], [type="checkbox"]',
+        ),
+      ].some((box) => box.checked),
+    ).toBe(false);
+    expect(select('background').selectedOptions).toHaveLength(0);
+    for (const id of ['sex', 'birth-sex', 'health', 'sponsorship']) {
+      expect(select(id).value, id).toBe('');
+    }
+    expect(changed).toEqual([
+      'first',
+      'last',
+      'email',
+      'ethnicity',
+      'orientation',
+    ]);
+    // The background was asked only about the lists, with the page's options.
+    expect(calls).toHaveLength(1);
+    expect((calls[0] as { category: string }[]).map((r) => r.category)).toEqual(
+      ['ethnicity', 'sexualOrientation', 'gender'],
+    );
+  });
+
+  it('never writes an option the page did not offer, or without a reply', async () => {
+    loadFixture('diversity-application.html');
+
+    const offMenu = await withDiversityChoices(plan(), (requests) =>
+      Promise.resolve({ results: requests.map(() => ({ value: 'injected' })) }),
+    );
+    const noReply = await withDiversityChoices(plan(), () =>
+      Promise.resolve(null),
+    );
+    const failed = await withDiversityChoices(plan(), () =>
+      Promise.reject(new Error('unreachable')),
+    );
+
+    for (const reports of [offMenu, noReply, failed]) {
+      expect(byId(reports, 'ethnicity')).toMatchObject({
+        status: 'manual',
+        fillValue: null,
+      });
+      expect(
+        reports.some((r) => r.status === 'fill' && r.fillValue === null),
+      ).toBe(false);
+    }
+  });
+
+  it('answers nothing when reuse was turned off in the meantime', async () => {
+    loadFixture('diversity-application.html');
+    const { request } = resolver({ ...savedDiversity(), reuse: false });
+
+    const outcomes = await fillFields(
+      await withDiversityChoices(plan(), request),
+    );
+
+    expect(select('ethnicity').value).toBe('');
+    expect(byId(outcomes, 'ethnicity').status).toBe('manual');
+  });
+
+  it('reports a choice the page rejects', async () => {
+    loadFixture('diversity-application.html');
+    const element = select('ethnicity');
+    element.addEventListener('input', () => {
+      element.value = '';
+    });
+
+    const outcomes = await fillFields(
+      await withDiversityChoices(plan(), resolver().request),
+    );
+
+    expect(byId(outcomes, 'ethnicity').status).toBe('rejected');
+  });
+
+  it('never submits, clicks or presses keys', async () => {
+    loadFixture('diversity-application.html');
+    const onSubmit = vi.fn((event: Event) => {
+      event.preventDefault();
+    });
+    const onClick = vi.fn();
+    const onKey = vi.fn();
+    document
+      .getElementById('application')
+      ?.addEventListener('submit', onSubmit);
+    document.addEventListener('click', onClick, true);
+    document.addEventListener('keydown', onKey, true);
+
+    await fillFields(await withDiversityChoices(plan(), resolver().request));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onKey).not.toHaveBeenCalled();
+  });
+
+  it('shows no saved answer in evidence', () => {
+    loadFixture('diversity-application.html');
+    const evidence = JSON.stringify(plan().map((r) => r.evidence));
+
+    expect(evidence).not.toMatch(/non binary|other-mixed|prefer-not-to-say/i);
+  });
+});

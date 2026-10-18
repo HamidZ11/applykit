@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { withDiversityChoices } from '@/autofill/diversity';
 import { fillFields } from '@/autofill/fill';
 import {
   attentionQueue,
@@ -44,6 +45,7 @@ import {
   isExtensionContextValid,
   openProfile,
   requestAutofillValues,
+  requestDiversityChoices,
   requestPanelSettings,
 } from './profile-access';
 import { plural } from './vocabulary';
@@ -125,6 +127,7 @@ export function usePanel(
   root: ParentNode = document,
   openProfileRequest: (section?: 'answers') => Promise<boolean> = openProfile,
   loadSettings: () => Promise<PanelSettings> = requestPanelSettings,
+  chooseDiversity: typeof requestDiversityChoices = requestDiversityChoices,
 ): PanelModel {
   // Off until the background says otherwise, and off if it cannot.
   const [diagnostics, setDiagnostics] = useState(false);
@@ -205,7 +208,13 @@ export function usePanel(
         return;
       }
       const fields = scanFields(root);
-      const outcomes = await fillFields(planFill(fields, latest.values));
+      // Monitoring questions get their option from the background now, and
+      // only now, if the user turned on reuse (ADR 0018).
+      const plan = await withDiversityChoices(
+        planFill(fields, latest.values),
+        chooseDiversity,
+      );
+      const outcomes = await fillFields(plan);
       dispatch({ type: 'autofilled', fields, outcomes });
     } catch {
       // Show the page as it is now rather than a result that is not known.
@@ -213,7 +222,7 @@ export function usePanel(
     } finally {
       filling.current = false;
     }
-  }, [loadValues, root]);
+  }, [loadValues, root, chooseDiversity]);
 
   const preview = useCallback(
     (choice: SectionChoice) =>

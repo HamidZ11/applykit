@@ -3,6 +3,8 @@ import { emptyAnswers } from '@/domain/application-answers';
 import { savedAnswers } from '@/test/answer-fixtures';
 import { sampleValues } from '@/test/autofill-fixtures';
 import {
+  isResolveDiversityMessage,
+  isResolveDiversityResponse,
   GET_AUTOFILL_VALUES,
   GET_PANEL_SETTINGS,
   isGetPanelSettingsMessage,
@@ -137,5 +139,65 @@ describe('panel settings', () => {
     expect(isPanelSettings({ diagnostics: true })).toBe(true);
     expect(isPanelSettings({ diagnostics: 'true' })).toBe(false);
     expect(isPanelSettings(null)).toBe(false);
+  });
+});
+
+describe('diversity in replies', () => {
+  it('accepts reuse and saved categories, or none', () => {
+    for (const diversity of [
+      null,
+      { reuse: false, saved: [] },
+      { reuse: true, saved: ['gender', 'ethnicity'] },
+    ]) {
+      expect(
+        isAutofillValuesResponse({
+          status: 'ready',
+          values: { ...sampleValues(), diversity },
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it.each([
+    ['an answer', { reuse: true, saved: ['gender'], gender: 'woman' }],
+    ['categories while reuse is off', { reuse: false, saved: ['gender'] }],
+    ['an unknown category', { reuse: true, saved: ['age'] }],
+    ['a missing status', undefined],
+  ])('rejects %s', (_, diversity) => {
+    expect(
+      isAutofillValuesResponse({
+        status: 'ready',
+        values: { ...sampleValues(), diversity },
+      }),
+    ).toBe(false);
+  });
+
+  it('checks a resolve reply against the questions asked', () => {
+    expect(isResolveDiversityResponse({ results: [{ value: 'v1' }] }, 1)).toBe(
+      true,
+    );
+    expect(isResolveDiversityResponse({ results: [] }, 1)).toBe(false);
+    expect(
+      isResolveDiversityResponse({ results: [{ reason: 'maybe' }] }, 1),
+    ).toBe(false);
+  });
+
+  it('accepts a resolve request only within its limits', () => {
+    const options = [{ value: 'a', text: 'A' }];
+    expect(
+      isResolveDiversityMessage({
+        type: 'applykit:resolve-diversity',
+        requests: [{ category: 'gender', options }],
+      }),
+    ).toBe(true);
+    expect(
+      isResolveDiversityMessage({
+        type: 'applykit:resolve-diversity',
+        requests: Array.from({ length: 21 }, () => ({
+          category: 'gender',
+          options,
+        })),
+      }),
+    ).toBe(false);
   });
 });
