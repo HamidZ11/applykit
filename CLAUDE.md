@@ -12,11 +12,13 @@ import with review, and autofill of personal, contact, address, link and
 education fields from the confirmed saved profile, including split calling
 codes and preferred names (ADR 0010, ADR 0011), and user-confirmed choice
 of the saved record for ambiguous education sections (ADR 0012),
-listing of custom dropdowns with saved-value guidance (ADR 0013), and
-employment autofill with the same per-section record choice (ADR 0015).
+listing of custom dropdowns with saved-value guidance (ADR 0013),
+employment autofill with the same per-section record choice (ADR 0015),
+and saved application answers, suggested and filled only when the user
+confirms each one (ADR 0016).
 
 Still to come (build only when asked, one at a time): custom dropdown
-widgets; application details and reusable answers; review
+widgets; review
 of uncertain fields. A separate marketing website comes later.
 
 No authentication, subscriptions, backend, external databases or AI APIs.
@@ -127,6 +129,10 @@ old (pnpm enforces a minimum release age; do not add exclusions).
 - A user's choice must never make other fields eligible for automatic
   filling: choices go through `planFill` as `SectionChoices`, are
   previewed, re-checked by `confirmChoice` and written by `fillFields`.
+- Saved application answers are only ever `suggest`ed: autofill never
+  writes them, and each is written only after `confirmAnswer` re-checks
+  it. `fixtures/reusable-answers.html` covers them next to the questions
+  they must never answer.
 - Tests fill from `src/test/autofill-fixtures.ts` (fictional); the extension
   itself has no sample data.
 - Browser tests and design captures run headless only, in a throwaway

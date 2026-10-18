@@ -31,6 +31,8 @@ interface ExtensionFixtures {
    * Defaults to the fictional E2E profile.
    */
   saveProfile: (profile?: object | null) => Promise<void>;
+  /** Stores saved application answers, in the stored format. */
+  saveAnswers: (stored: object) => Promise<void>;
 }
 
 type ProbeState = 'pending' | 'granted' | 'denied';
@@ -126,6 +128,18 @@ export const test = base.extend<ExtensionFixtures>({
         if (stored === null) await local.remove('profile');
         else await local.set({ profile: stored });
       }, profile);
+    });
+  },
+
+  saveAnswers: async ({ context }, use) => {
+    await use(async (stored) => {
+      const worker = context.serviceWorkers().at(-1);
+      if (!worker) throw new Error('No extension service worker');
+      await worker.evaluate(async (value) => {
+        await (
+          globalThis as unknown as ChromeInWorker
+        ).chrome.storage.local.set({ applicationAnswers: value });
+      }, stored);
     });
   },
 

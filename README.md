@@ -6,7 +6,8 @@ backend, no tracking.
 
 > **Status: profile autofill.** Save your profile once (by hand or from your
 > CV), then fill your personal, contact, address, link, education and
-> employment details on application forms. ApplyKit leaves everything else to you and
+> employment details on application forms, and reuse your saved answers to
+> common questions one at a time. ApplyKit leaves everything else to you and
 > never submits.
 
 ## Technology
@@ -111,6 +112,9 @@ Limitations:
    where you choose which saved record to use; `employment-application.html`
    has a current job, a previous job and numbered job sections next to
    employer contacts, a reference and an emergency contact;
+   `reusable-answers.html` asks notice period, start date, relocation,
+   working arrangement and salary questions next to eligibility, equal
+   opportunities and declaration questions;
    `custom-controls.html` is built from custom dropdowns.)
 4. Click the ApplyKit toolbar button. Without a saved profile the panel
    says so and offers **Set up your profile**; it fills nothing. Save a
@@ -185,6 +189,13 @@ Limitations:
   jobs show "Several employment records fit" and you choose, preview and
   confirm. A current job never gets an end date. "I currently work here"
   boxes are never ticked: the full list says whether to tick them.
+- Saved application answers: notice period, relocation (within your
+  country and abroad), working arrangement, earliest start date and salary
+  expectation, saved under **Application answers** on the profile page.
+  On a form they appear as "Saved answer" in the full list with **Use this
+  answer**; Autofill never fills them, and each is filled only when you
+  choose it. Units, pay periods and currencies are never converted: a
+  question that asks differently says why your answer does not fit.
 - Fields your profile has no value for link to your profile page.
 - Custom dropdowns are counted as fields and, when ApplyKit recognises
   them, show "From your saved profile" with the value to choose, plus
@@ -198,10 +209,11 @@ Limitations:
 - Detects fields from `autocomplete`, input type, labels, `name`, `id`,
   placeholders and surrounding sections, and skips any field whose signals
   disagree.
-- Never answers right-to-work, visa, salary, disability, demographic or
-  consent questions, reasons for leaving or gaps in employment, and never
-  fills details about references, employer contacts, hiring managers or
-  emergency contacts, CAPTCHAs, or hidden, disabled or read-only fields.
+- Never answers right-to-work, visa, current pay or salary history,
+  disability, demographic or consent questions, reasons for leaving or
+  gaps in employment, and never fills details about references, employer
+  contacts, hiring managers or emergency contacts, CAPTCHAs, or hidden,
+  disabled or read-only fields.
 - Writes with native `input` and `change` events so framework-controlled
   inputs (e.g. React) update, then checks what the site kept and reports
   values it rejected or reformatted.
@@ -220,8 +232,14 @@ Limitations:
 ## Known limitations
 
 - Autofill covers personal, contact, address, link, education and
-  employment fields; not written answers such as motivation or reasons for
-  leaving.
+  employment fields; saved answers cover five factual questions and are
+  filled one at a time. Written answers such as motivation or reasons for
+  leaving are never filled.
+- Saved answers: radio buttons, ranges and salary bands are never chosen;
+  questions in other units, periods or currencies, relocation questions
+  that do not say where (unless both of your answers agree), text date
+  fields without a stated format and past start dates are left to you.
+  Recognition is English-only and pattern-based.
 - Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
   and similar platforms) are listed and never filled: the full list shows
   the saved value to choose and a "Go to field" button. Only standard ARIA

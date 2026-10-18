@@ -18,8 +18,8 @@ src/
   components/onboarding/ Onboarding steps, form controls, draft reducer
   domain/               Domain types: UserProfile, countries, profile
                         validation schema
-  storage/              Extension storage access (profile store, autofill
-                        values source)
+  storage/              Extension storage access (profile store, answers
+                        store, autofill values source)
   cv/                   CV import: read, normalise, extract, review (no React)
   styles/theme.css      Design tokens shared by both surfaces
   messages.ts           Panel ↔ background message types
@@ -157,15 +157,26 @@ from, under a Web Locks lock, and report conflicts instead of overwriting. The
 domain model (`user-profile.ts`) has no validation or storage code; the schema
 (`profile-schema.ts`) has no storage code; the store has no UI code.
 
+### Application answers
+
+Saved answers to five common questions (notice period, relocation,
+working arrangement, earliest start date, salary expectation) live in
+their own store, `local:applicationAnswers` (ADR 0016), edited in the
+"Application answers" section of the same page (`AnswersView`, also
+opened at `options.html#answers`). Each category is typed and optional;
+each answer is saved on its own, compare-and-set, over the latest saved
+answers. There is no draft.
+
 ### Autofill values
 
-Autofill reads only the confirmed profile, through the background worker
-(ADR 0010). The panel receives `AutofillValues`, never the profile:
+Autofill reads only the confirmed profile and the saved application
+answers, through the background worker (ADR 0010, ADR 0016). The panel
+receives `AutofillValues`, never the profile:
 
 ```
 panel: requestAutofillValues()  → applykit:get-autofill-values
-background: sender is ApplyKit? → loadAutofillValues(profileStore)
-            loaded              → { ready, values: autofillValuesFrom(profile) }
+background: sender is ApplyKit? → loadAutofillValues(profileStore, answersStore)
+            loaded              → { ready, values: autofillValuesFrom(profile, answers | null) }
             empty | invalid | error → { missing | invalid | error }
 panel: validates the reply shape; anything else is { error }
 ```
@@ -220,7 +231,7 @@ profile", "Open your profile" or "Try again" instead of Autofill.
 
 ## Autofill rules
 
-Details and reasoning are in ADR 0010, ADR 0011 and ADR 0015.
+Details and reasoning are in ADR 0010, ADR 0011, ADR 0015 and ADR 0016.
 
 - Fields: full, first, last and preferred name; email; phone, or its
   calling code and national number separately; address lines 1 and 2, town
@@ -228,13 +239,18 @@ Details and reasoning are in ADR 0010, ADR 0011 and ADR 0015.
   portfolio or website; institution, qualification, field of study, start
   and graduation dates, and grade from one saved education record;
   employer, job title, employment type, start and end dates and duties
-  from one saved job.
+  from one saved job. Notice period, relocation, working arrangement,
+  earliest start date and salary expectation from the saved application
+  answers, only ever suggested (`suggest`) and written one field at a
+  time when the user chooses "Use this answer" (ADR 0016).
 - Modules in `src/autofill`: `detect` (what a control asks), `scan` (every
   control, with support and section), `report`, `plan-education` and
   `plan-employment` (the plan: value or reason per field), `records` (what
   both topics share: one record per section, the user's choice, writing
   text, options and month-year dates), `resolve` (preview and confirm a
-  record the user chose for a section), `suggestion` (saved values shown
+  record the user chose for a section, and a saved answer the user chose
+  to use), `answers` (what a saved answer gives one question, or why
+  not), `suggestion` (saved values shown
   as guidance for fields ApplyKit cannot fill), `fill` (write and verify),
   plus pure rules in `education`, `dates`, `options` and `categories`.
   `src/page/navigate.ts` takes the user to a field ("Go to field"): it
@@ -252,8 +268,9 @@ Details and reasoning are in ADR 0010, ADR 0011 and ADR 0015.
   Exactly one unopposed match is required; conflicting signals are skipped.
 - Skipped with a reason: details about someone else (references,
   employer contacts and addresses, companies outside a job section, hiring
-  managers), sensitive questions (right to work, visa, salary,
-  disability, demographics, date of birth), consent and declarations,
+  managers), sensitive questions (right to work, visa, current pay and
+  salary history, disability, demographics, date of birth), consent and
+  declarations,
   questions only the applicant can answer (reasons for leaving, gaps in
   employment), CAPTCHAs, values longer than `maxlength`, and fields
   outside the application form. Generic job labels ("Company name",
@@ -262,10 +279,12 @@ Details and reasoning are in ADR 0010, ADR 0011 and ADR 0015.
 - Writable controls: text, email, tel, url and search inputs; month and
   number inputs for education and job dates; native selects for country,
   calling code, education and job fields (exact or explicitly equivalent
-  options only); textareas only for a saved job description. Never
+  options only); textareas only for a saved job description; date,
+  month and number inputs for saved answers whose units they state.
+  Never
   hidden, disabled, read-only or password controls, checkboxes (an "I
-  currently work here" box is guided only), radios, file inputs or custom
-  dropdowns.
+  currently work here" box is guided only), radios (saved answers are
+  guided only), file inputs or custom dropdowns.
 - Preferred names use the first name only when the user chose that in
   their profile. Education records and jobs are chosen per section of the
   form; several fitting records leave the fields for the user, who can
@@ -281,5 +300,6 @@ Details and reasoning are in ADR 0010, ADR 0011 and ADR 0015.
 - Fields asking for a detail already matched earlier on the form are left
   to the user, except confirmation fields; education and job fields repeat
   once per section, and a month and a year of one date count separately.
+  Saved-answer questions may repeat: each is confirmed on its own.
 - The panel's shadow root is closed in production; browser tests build a
   variant with an open root into `.output/chrome-mv3-e2e`.
