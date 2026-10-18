@@ -1833,6 +1833,21 @@ describe('diversity questions', () => {
     ).toHaveLength(0);
   });
 
+  it('never fills a monitoring list the panel had not listed', async () => {
+    await openWith(savedDiversity());
+    const late = document.createElement('div');
+    late.innerHTML = `<label for="late">What is your sexual orientation?</label>
+      <select id="late"><option value="">Select…</option>
+      <option value="x">Prefer not to say</option></select>`;
+    document.getElementById('orientation')?.replaceWith(late);
+
+    await autofill();
+
+    expect(select('late').value).toBe('');
+    // Positive control: a listed one was filled.
+    expect(select('ethnicity').value).toBe('e12');
+  });
+
   it('fills nothing and asks for nothing with reuse off', async () => {
     await openWith({ ...savedDiversity(), reuse: false });
 

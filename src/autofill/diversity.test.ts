@@ -184,6 +184,13 @@ describe('monitoring questions on a form', () => {
     );
   }
 
+  /** What the panel listed before the user pressed Autofill. */
+  function listed() {
+    return new Set<Element>(
+      scanFields(document, visible).map((field) => field.element),
+    );
+  }
+
   function byId(reports: FieldReport[], id: string): FieldReport {
     const found = reports.find((r) => r.field.element.id === id);
     if (!found) throw new Error(`No field #${id}`);
@@ -302,7 +309,7 @@ describe('monitoring questions on a form', () => {
     });
 
     const outcomes = await fillFields(
-      await withDiversityChoices(plan(), request),
+      await withDiversityChoices(plan(), request, listed()),
     );
 
     expect(select('ethnicity').selectedOptions[0]?.text).toBe(
@@ -351,14 +358,23 @@ describe('monitoring questions on a form', () => {
   it('never writes an option the page did not offer, or without a reply', async () => {
     loadFixture('diversity-application.html');
 
-    const offMenu = await withDiversityChoices(plan(), (requests) =>
-      Promise.resolve({ results: requests.map(() => ({ value: 'injected' })) }),
+    const offMenu = await withDiversityChoices(
+      plan(),
+      (requests) =>
+        Promise.resolve({
+          results: requests.map(() => ({ value: 'injected' })),
+        }),
+      listed(),
     );
-    const noReply = await withDiversityChoices(plan(), () =>
-      Promise.resolve(null),
+    const noReply = await withDiversityChoices(
+      plan(),
+      () => Promise.resolve(null),
+      listed(),
     );
-    const failed = await withDiversityChoices(plan(), () =>
-      Promise.reject(new Error('unreachable')),
+    const failed = await withDiversityChoices(
+      plan(),
+      () => Promise.reject(new Error('unreachable')),
+      listed(),
     );
 
     for (const reports of [offMenu, noReply, failed]) {
@@ -377,7 +393,7 @@ describe('monitoring questions on a form', () => {
     const { request } = resolver({ ...savedDiversity(), reuse: false });
 
     const outcomes = await fillFields(
-      await withDiversityChoices(plan(), request),
+      await withDiversityChoices(plan(), request, listed()),
     );
 
     expect(select('ethnicity').value).toBe('');
@@ -392,7 +408,7 @@ describe('monitoring questions on a form', () => {
     });
 
     const outcomes = await fillFields(
-      await withDiversityChoices(plan(), resolver().request),
+      await withDiversityChoices(plan(), resolver().request, listed()),
     );
 
     expect(byId(outcomes, 'ethnicity').status).toBe('rejected');
@@ -411,11 +427,113 @@ describe('monitoring questions on a form', () => {
     document.addEventListener('click', onClick, true);
     document.addEventListener('keydown', onKey, true);
 
-    await fillFields(await withDiversityChoices(plan(), resolver().request));
+    await fillFields(
+      await withDiversityChoices(plan(), resolver().request, listed()),
+    );
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onClick).not.toHaveBeenCalled();
     expect(onKey).not.toHaveBeenCalled();
+  });
+
+  it('asks only about lists listed before Autofill was pressed', async () => {
+    loadFixture('diversity-application.html');
+    const before = listed();
+    const late = document.createElement('div');
+    late.innerHTML = `<label for="late">What is your sexual orientation?</label>
+      <select id="late"><option value="">Select…</option>
+      <option value="x">Prefer not to say</option></select>`;
+    // The page swaps its list for a new one when the user clicks.
+    document.getElementById('orientation')?.replaceWith(late);
+    const { request, calls } = resolver();
+
+    const outcomes = await fillFields(
+      await withDiversityChoices(plan(), request, before),
+    );
+
+    expect(byId(outcomes, 'late')).toMatchObject({
+      status: 'manual',
+      reason:
+        'This question appeared after you pressed Autofill, so ApplyKit left it to you.',
+    });
+    expect(select('late').value).toBe('');
+    // Positive control: the listed lists were still filled.
+    expect(select('ethnicity').value).toBe('e12');
+    // The late list's options were never sent to the background.
+    expect(calls).toHaveLength(1);
+    expect(JSON.stringify(calls)).not.toContain('"x"');
+  });
+
+  it('never writes a value two options share, or a list that changed', async () => {
+    loadFixture('diversity-application.html');
+    for (const option of select('orientation').options) {
+      if (option.text === 'Gay or lesbian') option.value = 'p';
+    }
+    const changing = (requests: Parameters<typeof resolveDiversity>[1]) =>
+      resolver()
+        .request(requests)
+        .then((reply) => {
+          const ethnicity = select('ethnicity');
+          const chosen = [...ethnicity.options].find((o) => o.value === 'e12');
+          if (chosen) chosen.text = 'White - Irish';
+          return reply;
+        });
+
+    const outcomes = await fillFields(
+      await withDiversityChoices(plan(), changing, listed()),
+    );
+
+    for (const id of ['orientation', 'ethnicity']) {
+      expect(byId(outcomes, id).status, id).toBe('manual');
+      expect(select(id).value, id).toBe('');
+    }
+  });
+
+  it('shows no answer the page already had once filling is done', async () => {
+    loadFixture('diversity-application.html');
+    const pending = await withDiversityChoices(
+      plan(),
+      resolver().request,
+      listed(),
+    );
+    select('ethnicity').value = 'e3';
+
+    const outcomes = await fillFields(pending);
+
+    expect(byId(outcomes, 'ethnicity')).toMatchObject({
+      status: 'kept',
+      value: null,
+    });
+  });
+
+  it.each([
+    'Disability (including long-term health conditions)',
+    'Do you consider yourself to have a disability (or long-term health condition)?',
+    'Gender (as registered at birth)',
+    'Gender (legal sex)',
+    'Sexual orientation (of your partner)',
+  ])('leaves “%s” as a sensitive question', (question) => {
+    document.body.innerHTML = `<form><label for="q">${question}</label>
+      <select id="q"><option value="">Select…</option><option>Yes</option>
+      <option>No</option><option>Woman</option><option>Man</option>
+      <option>Prefer not to say</option></select></form>`;
+
+    expect(byId(plan(), 'q')).toMatchObject({ target: null });
+  });
+
+  it.each([
+    ['Disability (optional)', 'diversityDisability'],
+    ['Gender (Optional)', 'diversityGender'],
+    [
+      'Do you consider yourself to have a disability (as defined by the Equality Act 2010)?',
+      'diversityDisability',
+    ],
+  ])('recognises “%s” with a known hint', (question, target) => {
+    document.body.innerHTML = `<form><label for="q">${question}</label>
+      <select id="q"><option value="">Select…</option><option>Yes</option>
+      <option>No</option><option>Prefer not to say</option></select></form>`;
+
+    expect(byId(plan(), 'q').target).toBe(target);
   });
 
   it('shows no saved answer in evidence', () => {

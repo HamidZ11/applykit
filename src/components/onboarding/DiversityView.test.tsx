@@ -194,7 +194,7 @@ describe('DiversityView', () => {
 
     await click('Clear all diversity preferences');
     expect(host.textContent).toContain(
-      'Delete every answer and turn reuse off?',
+      'Delete every answer and backup copy, and turn reuse off?',
     );
     await click('Cancel');
     expect(await stored()).toMatchObject({ preferences: savedDiversity() });
@@ -265,11 +265,49 @@ describe('DiversityView', () => {
     await render(<DiversityView now={() => NOW} />);
 
     expect(host.textContent).toContain('saved by a newer version of ApplyKit');
-    expect(host.querySelectorAll('select, input, button')).toHaveLength(0);
+    expect(host.querySelectorAll('select, input')).toHaveLength(0);
     expect(
       (await fakeBrowser.storage.local.get('diversityPreferences'))
         .diversityPreferences,
     ).toEqual(newer);
+
+    // Still the user's to delete.
+    await click('Clear all diversity preferences');
+    await click('Delete all');
+
+    expect(
+      (await fakeBrowser.storage.local.get('diversityPreferences'))
+        .diversityPreferences,
+    ).toBeUndefined();
+    expect(reuse().checked).toBe(false);
+  });
+
+  it('turns reuse off even after a save in another tab', async () => {
+    await browserDiversityStore.save(savedDiversity(), null, NOW);
+    await render(
+      <DiversityView now={() => new Date('2026-10-18T14:00:00.000Z')} />,
+    );
+    await browserDiversityStore.save(
+      {
+        ...savedDiversity(),
+        answers: { ...savedDiversity().answers, gender: 'woman' },
+      },
+      NOW.toISOString(),
+      new Date('2026-10-18T13:00:00.000Z'),
+    );
+
+    act(() => {
+      reuse().click();
+    });
+    await flush();
+
+    expect(await stored()).toMatchObject({
+      preferences: { reuse: false, answers: { gender: 'woman' } },
+    });
+    expect(reuse().checked).toBe(false);
+    expect(host.textContent).toContain(
+      'Reuse turned off. Your answers are kept.',
+    );
   });
 
   it('keeps unsaved answers across a visit to the profile', async () => {

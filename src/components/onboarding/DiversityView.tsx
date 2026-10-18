@@ -67,11 +67,44 @@ export function DiversityView({
     };
   }, [store, attempt]);
 
+  const clearAll = async () => {
+    setBusy(true);
+    setProblem(null);
+    const cleared = await store.clearAll();
+    setBusy(false);
+    setConfirmingClear(false);
+    if (!cleared) {
+      setProblem(
+        'ApplyKit could not delete your preferences. Nothing was changed; try again.',
+      );
+      return;
+    }
+    setDraft(null);
+    setNotice('All diversity preferences deleted.');
+    setLoad(null);
+    setAttempt((count) => count + 1);
+  };
+
+  const clearControl = (
+    <ClearAll
+      confirming={confirmingClear}
+      busy={busy}
+      onConfirming={setConfirmingClear}
+      onClear={() => {
+        void clearAll();
+      }}
+    />
+  );
+
   if (load === null) return <Shell heading={headingRef}>{null}</Shell>;
   if (load.status === 'unsupported') {
+    // Unreadable here, but still the user's to delete.
     return (
       <Shell heading={headingRef}>
         <Banner tone="warning">{NEWER}</Banner>
+        <div className="mt-6 flex justify-end">{clearControl}</div>
+        {problem && <Problem>{problem}</Problem>}
+        <Notice>{notice}</Notice>
       </Shell>
     );
   }
@@ -97,6 +130,51 @@ export function DiversityView({
   }
 
   const { preferences, updatedAt, damaged } = load;
+
+  /**
+   * Turning reuse off always applies, over whatever another tab saved:
+   * it keeps that tab's answers and only stops their use.
+   */
+  const turnOffReuse = async () => {
+    setBusy(true);
+    setProblem(null);
+    setNotice('');
+    let basedOn = updatedAt;
+    let answersNow = preferences.answers;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await store.save(
+        { reuse: false, answers: answersNow },
+        basedOn,
+        now(),
+      );
+      if (result.status === 'conflict') {
+        basedOn = result.current.updatedAt;
+        answersNow = result.current.preferences.answers;
+        continue;
+      }
+      setBusy(false);
+      if (result.status === 'saved') {
+        setLoad({
+          status: 'loaded',
+          preferences: result.saved.preferences,
+          updatedAt: result.saved.updatedAt,
+          damaged: [],
+        });
+        setNotice('Reuse turned off. Your answers are kept.');
+      } else if (result.status === 'unsupported') {
+        setLoad({ status: 'unsupported' });
+      } else {
+        setProblem(
+          'ApplyKit could not turn reuse off. Nothing was changed; try again.',
+        );
+      }
+      return;
+    }
+    setBusy(false);
+    setProblem(
+      'ApplyKit could not turn reuse off. Nothing was changed; try again.',
+    );
+  };
   const answers = draft ?? preferences.answers;
   const dirty = draft !== null;
 
@@ -145,24 +223,6 @@ export function DiversityView({
     }
   };
 
-  const clearAll = async () => {
-    setBusy(true);
-    setProblem(null);
-    const cleared = await store.clearAll();
-    setBusy(false);
-    setConfirmingClear(false);
-    if (!cleared) {
-      setProblem(
-        'ApplyKit could not delete your preferences. Nothing was changed; try again.',
-      );
-      return;
-    }
-    setDraft(null);
-    setNotice('All diversity preferences deleted.');
-    setLoad(null);
-    setAttempt((count) => count + 1);
-  };
-
   return (
     <Shell heading={headingRef}>
       {damaged === 'all' && (
@@ -186,13 +246,14 @@ export function DiversityView({
             checked={preferences.reuse}
             disabled={busy}
             onChange={(event) => {
-              const reuse = event.target.checked;
-              void save(
-                { reuse, answers: preferences.answers },
-                reuse
-                  ? 'Reuse turned on. Autofill now fills matching questions.'
-                  : 'Reuse turned off. Your answers are kept.',
-              );
+              if (event.target.checked) {
+                void save(
+                  { reuse: true, answers: preferences.answers },
+                  'Reuse turned on. Autofill now fills matching questions.',
+                );
+              } else {
+                void turnOffReuse();
+              }
             }}
             className="mt-0.5 size-4 shrink-0 rounded-xs accent-accent"
           />
@@ -237,15 +298,7 @@ export function DiversityView({
           ))}
         </FieldGrid>
 
-        {problem && (
-          <p
-            role="alert"
-            className="mt-4 flex items-start gap-1.5 text-xs text-danger"
-          >
-            <Icon icon={CircleAlert} size={13} className="mt-px shrink-0" />
-            {problem}
-          </p>
-        )}
+        {problem && <Problem>{problem}</Problem>}
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <PrimaryButton type="submit" disabled={!dirty || busy}>
@@ -262,47 +315,9 @@ export function DiversityView({
             </GhostButton>
           )}
           <span className="flex-1" />
-          {confirmingClear ? (
-            <span className="flex items-center gap-1 text-xs text-ink-2">
-              Delete every answer and turn reuse off?
-              <GhostButton
-                disabled={busy}
-                onClick={() => {
-                  setConfirmingClear(false);
-                }}
-              >
-                Cancel
-              </GhostButton>
-              <GhostButton
-                tone="danger"
-                disabled={busy}
-                onClick={() => {
-                  void clearAll();
-                }}
-              >
-                Delete all
-              </GhostButton>
-            </span>
-          ) : (
-            <GhostButton
-              tone="danger"
-              disabled={busy}
-              onClick={() => {
-                setConfirmingClear(true);
-              }}
-            >
-              Clear all diversity preferences
-            </GhostButton>
-          )}
+          {clearControl}
         </div>
-        <p role="status" className="mt-3 min-h-5 text-xs text-ink-2">
-          {notice && (
-            <span className="flex items-center gap-1.5">
-              <Icon icon={Check} size={14} className="text-success" />
-              {notice}
-            </span>
-          )}
-        </p>
+        <Notice>{notice}</Notice>
       </form>
     </Shell>
   );
@@ -360,6 +375,71 @@ function AnswerSelect({
         )}
       </select>
     </div>
+  );
+}
+
+/** "Clear all", confirmed inline; deletes backups too. */
+function ClearAll({
+  confirming,
+  busy,
+  onConfirming,
+  onClear,
+}: {
+  confirming: boolean;
+  busy: boolean;
+  onConfirming: (confirming: boolean) => void;
+  onClear: () => void;
+}) {
+  return confirming ? (
+    <span className="flex items-center gap-1 text-xs text-ink-2">
+      Delete every answer and backup copy, and turn reuse off?
+      <GhostButton
+        disabled={busy}
+        onClick={() => {
+          onConfirming(false);
+        }}
+      >
+        Cancel
+      </GhostButton>
+      <GhostButton tone="danger" disabled={busy} onClick={onClear}>
+        Delete all
+      </GhostButton>
+    </span>
+  ) : (
+    <GhostButton
+      tone="danger"
+      disabled={busy}
+      onClick={() => {
+        onConfirming(true);
+      }}
+    >
+      Clear all diversity preferences
+    </GhostButton>
+  );
+}
+
+function Problem({ children }: { children: ReactNode }) {
+  return (
+    <p
+      role="alert"
+      className="mt-4 flex items-start gap-1.5 text-xs text-danger"
+    >
+      <Icon icon={CircleAlert} size={13} className="mt-px shrink-0" />
+      {children}
+    </p>
+  );
+}
+
+function Notice({ children }: { children: string }) {
+  return (
+    <p role="status" className="mt-3 min-h-5 text-xs text-ink-2">
+      {children && (
+        <span className="flex items-center gap-1.5">
+          <Icon icon={Check} size={14} className="text-success" />
+          {children}
+        </span>
+      )}
+    </p>
   );
 }
 

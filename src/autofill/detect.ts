@@ -925,6 +925,9 @@ const SOMEONE_ELSE =
  * its whole wording is one, from a label or legend (never a placeholder or
  * a technical name), outside declarations and other people's sections.
  */
+const MONITORING_HINT =
+  /\(\s*(?:optional|required|(?:please )?(?:select|choose|tick) (?:one|all that apply)|as defined (?:by|in|under) the equality act(?: 2010)?)\s*\)/gi;
+
 function monitoringQuestion(
   questions: { signal: Signal; raw: string; core: string }[],
   surroundings: string,
@@ -935,7 +938,10 @@ function monitoringQuestion(
   const found = questions
     .filter((q) => q.signal === 'label')
     .flatMap((q) => {
-      const category = diversityQuestion(q.core);
+      // Other brackets can change the question ("Gender (legal sex)").
+      const category = diversityQuestion(
+        normalise(q.raw.replace(MONITORING_HINT, ' ')),
+      );
       return category ? [{ category, signal: q.signal, raw: q.raw }] : [];
     });
   const [first] = found;

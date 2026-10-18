@@ -215,6 +215,23 @@ export function matchDiversityOption(
     : { reason: 'no-option' };
 }
 
+/**
+ * Whether `value` names exactly one option, both as offered and in the
+ * list now: a list may share values between options or change while the
+ * background answers, and writing a shared value selects the first.
+ */
+function onlyOption(
+  element: Element,
+  offered: readonly OptionChoice[],
+  value: string,
+): boolean {
+  const [chosen, ...others] = offered.filter((o) => o.value === value);
+  if (!chosen || others.length > 0) return false;
+  if (!(element instanceof HTMLSelectElement)) return false;
+  const now = [...element.options].filter((o) => o.value === value);
+  return now.length === 1 && now[0]?.text.trim() === chosen.text;
+}
+
 /** What the background replies for one monitoring question. */
 export type DiversityChoice =
   { value: string } | { reason: 'reuse-off' | 'not-saved' | 'no-option' };
@@ -239,28 +256,48 @@ const LEFT: Record<
   },
 };
 
+const UNSEEN: Pick<FieldReport, 'status' | 'reason'> = {
+  status: 'manual',
+  reason:
+    'This question appeared after you pressed Autofill, so ApplyKit left it to you.',
+};
+
 /**
  * Completes the plan for monitoring questions just before writing: asks
  * the background which option of each list says the saved answer, and
- * plans exactly that option, or leaves the field with the reason. A
- * monitoring field is never written without a reply naming one of its
- * own options, and the saved answer itself is never shown.
+ * plans exactly that option, or leaves the field with the reason. Only
+ * questions that were already listed when the user pressed Autofill
+ * (`shown`) are asked about, so a page cannot add lists at that moment. A
+ * monitoring field is never written without a reply naming exactly one
+ * of its own options, still there as offered, and the saved answer
+ * itself is never shown.
  */
 export async function withDiversityChoices(
   plan: readonly FieldReport[],
   request: (
     requests: { category: DiversityCategory; options: OptionChoice[] }[],
   ) => Promise<{ results: DiversityChoice[] } | null>,
+  shown: ReadonlySet<Element>,
 ): Promise<FieldReport[]> {
-  const pending = plan.flatMap((report) =>
-    report.status === 'fill' &&
-    report.fillValue === null &&
-    report.target !== null &&
-    isDiversityField(report.target)
-      ? [{ report, category: DIVERSITY_CATEGORY[report.target] }]
-      : [],
-  );
-  if (pending.length === 0) return [...plan];
+  const decided = new Map<FieldReport, FieldReport>();
+  const pending = plan.flatMap((report) => {
+    if (
+      report.status !== 'fill' ||
+      report.fillValue !== null ||
+      report.target === null ||
+      !isDiversityField(report.target)
+    ) {
+      return [];
+    }
+    if (!shown.has(report.field.element)) {
+      decided.set(report, { ...report, ...UNSEEN });
+      return [];
+    }
+    return [{ report, category: DIVERSITY_CATEGORY[report.target] }];
+  });
+  if (pending.length === 0) {
+    return plan.map((report) => decided.get(report) ?? report);
+  }
   const lists = pending.map(({ report }) =>
     report.field.element instanceof HTMLSelectElement
       ? usableOptions(report.field.element).map((o) => ({
@@ -275,14 +312,13 @@ export async function withDiversityChoices(
       options: lists[index] ?? [],
     })),
   ).catch(() => null);
-  const decided = new Map<FieldReport, FieldReport>();
   pending.forEach(({ report }, index) => {
     const result = reply?.results[index];
     const offered = lists[index] ?? [];
     if (
       result &&
       'value' in result &&
-      offered.some((o) => o.value === result.value)
+      onlyOption(report.field.element, offered, result.value)
     ) {
       decided.set(report, { ...report, fillValue: result.value, value: null });
     } else if (result && 'reason' in result) {

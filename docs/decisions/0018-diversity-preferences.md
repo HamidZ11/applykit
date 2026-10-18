@@ -35,7 +35,9 @@ than a few saved clicks. Some users want to answer them once.
   (`options.html#diversity`): optional answers, "Reuse my saved
   diversity answers" saved as soon as it changes, and "Clear all
   diversity preferences" (with confirmation) which removes the
-  preferences and their backups. Turning reuse off keeps the answers.
+  preferences and their backups, also when they were saved by a newer
+  version. Turning reuse off keeps the answers and always applies, even
+  over a save from another tab.
 - **Narrow data path.** The panel never receives the answers. With its
   autofill values it gets only `{ reuse, saved }`: whether reuse is on
   and which categories have an answer (empty when reuse is off), enough
@@ -48,7 +50,9 @@ than a few saved clicks. Some users want to answer them once.
   diagnostics or the inspector; the inspector does not repeat a
   monitoring answer already on the page either.
 - **Recognition is whole questions.** A label or legend, without
-  bracketed hints or "optional", must be exactly a supported wording
+  "optional" or a few known bracketed hints ("(optional)", "(select all
+  that apply)", "(as defined by the Equality Act 2010)"; any other
+  bracket can change the question), must be exactly a supported wording
   ("What is your ethnic group?", "Religion or belief", "Do you consider
   yourself to have a disability?"). Questions that add or combine
   anything ("…or long-term health condition", "…same as registered at
@@ -60,7 +64,11 @@ than a few saved clicks. Some users want to answer them once.
   category's own other. For ethnicity, a form listing only broad groups
   gets the saved category's group, since each category belongs to
   exactly one. Zero or several matches leave the field with "The choices
-  here differ from your saved answer".
+  here differ from your saved answer". The chosen option's value must be
+  unique in the list and its text unchanged when the reply arrives.
+- **Only questions the user saw.** Monitoring lists are asked about only
+  if the panel listed them before the user pressed Autofill; a list a
+  page adds at that moment is left to the user.
 - **Controls.** Only empty, writable native single selects are filled,
   through the same plan and `fillFields` as everything else. Radio
   buttons, multiple selects, checkboxes and custom dropdowns are listed

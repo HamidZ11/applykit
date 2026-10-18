@@ -203,6 +203,11 @@ export function usePanel(
   const summary = useMemo(() => summarise(reports), [reports]);
   const queue = useMemo(() => attentionQueue(reports), [reports]);
 
+  const listed = useMemo(
+    () => new Set<Element>(state.fields.map((field) => field.element)),
+    [state.fields],
+  );
+
   const runAutofill = useCallback(async () => {
     if (filling.current) return;
     filling.current = true;
@@ -220,10 +225,12 @@ export function usePanel(
       }
       const fields = scanFields(root);
       // Monitoring questions get their option from the background now, and
-      // only now, if the user turned on reuse (ADR 0018).
+      // only now, if the user turned on reuse (ADR 0018); only those the
+      // panel listed before the click.
       const plan = await withDiversityChoices(
         planFill(fields, latest.values),
         chooseDiversity,
+        listed,
       );
       const outcomes = await fillFields(plan);
       dispatch({ type: 'autofilled', fields, outcomes });
@@ -233,7 +240,7 @@ export function usePanel(
     } finally {
       filling.current = false;
     }
-  }, [loadValues, root, chooseDiversity]);
+  }, [loadValues, root, chooseDiversity, listed]);
 
   const preview = useCallback(
     (choice: SectionChoice) =>

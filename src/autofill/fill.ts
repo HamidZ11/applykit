@@ -1,3 +1,4 @@
+import { isDiversityField } from './fields';
 import { comparable } from './options';
 import { isFormControl } from './scan';
 import { currentValue, type FieldReport } from './report';
@@ -44,7 +45,10 @@ export async function fillFields(
       return {
         ...report,
         status: 'kept',
-        value: existing,
+        value:
+          report.target !== null && isDiversityField(report.target)
+            ? null
+            : existing,
         reason: 'You entered something here first, so ApplyKit left it.',
       };
     }
