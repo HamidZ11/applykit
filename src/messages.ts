@@ -1,4 +1,12 @@
 import { TEXT_FIELDS, type AutofillValues } from '@/autofill/fields';
+import {
+  CURRENCIES,
+  NOTICE_UNITS,
+  SALARY_PERIODS,
+  WILLINGNESS,
+  WORK_ARRANGEMENTS,
+  isCalendarDate,
+} from '@/domain/application-answers';
 
 /** Messages between the panel's content script and the background worker. */
 
@@ -93,10 +101,11 @@ export function isAutofillValuesResponse(
   ) {
     return false;
   }
-  const { phone, education, employment } = values as {
+  const { phone, education, employment, answers } = values as {
     phone?: unknown;
     education?: unknown;
     employment?: unknown;
+    answers?: unknown;
   };
   return (
     isCountry(country) &&
@@ -104,7 +113,8 @@ export function isAutofillValuesResponse(
     Array.isArray(education) &&
     education.every(isEducation) &&
     Array.isArray(employment) &&
-    employment.every(isEmployment)
+    employment.every(isEmployment) &&
+    isAnswers(answers)
   );
 }
 
@@ -143,6 +153,40 @@ function isEmployment(record: unknown): boolean {
   return (
     EMPLOYMENT_TEXT.every((key) => typeof r[key] === 'string') &&
     typeof r.current === 'boolean'
+  );
+}
+
+const oneOf = (list: readonly string[], value: unknown) =>
+  typeof value === 'string' && list.includes(value);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+/** Every category present, each null or of its saved shape. */
+function isAnswers(answers: unknown): boolean {
+  if (answers === null) return true;
+  if (!isRecord(answers)) return false;
+  const { noticePeriod, relocation, workArrangement, startDate, salary } =
+    answers;
+  const willing = (value: unknown) =>
+    value === null || oneOf(WILLINGNESS, value);
+  return (
+    (noticePeriod === null ||
+      (isRecord(noticePeriod) &&
+        Number.isInteger(noticePeriod.amount) &&
+        oneOf(NOTICE_UNITS, noticePeriod.unit))) &&
+    (relocation === null ||
+      (isRecord(relocation) &&
+        willing(relocation.withinCountry) &&
+        willing(relocation.abroad))) &&
+    (workArrangement === null || oneOf(WORK_ARRANGEMENTS, workArrangement)) &&
+    (startDate === null ||
+      (typeof startDate === 'string' && isCalendarDate(startDate))) &&
+    (salary === null ||
+      (isRecord(salary) &&
+        typeof salary.amount === 'number' &&
+        Number.isFinite(salary.amount) &&
+        oneOf(CURRENCIES, salary.currency) &&
+        oneOf(SALARY_PERIODS, salary.period)))
   );
 }
 

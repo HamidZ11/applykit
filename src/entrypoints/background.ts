@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
 import { isGetAutofillValuesMessage, isOpenProfileMessage } from '@/messages';
+import { browserAnswersStore } from '@/storage/answers-store';
 import { loadAutofillValues } from '@/storage/autofill-source';
 import { browserProfileStore } from '@/storage/profile-store';
 
@@ -61,7 +62,7 @@ export default defineBackground(() => {
       // Read on every request, so the panel always uses the latest saved
       // profile. Never logs values.
       if (isGetAutofillValuesMessage(message)) {
-        loadAutofillValues(browserProfileStore)
+        loadAutofillValues(browserProfileStore, browserAnswersStore)
           .then(sendResponse)
           .catch(() => {
             sendResponse({ status: 'error' });

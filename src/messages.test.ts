@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { emptyAnswers } from '@/domain/application-answers';
+import { savedAnswers } from '@/test/answer-fixtures';
 import { sampleValues } from '@/test/autofill-fixtures';
 import {
   GET_AUTOFILL_VALUES,
@@ -7,6 +9,19 @@ import {
   isGetAutofillValuesMessage,
   isOpenProfileMessage,
 } from './messages';
+
+describe('saved answers in replies', () => {
+  it('accepts saved answers, none, or answers that could not be read', () => {
+    for (const answers of [savedAnswers(), emptyAnswers(), null]) {
+      expect(
+        isAutofillValuesResponse({
+          status: 'ready',
+          values: { ...sampleValues(), answers },
+        }),
+      ).toBe(true);
+    }
+  });
+});
 
 describe('message guards', () => {
   it('recognise ApplyKit messages by type only', () => {
@@ -80,6 +95,27 @@ describe('isAutofillValuesResponse', () => {
           ...sampleValues(),
           employment: [{ id: 'x', employer: 'E', current: 'yes' }],
         },
+      },
+    ],
+    [
+      'missing answers',
+      { status: 'ready', values: { ...sampleValues(), answers: undefined } },
+    ],
+    [
+      'a malformed answer',
+      {
+        status: 'ready',
+        values: {
+          ...sampleValues(),
+          answers: { ...emptyAnswers(), salary: { amount: '30k' } },
+        },
+      },
+    ],
+    [
+      'an answer for a question ApplyKit never answers',
+      {
+        status: 'ready',
+        values: { ...sampleValues(), answers: { ethnicity: 'example' } },
       },
     ],
     [

@@ -1,3 +1,4 @@
+import type { ApplicationAnswers } from '@/domain/application-answers';
 import type { EducationLevel } from './education';
 
 /**
@@ -198,4 +199,9 @@ export interface AutofillValues {
   education: EducationValue[];
   /** Saved jobs, in the order the user saved them. */
   employment: EmploymentValue[];
+  /**
+   * Saved answers to common questions, only ever suggested, never filled
+   * without the user's confirmation. Null when they could not be read.
+   */
+  answers: ApplicationAnswers | null;
 }

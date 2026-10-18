@@ -40,6 +40,13 @@ describe('autofillValuesFrom', () => {
       },
       education: [],
       employment: [],
+      answers: {
+        noticePeriod: null,
+        relocation: null,
+        workArrangement: null,
+        startDate: null,
+        salary: null,
+      },
     });
   });
 
@@ -146,6 +153,7 @@ describe('autofillValuesFrom', () => {
       'phone',
       'education',
       'employment',
+      'answers',
     ]);
   });
 });
