@@ -2011,6 +2011,27 @@ describe('AI drafting', () => {
     await settle();
   }
 
+  it('counts open questions apart from autofill and other fields', async () => {
+    await openWith();
+    click('Show summary');
+
+    const text = dialog().textContent;
+    expect(text).toContain('Fill 2 fields from your profile');
+    expect(text).toContain('8 open questions you can draft with AI');
+    expect(text).toMatch(/Leave \d+ other fields for you/);
+    expect(text).not.toContain('Fill 10');
+  });
+
+  it('describes open questions plainly while AI drafting is off', async () => {
+    await openWith(false);
+    click('Show summary');
+
+    expect(dialog().textContent).toContain(
+      '8 open questions to answer in your own words',
+    );
+    expect(dialog().textContent).not.toContain('AI');
+  });
+
   it('offers nothing while AI drafting is not connected', async () => {
     await openWith(false);
     click(/^Describe your programming skills/);

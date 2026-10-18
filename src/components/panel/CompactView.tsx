@@ -1,5 +1,10 @@
 import type { ReactNode } from 'react';
-import { ChevronRight, CircleDashed, ShieldCheck } from 'lucide-react';
+import {
+  ChevronRight,
+  CircleDashed,
+  ShieldCheck,
+  MessageSquareText,
+} from 'lucide-react';
 import { isAnswerField } from '@/autofill/fields';
 import { FieldRow, fieldKey } from './FieldRow';
 import { Icon } from '@/components/ui/icons';
@@ -44,11 +49,18 @@ function ReadyBody({ model }: { model: PanelModel }) {
   );
 }
 
-/** Before autofill: what ApplyKit will fill, keep and leave for you. */
+/**
+ * Before autofill: what ApplyKit will fill, keep and leave for you. Open
+ * questions are counted apart from other fields left to the user: they
+ * are never autofilled, and with AI drafting connected the user can ask
+ * for a draft of each.
+ */
 function Plan({ model }: { model: PanelModel }) {
   const { reports, summary, queue, expand } = model;
   const willFill = reports.filter((r) => r.status === 'fill').length;
   const willKeep = reports.filter((r) => r.status === 'keep').length;
+  const open = queue.filter((r) => r.status === 'open').length;
+  const others = queue.length - open;
 
   return (
     <ul className="-mx-1.5 mt-2.5">
@@ -68,10 +80,26 @@ function Plan({ model }: { model: PanelModel }) {
           onOpen={expand}
         />
       )}
-      {queue.length > 0 && (
+      {open > 0 && (
+        <PlanLine
+          glyph={
+            <Icon icon={MessageSquareText} size={14} className="text-ink-3" />
+          }
+          title={`${plural(open, 'open question')} ${
+            model.ai ? 'you can draft with AI' : 'to answer in your own words'
+          }`}
+          filter="you"
+          onOpen={expand}
+        />
+      )}
+      {others > 0 && (
         <PlanLine
           glyph={<Icon icon={CircleDashed} size={14} className="text-ink-3" />}
-          title={`Leave ${String(queue.length)} for you`}
+          title={
+            open > 0
+              ? `Leave ${plural(others, 'other field')} for you`
+              : `Leave ${String(others)} for you`
+          }
           meta={
             summary.requiredNeedsYou > 0
               ? `${String(summary.requiredNeedsYou)} required`
