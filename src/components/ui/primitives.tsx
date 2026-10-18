@@ -34,11 +34,21 @@ export function PrimaryButton({ className = '', ...props }: ButtonProps) {
   );
 }
 
-export function SecondaryButton({ className = '', ...props }: ButtonProps) {
+/**
+ * A bounded button for actions that start something: visibly a control
+ * before any hover. `sm` fits inside a field's detail in the panel.
+ */
+export function SecondaryButton({
+  className = '',
+  size = 'md',
+  ...props
+}: ButtonProps & { size?: 'md' | 'sm' }) {
   return (
     <button
       type="button"
-      className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-sm border border-line bg-white px-2.5 font-medium text-ink-2 shadow-control transition-[background-color,color,transform] duration-100 hover:bg-hover hover:text-ink active:scale-[0.98] disabled:bg-white disabled:text-ink-3 disabled:active:scale-100 ${className}`}
+      className={`inline-flex items-center justify-center rounded-sm border border-line bg-white font-medium text-ink-2 shadow-control transition-[background-color,border-color,color,transform] duration-100 hover:border-line-strong hover:bg-hover hover:text-ink active:scale-[0.98] active:bg-line motion-reduce:active:scale-100 disabled:border-line disabled:bg-white disabled:text-ink-3 disabled:active:scale-100 ${
+        size === 'sm' ? 'h-7 gap-1.5 px-2 text-xs' : 'h-8 gap-1.5 px-2.5'
+      } ${className}`}
       {...props}
     />
   );
@@ -71,7 +81,7 @@ export function GhostButton({
   return (
     <button
       type="button"
-      className={`inline-flex h-7 items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors duration-100 ${
+      className={`inline-flex h-7 items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors duration-100 disabled:bg-transparent disabled:text-ink-3 ${
         tone === 'danger'
           ? 'text-danger hover:bg-danger-soft'
           : 'text-ink-2 hover:bg-hover hover:text-ink'

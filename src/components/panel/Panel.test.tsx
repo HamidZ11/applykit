@@ -958,6 +958,112 @@ describe('choosing a saved job', () => {
   });
 });
 
+describe('field actions', () => {
+  /** Two saved jobs: numbered employment sections need a choice. */
+  async function openEmployment() {
+    loadFixture('employment-application.html');
+    document.body.append(host);
+    const saved = fullProfile();
+    saved.employment = employmentRecords();
+    await open(ready(autofillValuesFrom(saved)));
+    click('Show all fields');
+  }
+
+  const actionNames = () =>
+    [...host.querySelectorAll('li > div button')].map((b) =>
+      b.textContent.trim(),
+    );
+
+  it('shows the actions for a field as one row of bordered buttons', async () => {
+    await openEmployment();
+    click(/^Company name/);
+
+    expect(actionNames()).toEqual(['Choose a saved record', 'Go to field']);
+    const choose = button('Choose a saved record');
+    const goTo = button('Go to field');
+    for (const action of [choose, goTo]) {
+      expect(action.type).toBe('button');
+      expect(action.disabled).toBe(false);
+    }
+    // One shared treatment, visibly bounded before any hover.
+    expect(choose.className).toBe(goTo.className);
+    expect(choose.className).toMatch(/\bborder\b/);
+    // Explanations stay text, not controls.
+    expect(dialog().textContent).toContain('Several employment records fit');
+    expect(findButton(/Several employment records fit/)).toBeUndefined();
+  });
+
+  it('gives profile links the same treatment', async () => {
+    const values = sampleValues();
+    values.text.lastName = '';
+    await open(ready(values));
+    click('Show all fields');
+    click(/^Last name/);
+
+    expect(actionNames()).toEqual(['Edit your profile', 'Go to field']);
+    expect(button(/Edit your profile$/).className).toBe(
+      button('Go to field').className,
+    );
+  });
+
+  it('swaps the row for the chooser and restores it on Cancel', async () => {
+    await openEmployment();
+    click(/^Company name/);
+
+    click('Choose a saved record');
+    await settle();
+
+    // While choosing, only the chooser's own actions are offered.
+    expect(findButton('Go to field')).toBeUndefined();
+    expect(findButton('Choose a saved record')).toBeUndefined();
+    expect(button(/^Fill fields/).disabled).toBe(true);
+    expect(button('Cancel').disabled).toBe(false);
+
+    click('Cancel');
+
+    expect(actionNames()).toEqual(['Choose a saved record', 'Go to field']);
+    expect(document.activeElement).toBe(button(/^Company name/));
+  });
+
+  it('marks the chosen record and enables the primary action', async () => {
+    await openEmployment();
+    click(/^Company name/);
+    click('Choose a saved record');
+    await settle();
+    const radio = [
+      ...host.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+    ].find((r) =>
+      r.closest('label')?.textContent.includes('Example Logistics'),
+    );
+    if (!radio) throw new Error('No record');
+
+    await act(async () => {
+      radio.click();
+      await Promise.resolve();
+    });
+
+    const labels = [...host.querySelectorAll('fieldset label')];
+    expect(labels.map((l) => l.className.includes('bg-accent-soft'))).toEqual([
+      false,
+      true,
+    ]);
+    expect(button('Fill 5 fields').disabled).toBe(false);
+  });
+
+  it('keeps the compact mode free of field actions', async () => {
+    await openEmployment();
+    click('Show summary');
+
+    for (const name of [
+      'Choose a saved record',
+      'Go to field',
+      'Edit your profile',
+    ]) {
+      expect(findButton(name), name).toBeUndefined();
+    }
+  });
+});
+
 describe('missing profile details', () => {
   it('links to the profile editor', async () => {
     const values = sampleValues();

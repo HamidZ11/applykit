@@ -1,11 +1,15 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { LocateFixed, UserRound } from 'lucide-react';
+import { ListChecks, LocateFixed, UserRound } from 'lucide-react';
 import type { AutofillValues } from '@/autofill/fields';
 import { needsYou, type FieldReport } from '@/autofill/report';
 import type { FieldElement } from '@/autofill/scan';
 import type { Suggestion } from '@/autofill/suggestion';
 import { Icon } from '@/components/ui/icons';
-import { GhostButton, PrimaryButton } from '@/components/ui/primitives';
+import {
+  GhostButton,
+  PrimaryButton,
+  SecondaryButton,
+} from '@/components/ui/primitives';
 import { fieldKey } from './FieldRow';
 import { StatusGlyph } from './icons';
 import type { PanelModel } from './usePanel';
@@ -33,6 +37,8 @@ export function FieldActions({
     status === 'no-value' ||
     status === 'no-profile' ||
     suggestion?.kind === 'missing';
+  const [choosing, setChoosing] = useState(false);
+  const canChoose = records.length > 1;
 
   return (
     <>
@@ -43,23 +49,43 @@ export function FieldActions({
           option that only looks similar.
         </p>
       )}
-      {records.length > 1 && (
-        <RecordChooser report={report} records={records} model={model} />
-      )}
-      {(profileLacksIt || needsYou(report)) && (
-        <div className="mt-1.5 -ml-2 flex flex-wrap items-center gap-1">
-          {profileLacksIt && (
-            <GhostButton onClick={model.openProfile}>
-              <Icon icon={UserRound} size={14} />
-              {status === 'no-profile'
-                ? 'Set up your profile'
-                : 'Edit your profile'}
-            </GhostButton>
-          )}
-          {needsYou(report) && (
-            <GoToButton element={report.field.element} model={model} />
-          )}
-        </div>
+      {canChoose && choosing ? (
+        // The chooser has its own actions; the row's return when it closes.
+        <RecordChooser
+          report={report}
+          records={records}
+          model={model}
+          onClose={() => {
+            setChoosing(false);
+          }}
+        />
+      ) : (
+        (canChoose || profileLacksIt || needsYou(report)) && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {canChoose && (
+              <SecondaryButton
+                size="sm"
+                onClick={() => {
+                  setChoosing(true);
+                }}
+              >
+                <Icon icon={ListChecks} size={14} className="text-ink-3" />
+                Choose a saved record
+              </SecondaryButton>
+            )}
+            {profileLacksIt && (
+              <SecondaryButton size="sm" onClick={model.openProfile}>
+                <Icon icon={UserRound} size={14} className="text-ink-3" />
+                {status === 'no-profile'
+                  ? 'Set up your profile'
+                  : 'Edit your profile'}
+              </SecondaryButton>
+            )}
+            {needsYou(report) && (
+              <GoToButton element={report.field.element} model={model} />
+            )}
+          </div>
+        )
       )}
     </>
   );
@@ -98,23 +124,24 @@ function GoToButton({
   const [scrolledOnly, setScrolledOnly] = useState(false);
   return (
     <>
-      <GhostButton
+      <SecondaryButton
+        size="sm"
         onClick={() => {
           const result = model.goToField(element);
           setProblem(result.ok ? null : result.message);
           setScrolledOnly(result.ok && !result.focused);
         }}
       >
-        <Icon icon={LocateFixed} size={14} />
+        <Icon icon={LocateFixed} size={14} className="text-ink-3" />
         Go to field
-      </GhostButton>
+      </SecondaryButton>
       {problem && (
-        <p role="alert" className="basis-full pl-2 text-danger">
+        <p role="alert" className="basis-full text-danger">
           {problem}
         </p>
       )}
       {scrolledOnly && (
-        <p role="status" className="basis-full pl-2 text-ink-3">
+        <p role="status" className="basis-full text-ink-3">
           Scrolled to it. Click it on the page to choose.
         </p>
       )}
@@ -169,12 +196,14 @@ function RecordChooser({
   report,
   records,
   model,
+  onClose,
 }: {
   report: FieldReport;
   records: RecordOption[];
   model: PanelModel;
+  /** Called when the chooser closes: cancelled, or filled. */
+  onClose: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [recordId, setRecordId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -188,8 +217,8 @@ function RecordChooser({
 
   // Opening moves focus to the first record, so the arrow keys work at once.
   useEffect(() => {
-    if (open) firstRadio.current?.focus({ preventScroll: true });
-  }, [open]);
+    firstRadio.current?.focus({ preventScroll: true });
+  }, []);
 
   // The field's own row button, where focus returns when the chooser closes
   // or is replaced by the filled result.
@@ -200,9 +229,7 @@ function RecordChooser({
 
   const close = () => {
     const button = rowButton();
-    setOpen(false);
-    setRecordId(null);
-    setError(null);
+    onClose();
     button?.focus({ preventScroll: true });
   };
 
@@ -217,6 +244,7 @@ function RecordChooser({
     );
     setBusy(false);
     if (result.ok) {
+      onClose();
       button?.focus({ preventScroll: true });
     } else {
       setError(result.message);
@@ -225,27 +253,12 @@ function RecordChooser({
 
   // Escape closes the chooser before it closes the panel.
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape' && open) {
+    if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
       close();
     }
   };
-
-  if (!open) {
-    return (
-      <div ref={root} className="mt-1.5 -ml-2">
-        <GhostButton
-          onClick={() => {
-            setOpen(true);
-          }}
-          className="text-accent hover:bg-accent-soft hover:text-accent-hover"
-        >
-          Choose a saved record
-        </GhostButton>
-      </div>
-    );
-  }
 
   return (
     <div
@@ -258,7 +271,11 @@ function RecordChooser({
         {records.map((record, index) => (
           <label
             key={record.id}
-            className="flex cursor-default items-start gap-2.5 border-b border-line px-2.5 py-2 last:border-b-0 has-[:checked]:bg-accent-soft"
+            className={`flex cursor-default items-start gap-2.5 border-b border-line px-2.5 py-2 transition-colors duration-100 last:border-b-0 ${
+              recordId === record.id
+                ? 'bg-accent-soft shadow-[inset_2px_0_0_var(--color-accent)]'
+                : 'hover:bg-hover'
+            }`}
           >
             <input
               ref={index === 0 ? firstRadio : undefined}
@@ -273,7 +290,11 @@ function RecordChooser({
               className="mt-0.5 size-3.5 shrink-0 accent-accent"
             />
             <span className="min-w-0">
-              <span className="block truncate font-medium text-ink">
+              <span
+                className={`block truncate font-medium ${
+                  recordId === record.id ? 'text-accent-hover' : 'text-ink'
+                }`}
+              >
                 {record.name}
               </span>
               <span className="block truncate text-2xs text-ink-3">
