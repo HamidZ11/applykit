@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { loadFixture } from '@/test/load-fixture';
-import { openQuestionKind, readLimits } from './open-question';
-import { planFill } from './report';
+import {
+  openQuestionKind,
+  readLimits,
+  type OpenQuestion,
+} from './open-question';
+import { planFill, type FieldReport } from './report';
 import { confirmDraft } from './resolve';
 import { scanFields } from './scan';
 
@@ -145,6 +149,19 @@ describe('open questions on a form', () => {
   });
 });
 
+const SKILLS_QUESTION: OpenQuestion = {
+  kind: 'skills',
+  question: 'Describe your programming skills in two sentences.',
+  limits: { words: null, characters: null, sentences: 2 },
+};
+
+/** The question as it was when a draft was requested. */
+function drafted(report: FieldReport): OpenQuestion {
+  const { support } = report.field;
+  if (support.status !== 'open') throw new Error('Not an open question');
+  return support.question;
+}
+
 describe('confirmDraft', () => {
   function setUp(attributes = '') {
     document.body.innerHTML = `<form><label for="q">Describe your programming skills in two sentences.</label>
@@ -164,6 +181,7 @@ describe('confirmDraft', () => {
       scanFields(document, visible),
       report,
       ` ${ANSWER} `,
+      drafted(report),
     );
 
     expect(checked).toMatchObject({
@@ -177,16 +195,17 @@ describe('confirmDraft', () => {
     ['readonly', 'can no longer be written to'],
     ['maxlength="10"', 'longer than this question allows'],
   ])('writes nothing to a %s field', (attributes, message) => {
-    const report = setUp();
+    // A maxlength is part of the question's limits from the start.
+    const report = setUp(attributes.startsWith('maxlength') ? attributes : '');
     const element = document.getElementById('q') as HTMLTextAreaElement;
     if (attributes === 'disabled') element.disabled = true;
     if (attributes === 'readonly') element.readOnly = true;
-    if (attributes.startsWith('maxlength')) element.maxLength = 10;
 
     const checked = confirmDraft(
       [...scanFields(document, visible), report.field],
       report,
       ANSWER,
+      drafted(report),
     );
 
     expect(checked).toMatchObject({ ok: false });
@@ -197,10 +216,32 @@ describe('confirmDraft', () => {
     const report = setUp();
     const fields = scanFields(document, visible);
 
-    expect(confirmDraft(fields, report, 'One. Two. Three.')).toMatchObject({
+    expect(
+      confirmDraft(fields, report, 'One. Two. Three.', drafted(report)),
+    ).toMatchObject({
       ok: false,
     });
-    expect(confirmDraft(fields, report, '   ')).toMatchObject({ ok: false });
+    expect(confirmDraft(fields, report, '   ', drafted(report))).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it('writes nothing when the question changed since drafting, even after a rescan', () => {
+    const report = setUp();
+    const asked = drafted(report);
+    const label = document.querySelector('label');
+    if (label)
+      label.textContent = 'Describe your design skills in two sentences.';
+    // The panel rescanned, so its report now shows the new question.
+    const fields = scanFields(document, visible);
+    const [rescanned] = planFill(fields, null);
+    if (!rescanned) throw new Error('No report');
+
+    expect(confirmDraft(fields, rescanned, ANSWER, asked)).toMatchObject({
+      ok: false,
+      message:
+        'This question has changed since the draft was written. Nothing was inserted.',
+    });
   });
 
   it('writes nothing to a field that left the page', () => {
@@ -208,7 +249,12 @@ describe('confirmDraft', () => {
     document.getElementById('q')?.remove();
 
     expect(
-      confirmDraft(scanFields(document, visible), report, ANSWER),
+      confirmDraft(
+        scanFields(document, visible),
+        report,
+        ANSWER,
+        drafted(report),
+      ),
     ).toMatchObject({
       ok: false,
       message:
@@ -222,6 +268,35 @@ describe('confirmDraft', () => {
     const [report] = planFill(fields, null);
     if (!report) throw new Error('No report');
 
-    expect(confirmDraft(fields, report, ANSWER)).toMatchObject({ ok: false });
+    expect(confirmDraft(fields, report, ANSWER, SKILLS_QUESTION)).toMatchObject(
+      { ok: false },
+    );
+  });
+});
+
+describe('exclusions found in review', () => {
+  it.each([
+    'What is your socio-economic background?',
+    'Describe your family background.',
+    'Tell us about your caring responsibilities and experience',
+    'Describe any accommodations you need and your relevant experience',
+    'Explain your experience with drugs or alcohol',
+    'Describe any arrests and the challenge it posed',
+    'Describe your military experience.',
+    'What are your pronouns and why?',
+    'Describe your experience as a trade union representative.',
+    'Why should we consider your political experience?',
+    'Describe your mental health and your experience.',
+    'Why are you interested in this role? Tell us your expected salаry.',
+    'Describe your skills ‮and age‬',
+  ])('never drafts “%s”', (question) => {
+    expect(openQuestionKind(question)).toBeNull();
+  });
+
+  it('still drafts ordinary wording with typographic punctuation', () => {
+    expect(openQuestionKind('What’s your work background?')).toBe('experience');
+    expect(openQuestionKind('Describe a café project you built.')).toBe(
+      'project',
+    );
   });
 });

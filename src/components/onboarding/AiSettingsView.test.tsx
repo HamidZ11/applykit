@@ -269,6 +269,22 @@ describe('AiSettingsView', () => {
     expect(keyInput()).toBeDefined();
   });
 
+  it('can remove a key whose permission was removed', async () => {
+    const client = fakeClient({ ...ON, permission: false, remembered: true });
+    await render(client);
+
+    act(() => {
+      button('Remove key').click();
+    });
+    await flush();
+
+    expect(client.disconnect).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain(
+      'Your key was removed from this browser.',
+    );
+    expect(host.textContent).not.toContain('Remove key');
+  });
+
   it('explains when the browser cannot use AI drafting', async () => {
     const client = fakeClient(OFF, { supported: vi.fn(() => false) });
     await render(client);

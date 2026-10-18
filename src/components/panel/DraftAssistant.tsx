@@ -29,8 +29,14 @@ type Stage =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'preview'; preview: Preview; full: boolean }
-  | { kind: 'drafting'; preview: Preview; controller: AbortController }
-  | { kind: 'draft'; preview: Preview; text: string }
+  | {
+      kind: 'drafting';
+      preview: Preview;
+      controller: AbortController;
+      /** The question as it was asked; insertion checks it is unchanged. */
+      asked: OpenQuestion;
+    }
+  | { kind: 'draft'; preview: Preview; text: string; asked: OpenQuestion }
   | {
       kind: 'problem';
       message: string;
@@ -115,7 +121,8 @@ export function DraftAssistant({
 
   const send = (current: Preview, approve: boolean) => {
     const abort = new AbortController();
-    setStage({ kind: 'drafting', preview: current, controller: abort });
+    const asked = question;
+    setStage({ kind: 'drafting', preview: current, controller: abort, asked });
     void model
       .draftAnswer(
         { ...request(), selected: [...selected], approve },
@@ -135,7 +142,12 @@ export function DraftAssistant({
         }
         switch (reply.status) {
           case 'draft':
-            setStage({ kind: 'draft', preview: current, text: reply.text });
+            setStage({
+              kind: 'draft',
+              preview: current,
+              text: reply.text,
+              asked,
+            });
             return;
           case 'needs-approval':
             setStage({ kind: 'preview', preview: current, full: true });
@@ -280,9 +292,9 @@ export function DraftAssistant({
       return (
         <DraftReview
           text={stage.text}
-          limits={question.limits}
+          limits={stage.asked.limits}
           shared={[
-            question.question,
+            stage.asked.question,
             names.role,
             names.employer,
             ...stage.preview.items
@@ -298,7 +310,7 @@ export function DraftAssistant({
           onCancel={() => {
             setStage({ kind: 'idle' });
           }}
-          onInsert={(text) => model.insertDraft(report, text)}
+          onInsert={(text) => model.insertDraft(report, text, stage.asked)}
           onInserted={() => {
             setStage({ kind: 'idle' });
           }}

@@ -37,10 +37,15 @@ async function send(message: object): Promise<unknown> {
 
 export const browserAiSettingsClient: AiSettingsClient = {
   supported() {
-    const area = (browser.storage as { session?: unknown } | undefined)
-      ?.session;
+    // Session storage limited to trusted contexts (Chrome 102+, Safari
+    // 17.1+), so a session key is never readable by content scripts.
+    const area = (
+      browser.storage as { session?: { setAccessLevel?: unknown } } | undefined
+    )?.session;
     const permissions = (browser as { permissions?: unknown }).permissions;
-    return area !== undefined && permissions !== undefined;
+    return (
+      typeof area?.setAccessLevel === 'function' && permissions !== undefined
+    );
   },
   async status() {
     const reply = await send({ type: AI_STATUS_TYPE });

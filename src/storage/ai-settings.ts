@@ -5,7 +5,7 @@ import {
   type ModelChoice,
   type TokenUsage,
 } from '@/ai/models';
-import { AI_SETTINGS_KEY, AI_USAGE_KEY } from './keys';
+import { AI_SETTINGS_KEY, AI_USAGE_KEY, AI_USAGE_SESSION_KEY } from './keys';
 import { withLock } from './lock';
 
 /**
@@ -138,8 +138,29 @@ function count(value: unknown): number | null {
  * Today's stored usage. Unreadable data for today counts as the limit
  * reached, so a damaged counter never allows more requests.
  */
+/**
+ * Today's usage, from both copies: where content scripts can reach local
+ * storage, they cannot reset the session copy, so the higher count wins.
+ */
 async function readUsage(day: string): Promise<UsageToday | null> {
-  const value = await storage.getItem<unknown>(AI_USAGE_KEY);
+  const [local, session] = await Promise.all([
+    readUsageCopy(AI_USAGE_KEY, day),
+    readUsageCopy(AI_USAGE_SESSION_KEY, day),
+  ]);
+  if (!local || !session) return null;
+  return local.requests >= session.requests ? local : session;
+}
+
+async function writeUsage(usage: UsageToday): Promise<void> {
+  await storage.setItem(AI_USAGE_SESSION_KEY, usage);
+  await storage.setItem(AI_USAGE_KEY, usage);
+}
+
+async function readUsageCopy(
+  key: typeof AI_USAGE_KEY | typeof AI_USAGE_SESSION_KEY,
+  day: string,
+): Promise<UsageToday | null> {
+  const value = await storage.getItem<unknown>(key);
   if (value === null) return emptyUsage(day);
   if (typeof value !== 'object') return null;
   const stored = value as Record<string, unknown>;
@@ -182,10 +203,7 @@ export const browserAiUsageStore: AiUsageStore = {
       return await serially(async () => {
         const usage = await readUsage(day);
         if (!usage || usage.requests >= limit) return false;
-        await storage.setItem(AI_USAGE_KEY, {
-          ...usage,
-          requests: usage.requests + 1,
-        });
+        await writeUsage({ ...usage, requests: usage.requests + 1 });
         return true;
       });
     } catch {
@@ -199,7 +217,7 @@ export const browserAiUsageStore: AiUsageStore = {
       await serially(async () => {
         const current = await readUsage(day);
         if (!current) return;
-        await storage.setItem(AI_USAGE_KEY, {
+        await writeUsage({
           ...current,
           inputTokens: current.inputTokens + usage.inputTokens,
           outputTokens: current.outputTokens + usage.outputTokens,

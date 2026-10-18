@@ -181,9 +181,8 @@ remove it). Both are trusted extension contexts.
   `local:aiCredential` when remembered), never in the profile, drafts,
   CV import, answers, diversity or settings objects.
 - The background never puts the key in a message, a thrown error, a
-  result or a log. API errors are mapped to fixed messages; only the
-  error type and `request-id` are kept (the `request-id` is shown on
-  request for support).
+  result or a log. API errors are mapped to fixed messages; nothing of
+  the API's error text, or its `request-id`, is kept.
 - `storage.session.setAccessLevel('TRUSTED_CONTEXTS')` is the default in
   Chrome and Safari 17.1+; the background sets it explicitly where
   supported. `storage.local` cannot be restricted in Safari, and its
@@ -197,8 +196,8 @@ remove it). Both are trusted extension contexts.
 - Recommended in the UI: create a dedicated key in a dedicated
   workspace, with a workspace spend limit and an expiry.
 - Fixtures, tests and commits use only fake keys that cannot be valid
-  (e.g. `sk-ant-test-not-a-key`). A test checks the built bundle
-  contains no `sk-ant-api` string.
+  (e.g. `sk-ant-test-not-a-real-key-…`). The built bundles were searched
+  by hand for `sk-ant-api` before review; there is no automated check.
 
 **Residual risks** (not claimable as secure):
 
@@ -208,8 +207,14 @@ remove it). Both are trusted extension contexts.
   background bundle could exfiltrate the key. Mitigated by the existing
   dependency policy (pinned, minimum release age, no new runtime
   dependencies for AI) and review, not eliminated.
-- A compromised renderer cannot read the key, but can send drafting
-  requests through the panel's messaging and spend money (section 13).
+- A compromised renderer cannot read a session key (session storage is
+  limited to trusted contexts; AI drafting requires browsers that
+  support that). It can read a remembered key where `storage.local`
+  cannot be restricted (Safari, and Chrome versions without
+  `storage.local.setAccessLevel`), and anywhere it can send drafting
+  requests through the panel's messaging and spend money up to the
+  daily limit, whose count is also kept in session storage (section
+  13).
 
 ## 6. Privacy and data-sharing boundaries
 
@@ -468,10 +473,10 @@ verification.
 | Accidental logging                   | Key or data in console               | No logging of requests, keys or drafts; errors mapped to fixed text; test asserts no `console` calls with values                   | Developer error; reviewed                                               |
 | Storage exposure                     | Key read from disk                   | Session storage by default; remember is opt-in with warning                                                                        | Remembered key unencrypted on disk                                      |
 | Malicious dependency                 | Key exfiltration                     | No SDK or new runtime dependency; pnpm minimum release age                                                                         | Existing dependencies                                                   |
-| Key in build                         | Leaked key                           | No keys in code or tests; bundle check for `sk-ant-api`                                                                            | None known                                                              |
+| Key in build                         | Leaked key                           | No keys in code or tests; bundles searched by hand for `sk-ant-api`                                                                | None known                                                              |
 | Unauthorised API calls               | Cost                                 | Only after Draft, with a key the user added                                                                                        | Compromised renderer within limits                                      |
 | Excessive spending                   | Cost                                 | Token caps, no auto-retry loops, daily limit, usage estimate, Console limit advice                                                 | Local counters are not a provider cap                                   |
-| Error messages                       | Key or data shown                    | Fixed messages; only `request-id` retained                                                                                         | None known                                                              |
+| Error messages                       | Key or data shown                    | Fixed messages; nothing of the API's error kept                                                                                    | None known                                                              |
 | Fabricated content                   | Dishonest application                | Grounded prompt, missing-fact placeholder, grounding flags, user review                                                            | User may insert an unreviewed claim                                     |
 
 ## 14. Implementation phases

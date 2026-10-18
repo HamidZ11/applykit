@@ -104,3 +104,14 @@ describe('daily usage', () => {
     expect((await usage.today(NOW)).requests).toBe(3);
   });
 });
+
+describe('daily usage, protected copy', () => {
+  it('keeps counting when the local copy is cleared', async () => {
+    await usage.reserve(2, NOW);
+    await usage.reserve(2, NOW);
+    await fakeBrowser.storage.local.remove('aiUsage');
+
+    expect(await usage.reserve(2, NOW)).toBe(false);
+    expect((await usage.today(NOW)).requests).toBe(2);
+  });
+});

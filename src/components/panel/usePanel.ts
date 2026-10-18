@@ -26,6 +26,7 @@ import {
   type SectionChoice,
 } from '@/autofill/resolve';
 import type { AutofillValues } from '@/autofill/fields';
+import type { OpenQuestion } from '@/autofill/open-question';
 import {
   scanFields,
   type FieldElement,
@@ -127,7 +128,11 @@ export interface PanelModel extends PanelState {
    * Inserts the user's final text into the open question it was drafted
    * for, after re-checking the field. Never submits.
    */
-  insertDraft: (previewed: FieldReport, text: string) => Promise<ChoiceResult>;
+  insertDraft: (
+    previewed: FieldReport,
+    text: string,
+    drafted: OpenQuestion,
+  ) => Promise<ChoiceResult>;
   /** Opens the skills and projects; failures as for the profile. */
   openSkills: () => void;
   /** Opens the AI Assistant settings; failures as for the profile. */
@@ -357,13 +362,22 @@ export function usePanel(
   );
 
   const insertDraft = useCallback(
-    async (previewed: FieldReport, text: string): Promise<ChoiceResult> => {
+    async (
+      previewed: FieldReport,
+      text: string,
+      drafted: OpenQuestion,
+    ): Promise<ChoiceResult> => {
       if (filling.current) {
         return { ok: false, message: 'ApplyKit is still filling. Try again.' };
       }
       filling.current = true;
       try {
-        const checked = confirmDraft(scanFields(root), previewed, text);
+        const checked = confirmDraft(
+          scanFields(root),
+          previewed,
+          text,
+          drafted,
+        );
         if (!checked.ok) return checked;
         const outcomes = await fillFields(checked.plan);
         const filled = outcomes.filter(

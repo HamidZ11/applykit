@@ -7,6 +7,7 @@ import {
 } from './fields';
 import { overLimits } from '@/ai/check';
 import { currentValue, needsYou, planFill, type FieldReport } from './report';
+import type { OpenQuestion } from './open-question';
 import { isFormControl, type ScannedField } from './scan';
 
 /**
@@ -230,6 +231,8 @@ export function confirmDraft(
   fields: readonly ScannedField[],
   previewed: FieldReport,
   text: string,
+  /** The question as it was when the draft was requested. */
+  drafted: OpenQuestion,
 ): ChoiceCheck {
   const { element, support } = previewed.field;
   const current = fields.find((field) => field.element === element);
@@ -244,7 +247,10 @@ export function confirmDraft(
     support.status !== 'open' ||
     current.support.status !== 'open' ||
     current.label !== previewed.field.label ||
-    current.support.question.question !== support.question.question
+    current.support.question.question !== drafted.question ||
+    current.support.question.kind !== drafted.kind ||
+    JSON.stringify(current.support.question.limits) !==
+      JSON.stringify(drafted.limits)
   ) {
     return {
       ok: false,

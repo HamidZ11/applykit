@@ -559,8 +559,8 @@ function excluded(field: AutofillField, text: string): boolean {
   return (EXCLUDE[field]?.test(text) ?? false) && !INSTRUCTION.test(text);
 }
 
-/** Never answered automatically. */
-const SENSITIVE =
+/** Never answered automatically; open questions about these are never drafted. */
+export const SENSITIVE =
   /\b(?:reasonable adjustments?|access requirements?|right to work|work permit|visa|sponsor\w*|salary|compensation|pay|wage|disabilit\w*|disabled|gender|sex|ethnic\w*|race|religio\w*|belief|sexual\w*|orientation|age|date of birth|dob|birth\w*|veteran|military|criminal|convictions?|pronouns?|marital|pregnan\w*|nationality|citizen\w*|origin|native|passport|national insurance|social security|ssn|diversity|equal opportunit\w*|caste|medical|health|political|politics|trade union\w*|authori[sz]ation|authori[sz]ed to work|eligib\w* to work|entitle\w* to work|permission to work|work eligibility|immigration)\b/;
 
 /**

@@ -60,3 +60,9 @@ export const SKILLS_BACKUP_KEY = 'local:skillsProjectsBackup';
  * browser closes.
  */
 export const AI_APPROVALS_KEY = 'session:aiApprovals';
+
+/**
+ * A copy of today's AI request count in session storage, which content
+ * scripts cannot reach: the higher of the two counts applies.
+ */
+export const AI_USAGE_SESSION_KEY = 'session:aiUsage';

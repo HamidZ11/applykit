@@ -1,3 +1,5 @@
+import { SENSITIVE } from './detect';
+
 /**
  * Open questions the applicant answers in their own words, which AI
  * drafting may help with (ADR 0019): "Describe your programming skills in
@@ -43,7 +45,7 @@ export const MAX_QUESTION_LENGTH = 1000;
  * other people, contact details, pay, and catch-all boxes.
  */
 const EXCLUDED =
-  /\b(?:consent\w*|agree\w*|declar\w*|certif\w*|confirm\w*|attest\w*|signature|sign|signed|initials|password\w*|passcode|pin|captcha|referees?|references?|emergency|next of kin|guardian|parents?|spouse|partner|salary|salaries|pay|paid|compensation|remuneration|wage|wages|notice period|visa|sponsor\w*|right to work|work permit|immigration|nationality|citizen\w*|passport|criminal|convictions?|offen[cs]es?|cautions?|disciplinary|dismiss\w*|health|medical|illness|disabilit\w*|disabled|adjustments?|conditions?|gender|sex|sexual\w*|ethnic\w*|race|religio\w*|belief|beliefs|pregnan\w*|marital|age|birth|diversity|equal opportunit\w*|leave|leaving|left|gaps?|career breaks?|eligib\w*|entitle\w*|authori[sz]\w*|clearance|vetting|dbs|address|postcode|phone|mobile|email|linkedin|website|url|portfolio link|cover letter|anything else|additional information|other information|comments?|how did you hear|speak|spoken|fluen\w*)\b/;
+  /\b(?:consent\w*|agree\w*|declar\w*|certif\w*|confirm\w*|attest\w*|signature|sign|signed|initials|password\w*|passcode|pin|captcha|referees?|references?|emergency|next of kin|guardian|parents?|spouse|partner|salary|salaries|pay|paid|compensation|remuneration|wage|wages|notice period|visa|sponsor\w*|right to work|work permit|immigration|nationality|citizen\w*|passport|criminal|convictions?|offen[cs]es?|cautions?|disciplinary|dismiss\w*|health|medical|illness|disabilit\w*|disabled|adjustments?|conditions?|gender|sex|sexual\w*|ethnic\w*|race|religio\w*|belief|beliefs|pregnan\w*|marital|age|birth|diversity|equal opportunit\w*|leave|leaving|left|gaps?|career breaks?|eligib\w*|entitle\w*|authori[sz]\w*|clearance|vetting|dbs|address|postcode|phone|mobile|email|linkedin|website|url|portfolio link|cover letter|anything else|additional information|other information|comments?|how did you hear|speak|spoken|fluen\w*|socio\w*|economic|class|family|families|carers?|caring|accommodations?|arrests?|drugs?|alcohol|substances?|mental|neuro\w*|military|veterans?|armed forces|pronouns?|political|trade unions?|caste|national insurance|ssn|benefits)\b/;
 
 /** Questions answered yes or no, or with a fact about the applicant. */
 const CLOSED =
@@ -69,12 +71,20 @@ const KINDS: [OpenQuestionKind, RegExp][] = [
   ],
   [
     'experience',
-    /\b(?:experience|background|strengths?|suitab\w*|what (?:would|will|can|could) you bring|contribute|achievements?)\b/,
+    // "Background" alone can mean family or social background.
+    /\b(?:experience|(?:professional|technical|work|academic|educational) background|strengths?|suitab\w*|what (?:would|will|can|could) you bring|contribute|achievements?)\b/,
   ],
 ];
 
-function plain(text: string): string {
-  return text
+/**
+ * Lowercase ASCII words. Letters from other scripts (a Cyrillic "а" in
+ * "salаry") would hide words from the exclusions, so text with any is
+ * not drafted: `null`.
+ */
+function plain(text: string): string | null {
+  const latin = text.normalize('NFKD').replace(/\p{M}/gu, '');
+  if (/[^\p{ASCII}’‘“”–—…£€]/u.test(latin)) return null;
+  return latin
     .toLowerCase()
     .replace(/[’']/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
@@ -91,8 +101,16 @@ export function openQuestionKind(
   surroundings = '',
 ): OpenQuestionKind | null {
   const question = plain(text);
+  const around = plain(surroundings);
+  if (question === null || around === null) return null;
   if (question === '' || question.split(' ').length > MAX_WORDS) return null;
-  if (EXCLUDED.test(question) || EXCLUDED.test(plain(surroundings))) {
+  // Everything detection treats as sensitive, and more.
+  if (
+    EXCLUDED.test(question) ||
+    EXCLUDED.test(around) ||
+    SENSITIVE.test(question) ||
+    SENSITIVE.test(around)
+  ) {
     return null;
   }
   if (!OPEN.test(question) && !text.trim().endsWith('?')) return null;

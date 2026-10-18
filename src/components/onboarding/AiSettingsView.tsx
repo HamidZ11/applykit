@@ -286,7 +286,29 @@ export function AiSettingsView({
           {status.connected && !status.permission && (
             <Banner tone="warning">
               Access to api.anthropic.com was removed in the browser&rsquo;s
-              settings. Connect again to use AI drafting.
+              settings. Connect again to use AI drafting, or remove your key
+              ending {status.keyHint}.{' '}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void client.disconnect().then(async (ok) => {
+                    const next = await client.status();
+                    setBusy(false);
+                    if (next) setPhase({ kind: 'ready', status: next });
+                    if (ok)
+                      setNotice('Your key was removed from this browser.');
+                    else
+                      setProblem(
+                        'ApplyKit could not remove your key. Try again.',
+                      );
+                  });
+                }}
+                className="font-medium underline underline-offset-2 hover:no-underline"
+              >
+                Remove key
+              </button>
             </Banner>
           )}
           <div>
@@ -336,7 +358,8 @@ export function AiSettingsView({
                 Off: the key is forgotten when the browser closes. On: it is
                 stored in this browser&rsquo;s extension storage without
                 encryption, readable by anyone with access to this browser
-                profile.
+                profile, and, in some browsers, by a page that compromises the
+                tab ApplyKit runs in.
               </span>
             </span>
           </label>
