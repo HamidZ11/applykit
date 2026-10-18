@@ -93,6 +93,7 @@ export function ExpandedView({ model }: { model: PanelModel }) {
                     }}
                     // Saved answers show their value and action at once.
                     open={category === 'suggested'}
+                    diagnostics={model.diagnostics}
                     actions={<FieldActions report={report} model={model} />}
                   />
                 ))}

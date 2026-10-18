@@ -30,8 +30,10 @@ import {
   SecondaryButton,
 } from '@/components/ui/primitives';
 import { readCv, type CvFile, type CvReadResult } from '@/cv/read';
+import type { SettingsStore } from '@/storage/settings-store';
 import { AnswersView, type AnswerDrafts } from './AnswersView';
 import { CvImport } from './CvImport';
+import { DiagnosticsSetting } from './DiagnosticsSetting';
 import { formatSavedAt } from './format';
 import { LinksStep } from './LinksStep';
 import {
@@ -91,6 +93,8 @@ const systemClock = () => new Date();
 interface OnboardingAppProps {
   store?: ProfileStore;
   answersStore?: AnswersStore;
+  /** ApplyKit's own preferences; injectable for tests. */
+  settingsStore?: SettingsStore;
   /** Reads a CV file; injectable for tests. */
   readCvFile?: (file: CvFile) => Promise<CvReadResult>;
   /** Clock for save timestamps; injectable for tests. */
@@ -108,6 +112,7 @@ interface OnboardingAppProps {
 export function OnboardingApp({
   store = browserProfileStore,
   answersStore = browserAnswersStore,
+  settingsStore,
   readCvFile = readCv,
   now = systemClock,
 }: OnboardingAppProps) {
@@ -325,6 +330,7 @@ export function OnboardingApp({
       editing={editing}
       importing={importing}
       answering={answering}
+      settingsStore={settingsStore}
       onGo={go}
       onImport={() => {
         setImported(null);
@@ -624,6 +630,7 @@ function StepRail({
   editing,
   importing,
   answering,
+  settingsStore,
   onGo,
   onImport,
   onAnswers,
@@ -632,6 +639,7 @@ function StepRail({
   editing: boolean;
   importing: boolean;
   answering: boolean;
+  settingsStore: SettingsStore | undefined;
   onGo: (step: Step) => void;
   onImport: () => void;
   onAnswers: () => void;
@@ -756,10 +764,15 @@ function StepRail({
         </button>
       )}
 
-      <p className="hidden md:mt-auto md:flex md:items-start md:gap-2 md:px-2 md:text-xs md:text-ink-3">
-        <Icon icon={ShieldCheck} size={14} className="mt-px shrink-0" />
-        Stored only in this browser. ApplyKit never uploads your profile.
-      </p>
+      <div className="hidden md:mt-auto md:block md:space-y-4">
+        <DiagnosticsSetting
+          {...(settingsStore ? { store: settingsStore } : {})}
+        />
+        <p className="flex items-start gap-2 px-2 text-xs text-ink-3">
+          <Icon icon={ShieldCheck} size={14} className="mt-px shrink-0" />
+          Stored only in this browser. ApplyKit never uploads your profile.
+        </p>
+      </div>
     </aside>
   );
 }

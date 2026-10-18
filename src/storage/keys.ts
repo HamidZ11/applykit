@@ -19,3 +19,6 @@ export const ANSWERS_KEY = 'local:applicationAnswers';
  * overwritten (a list, oldest first).
  */
 export const ANSWERS_BACKUP_KEY = 'local:applicationAnswersBackup';
+
+/** Whether the panel shows developer diagnostics; off unless `true`. */
+export const DIAGNOSTICS_KEY = 'local:developerDiagnostics';

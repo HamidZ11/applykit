@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { GET_AUTOFILL_VALUES, OPEN_PROFILE } from '@/messages';
+import {
+  GET_AUTOFILL_VALUES,
+  GET_PANEL_SETTINGS,
+  OPEN_PROFILE,
+} from '@/messages';
+import { browserSettingsStore } from '@/storage/settings-store';
 import { browserProfileStore } from '@/storage/profile-store';
 import { fullProfile } from '@/test/autofill-fixtures';
 import background from '@/entrypoints/background';
@@ -114,6 +119,14 @@ describe('background messages', () => {
         frameId: 3,
       }),
     ).toBeUndefined();
+  });
+
+  it('tells the panel whether to show developer diagnostics', async () => {
+    expect(await send(GET_PANEL_SETTINGS)).toEqual({ diagnostics: false });
+
+    await browserSettingsStore.saveDiagnostics(true);
+    expect(await send(GET_PANEL_SETTINGS)).toEqual({ diagnostics: true });
+    expect(await send(GET_PANEL_SETTINGS, 'another-extension')).toBeUndefined();
   });
 
   it('ignores unknown messages', async () => {

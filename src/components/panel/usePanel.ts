@@ -29,7 +29,7 @@ import {
   type FieldElement,
   type ScannedField,
 } from '@/autofill/scan';
-import type { AutofillValuesResponse } from '@/messages';
+import type { AutofillValuesResponse, PanelSettings } from '@/messages';
 import { goToField, type GoToResult } from '@/page/navigate';
 import { readPageContext, type PageContext } from '@/page/page-context';
 import {
@@ -44,6 +44,7 @@ import {
   isExtensionContextValid,
   openProfile,
   requestAutofillValues,
+  requestPanelSettings,
 } from './profile-access';
 import { plural } from './vocabulary';
 
@@ -103,6 +104,8 @@ export interface PanelModel extends PanelState {
   openAnswers: () => void;
   /** Why the last profile action failed, in words the user can act on. */
   problem: string | null;
+  /** Show how each field was recognised (Developer diagnostics). */
+  diagnostics: boolean;
 }
 
 /**
@@ -121,7 +124,10 @@ export function usePanel(
   loadValues: LoadValues = requestAutofillValues,
   root: ParentNode = document,
   openProfileRequest: (section?: 'answers') => Promise<boolean> = openProfile,
+  loadSettings: () => Promise<PanelSettings> = requestPanelSettings,
 ): PanelModel {
+  // Off until the background says otherwise, and off if it cannot.
+  const [diagnostics, setDiagnostics] = useState(false);
   /** Why an action failed, shown in the panel; cleared on the next try. */
   const [problem, setProblem] = useState<string | null>(null);
   const [state, dispatch] = useReducer(panelReducer, root, (r) =>
@@ -162,6 +168,9 @@ export function usePanel(
 
   const onOpen = useEffectEvent(() => {
     void refreshValues();
+    void loadSettings().then((settings) => {
+      setDiagnostics(settings.diagnostics);
+    });
   });
   useEffect(() => {
     onOpen();
@@ -361,6 +370,7 @@ export function usePanel(
     applyChoice,
     applyAnswer,
     goToField: goTo,
+    diagnostics,
     openProfile: openProfileAction,
     openAnswers: openAnswersAction,
     // An old panel left on the page after ApplyKit was reloaded can no

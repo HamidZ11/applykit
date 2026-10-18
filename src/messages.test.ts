@@ -4,6 +4,9 @@ import { savedAnswers } from '@/test/answer-fixtures';
 import { sampleValues } from '@/test/autofill-fixtures';
 import {
   GET_AUTOFILL_VALUES,
+  GET_PANEL_SETTINGS,
+  isGetPanelSettingsMessage,
+  isPanelSettings,
   OPEN_PROFILE,
   isAutofillValuesResponse,
   isGetAutofillValuesMessage,
@@ -124,5 +127,15 @@ describe('isAutofillValuesResponse', () => {
     ],
   ])('rejects %s', (_, value) => {
     expect(isAutofillValuesResponse(value)).toBe(false);
+  });
+});
+
+describe('panel settings', () => {
+  it('recognises the request and checks the reply', () => {
+    expect(isGetPanelSettingsMessage(GET_PANEL_SETTINGS)).toBe(true);
+    expect(isGetPanelSettingsMessage({ type: 'applykit:other' })).toBe(false);
+    expect(isPanelSettings({ diagnostics: true })).toBe(true);
+    expect(isPanelSettings({ diagnostics: 'true' })).toBe(false);
+    expect(isPanelSettings(null)).toBe(false);
   });
 });

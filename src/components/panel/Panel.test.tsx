@@ -13,7 +13,11 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { AutofillValues } from '@/autofill/fields';
 import { fillFields } from '@/autofill/fill';
 import { scanFields } from '@/autofill/scan';
-import { OPEN_PROFILE, type AutofillValuesResponse } from '@/messages';
+import {
+  GET_PANEL_SETTINGS,
+  OPEN_PROFILE,
+  type AutofillValuesResponse,
+} from '@/messages';
 import { autofillValuesFrom } from '@/autofill/profile-values';
 import {
   educationRecords,
@@ -207,16 +211,19 @@ describe('Panel with a saved profile', () => {
     expect(dialog().textContent).toContain('8 left for you');
   });
 
-  it('explains each field with its evidence in expanded mode', () => {
+  it('explains each field without the engine’s workings', () => {
     click('Show all fields');
     click(/^First name/);
 
     const text = dialog().textContent;
     expect(text).toContain('ApplyKit will fill this with your first name.');
-    expect(text).toContain('matched as first name');
-    expect(text).toContain('autocomplete="given-name"');
-    expect(text).toContain('label “First name *”');
+    expect(text).toContain('Will fill');
     expect(button(/^First name/).textContent).toContain('Alex');
+    expect(text).not.toContain('matched as');
+    expect(text).not.toContain('autocomplete=');
+    expect(
+      host.querySelector('[aria-label="Developer diagnostics"]'),
+    ).toBeNull();
   });
 
   it('groups the full list by topic, without empty groups', () => {
@@ -1346,6 +1353,161 @@ describe('suggested answers in the compact panel', () => {
     const review = button('Review answers');
     expect(review.type).toBe('button');
     expect(review.disabled).toBe(false);
+  });
+});
+
+describe('developer diagnostics', () => {
+  const DIAGNOSTIC = /matched as|autocomplete="|name="|id="|label “|in “/;
+
+  async function openWith(
+    fixture: string,
+    response: AutofillValuesResponse,
+    diagnostics = false,
+  ) {
+    act(() => {
+      root.unmount();
+    });
+    loadFixture(fixture);
+    document.body.append(host);
+    profile = response;
+    root = createRoot(host);
+    act(() => {
+      root.render(
+        <Panel
+          onClose={onClose}
+          loadValues={loadValues}
+          loadSettings={() => Promise.resolve({ diagnostics })}
+        />,
+      );
+    });
+    await settle();
+  }
+
+  /** Opens every row of the full list in turn and checks its detail. */
+  function expectEveryRowFreeOfDiagnostics() {
+    const names = [
+      ...host.querySelectorAll<HTMLButtonElement>(
+        '[aria-label="Fields on this form"] li > button',
+      ),
+    ].map((b) => b.textContent);
+    expect(names.length).toBeGreaterThan(5);
+    for (const name of names) {
+      const row = [
+        ...host.querySelectorAll<HTMLButtonElement>(
+          '[aria-label="Fields on this form"] li > button',
+        ),
+      ].find((b) => b.textContent === name);
+      if (!row) continue;
+      if (row.getAttribute('aria-expanded') !== 'true') {
+        act(() => {
+          row.click();
+        });
+      }
+      const detail = row.closest('li')?.querySelector(':scope > div');
+      // The explanation is still there, and nothing of the engine's.
+      expect(detail?.querySelector('p')?.textContent, name).not.toBe('');
+      expect(detail?.textContent ?? '', name).not.toMatch(DIAGNOSTIC);
+      expect(
+        detail?.querySelector('[aria-label="Developer diagnostics"]'),
+        name,
+      ).toBeNull();
+    }
+  }
+
+  it.each([
+    ['full-application.html', () => ready()],
+    [
+      'interactive-education.html',
+      () => {
+        const saved = fullProfile();
+        saved.education = [...educationRecords(), gcseRecord()];
+        return ready(autofillValuesFrom(saved));
+      },
+    ],
+    [
+      'employment-application.html',
+      () => {
+        const saved = fullProfile();
+        saved.employment = employmentRecords();
+        return ready(autofillValuesFrom(saved));
+      },
+    ],
+    ['custom-controls.html', () => ready()],
+    [
+      'reusable-answers.html',
+      () => ready(autofillValuesFrom(fullProfile(), savedAnswers())),
+    ],
+  ] as const)(
+    'shows none by default on %s, before and after autofill',
+    async (fixture, response) => {
+      await openWith(fixture, response());
+      click('Show all fields');
+      expectEveryRowFreeOfDiagnostics();
+
+      click('Show summary');
+      await autofill();
+      click('Show all fields');
+      expectEveryRowFreeOfDiagnostics();
+    },
+  );
+
+  it('shows none for a value the site rejected, and still says why', async () => {
+    await openWith('job-application.html', ready());
+    const first = document.getElementById('given') as HTMLInputElement;
+    first.addEventListener('input', () => {
+      first.value = '';
+    });
+
+    await autofill();
+    click('Show all fields');
+    click(/^First name/);
+
+    expect(dialog().textContent).toContain(
+      'The site cleared this value. Enter it yourself.',
+    );
+    expectEveryRowFreeOfDiagnostics();
+  });
+
+  it('shows the workings separately when turned on', async () => {
+    await openWith('job-application.html', ready(), true);
+    click('Show all fields');
+    click(/^First name/);
+
+    const group = host.querySelector('[aria-label="Developer diagnostics"]');
+    expect(group?.getAttribute('role')).toBe('group');
+    expect(group?.textContent).toContain('matched as first name');
+    expect(group?.textContent).toContain('autocomplete="given-name"');
+    expect(group?.textContent).toContain('label “First name *”');
+    // The explanation stays outside it.
+    expect(group?.textContent).not.toContain('ApplyKit will fill this');
+  });
+
+  it('keeps them off when the setting cannot be read', async () => {
+    // Values come from `loadValues`; only the settings request fails.
+    const sendMessage = vi
+      .spyOn(fakeBrowser.runtime, 'sendMessage')
+      .mockRejectedValue(new Error('unreachable'));
+    act(() => {
+      root.unmount();
+    });
+    loadFixture('job-application.html');
+    document.body.append(host);
+    profile = ready();
+    root = createRoot(host);
+    act(() => {
+      root.render(<Panel onClose={onClose} loadValues={loadValues} />);
+    });
+    await settle();
+    click('Show all fields');
+    click(/^First name/);
+
+    expect(dialog().textContent).toContain(
+      'ApplyKit will fill this with your first name.',
+    );
+    expect(
+      host.querySelector('[aria-label="Developer diagnostics"]'),
+    ).toBeNull();
+    expect(sendMessage).toHaveBeenCalledWith(GET_PANEL_SETTINGS);
   });
 });
 

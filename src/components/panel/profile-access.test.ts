@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { GET_AUTOFILL_VALUES } from '@/messages';
+import { GET_AUTOFILL_VALUES, GET_PANEL_SETTINGS } from '@/messages';
 import { sampleValues } from '@/test/autofill-fixtures';
 import {
   isExtensionContextValid,
   openProfile,
   requestAutofillValues,
+  requestPanelSettings,
 } from './profile-access';
 
 beforeEach(() => {
@@ -72,5 +73,35 @@ describe('isExtensionContextValid', () => {
     expect(isExtensionContextValid()).toBe(true);
     fakeBrowser.runtime.id = '';
     expect(isExtensionContextValid()).toBe(false);
+  });
+});
+
+describe('requestPanelSettings', () => {
+  it('passes the background’s setting on', async () => {
+    const sendMessage = vi
+      .spyOn(fakeBrowser.runtime, 'sendMessage')
+      .mockResolvedValue({ diagnostics: true } as never);
+
+    expect(await requestPanelSettings()).toEqual({ diagnostics: true });
+    expect(sendMessage).toHaveBeenCalledWith(GET_PANEL_SETTINGS);
+  });
+
+  it.each([undefined, { diagnostics: 'yes' }, 'on'])(
+    'keeps diagnostics off for the reply %j',
+    async (reply) => {
+      vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue(
+        reply as never,
+      );
+
+      expect(await requestPanelSettings()).toEqual({ diagnostics: false });
+    },
+  );
+
+  it('keeps diagnostics off when ApplyKit cannot be reached', async () => {
+    vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockImplementation(() => {
+      throw new Error('Extension context invalidated.');
+    });
+
+    expect(await requestPanelSettings()).toEqual({ diagnostics: false });
   });
 });

@@ -35,6 +35,34 @@ export function isOpenProfileResponse(
   );
 }
 
+/** Asks for the panel's display preferences. */
+export interface GetPanelSettingsMessage {
+  type: 'applykit:get-panel-settings';
+}
+
+export const GET_PANEL_SETTINGS: GetPanelSettingsMessage = {
+  type: 'applykit:get-panel-settings',
+};
+
+/** How the panel shows fields; developer diagnostics are off by default. */
+export interface PanelSettings {
+  diagnostics: boolean;
+}
+
+export function isGetPanelSettingsMessage(
+  message: unknown,
+): message is GetPanelSettingsMessage {
+  return hasType(message, GET_PANEL_SETTINGS.type);
+}
+
+export function isPanelSettings(value: unknown): value is PanelSettings {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { diagnostics?: unknown }).diagnostics === 'boolean'
+  );
+}
+
 /** Asks for the values autofill may use, from the confirmed profile. */
 export interface GetAutofillValuesMessage {
   type: 'applykit:get-autofill-values';

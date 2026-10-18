@@ -1,10 +1,13 @@
 import { browser } from 'wxt/browser';
 import {
   GET_AUTOFILL_VALUES,
+  GET_PANEL_SETTINGS,
   OPEN_PROFILE,
   isAutofillValuesResponse,
   isOpenProfileResponse,
+  isPanelSettings,
   type AutofillValuesResponse,
+  type PanelSettings,
 } from '@/messages';
 
 /**
@@ -19,6 +22,20 @@ export async function requestAutofillValues(): Promise<AutofillValuesResponse> {
     return isAutofillValuesResponse(response) ? response : { status: 'error' };
   } catch {
     return { status: 'error' };
+  }
+}
+
+/**
+ * The panel's display preferences, from the background. Diagnostics stay
+ * off when the reply is missing, malformed or the extension unreachable.
+ */
+export async function requestPanelSettings(): Promise<PanelSettings> {
+  try {
+    const response: unknown =
+      await browser.runtime.sendMessage(GET_PANEL_SETTINGS);
+    return isPanelSettings(response) ? response : { diagnostics: false };
+  } catch {
+    return { diagnostics: false };
   }
 }
 

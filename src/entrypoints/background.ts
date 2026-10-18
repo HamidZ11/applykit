@@ -1,9 +1,14 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
-import { isGetAutofillValuesMessage, isOpenProfileMessage } from '@/messages';
+import {
+  isGetAutofillValuesMessage,
+  isGetPanelSettingsMessage,
+  isOpenProfileMessage,
+} from '@/messages';
 import { browserAnswersStore } from '@/storage/answers-store';
 import { loadAutofillValues } from '@/storage/autofill-source';
 import { browserProfileStore } from '@/storage/profile-store';
+import { browserSettingsStore } from '@/storage/settings-store';
 
 export default defineBackground(() => {
   // The profile is only read here and by the profile page. Content scripts
@@ -75,6 +80,12 @@ export default defineBackground(() => {
           .catch(() => {
             sendResponse({ status: 'error' });
           });
+        return true; // The response is sent asynchronously.
+      }
+      if (isGetPanelSettingsMessage(message)) {
+        void browserSettingsStore.loadDiagnostics().then((diagnostics) => {
+          sendResponse({ diagnostics });
+        });
         return true; // The response is sent asynchronously.
       }
       return undefined;

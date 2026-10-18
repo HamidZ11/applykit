@@ -12,8 +12,8 @@ interface FieldRowProps {
   report: FieldReport;
   selected: boolean;
   /**
-   * Expanded mode: show values, and the explanation and evidence when
-   * selected. Compact mode shows statuses only, never personal values.
+   * Expanded mode: show values, and the explanation when selected.
+   * Compact mode shows statuses only, never personal values.
    */
   detailed: boolean;
   /** Briefly highlight a row that autofill just filled. */
@@ -24,6 +24,11 @@ interface FieldRowProps {
   actions?: ReactNode;
   /** Expanded mode: show the explanation and actions without selecting. */
   open?: boolean;
+  /**
+   * Expanded mode: also show how ApplyKit recognised the field (matched
+   * field, control kind, section, evidence). For developers; off by default.
+   */
+  diagnostics?: boolean;
 }
 
 /**
@@ -39,12 +44,13 @@ export function FieldRow({
   onSelect,
   actions,
   open = false,
+  diagnostics = false,
 }: FieldRowProps) {
   const { field, status } = report;
   const value = detailed ? report.value : null;
   const row = useRef<HTMLLIElement>(null);
   const expanded = detailed && (selected || open);
-  const detail = expanded ? detectionDetail(report) : null;
+  const detail = expanded && diagnostics ? detectionDetail(report) : null;
 
   useEffect(() => {
     if (selected) row.current?.scrollIntoView({ block: 'nearest' });
@@ -94,43 +100,52 @@ export function FieldRow({
         <div className="animate-[ak-fade-in_140ms_var(--ease-out)] pr-2 pb-2.5 pl-[32px] text-xs">
           <p className="text-ink-2">{explain(report)}</p>
           {actions}
-          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 font-mono text-2xs text-ink-3">
-            <span>
+          {/* The row shows a value instead of its status: say it here. */}
+          {value !== null && (
+            <p className="mt-1 text-2xs text-ink-3">
               {STATUS_LABEL[status]}
               {report.chosen ? ' · your choice' : ''}
-            </span>
-            <span aria-hidden>·</span>
-            <span>{KIND_LABEL[field.kind].toLowerCase()}</span>
-            {detail?.target && (
-              <>
-                <span aria-hidden>·</span>
-                <span>matched as {detail.target.toLowerCase()}</span>
-              </>
-            )}
-            {field.required && (
-              <>
-                <span aria-hidden>·</span>
-                <span>required</span>
-              </>
-            )}
-            {field.section && (
-              <>
-                <span aria-hidden>·</span>
-                <span className="truncate">in “{field.section}”</span>
-              </>
-            )}
-          </p>
-          {detail && detail.evidence.length > 0 && (
-            <ul
-              aria-label="Evidence"
-              className="mt-1 font-mono text-2xs text-ink-3"
+            </p>
+          )}
+          {detail && (
+            <div
+              role="group"
+              aria-label="Developer diagnostics"
+              className="mt-2 border-t border-line pt-1.5 font-mono text-2xs text-ink-3"
             >
-              {detail.evidence.map((item, index) => (
-                <li key={index} className="truncate" title={item}>
-                  {item}
-                </li>
-              ))}
-            </ul>
+              <p className="flex flex-wrap items-center gap-x-1.5">
+                <span>{status}</span>
+                <span aria-hidden>·</span>
+                <span>{KIND_LABEL[field.kind].toLowerCase()}</span>
+                {detail.target && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span>matched as {detail.target.toLowerCase()}</span>
+                  </>
+                )}
+                {field.required && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span>required</span>
+                  </>
+                )}
+                {field.section && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span className="truncate">in “{field.section}”</span>
+                  </>
+                )}
+              </p>
+              {detail.evidence.length > 0 && (
+                <ul aria-label="Evidence" className="mt-0.5">
+                  {detail.evidence.map((item, index) => (
+                    <li key={index} className="truncate" title={item}>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </div>
       )}

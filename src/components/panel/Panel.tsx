@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/primitives';
 import { useHeightTransition } from './useHeightTransition';
 import { usePanel, type LoadValues, type PanelModel } from './usePanel';
+import type { PanelSettings } from '@/messages';
 import { locateTarget } from './vocabulary';
 
 /** Expanded height: tall enough to inspect, never taller than the viewport. */
@@ -38,14 +39,17 @@ export function Panel({
   onClose,
   loadValues,
   openProfile,
+  loadSettings,
 }: {
   onClose: () => void;
   /** Where the confirmed profile's values come from; replaced in tests. */
   loadValues?: LoadValues;
   /** Opens the profile page; replaced in tests. */
   openProfile?: (section?: 'answers') => Promise<boolean>;
+  /** Where the panel's display preferences come from; replaced in tests. */
+  loadSettings?: () => Promise<PanelSettings>;
 }) {
-  const model = usePanel(loadValues, undefined, openProfile);
+  const model = usePanel(loadValues, undefined, openProfile, loadSettings);
   const frame = useRef<HTMLDivElement>(null);
   const { mode, phase, summary, selected, fields } = model;
   const hasForm = summary.total > 0;
