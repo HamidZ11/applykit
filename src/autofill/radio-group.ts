@@ -1,5 +1,6 @@
 import { RADIO_CONTAINERS, radioQuestionText } from './detect';
 import { comparable } from './options';
+import { isShown } from './visibility';
 
 /**
  * Native radio groups ApplyKit may answer (ADR 0020). A group qualifies
@@ -84,22 +85,13 @@ export function radioLabel(radio: HTMLInputElement): string {
   return named.replace(/\s+/g, ' ').trim();
 }
 
-/** The browser's own check, for a radio read outside a scan. */
-function shown(element: Element): boolean {
-  if (element.closest('[hidden], [aria-hidden="true"], [inert]')) return false;
-  const view = element.ownerDocument.defaultView;
-  if (!view) return true;
-  const style = view.getComputedStyle(element);
-  return style.display !== 'none' && style.visibility !== 'hidden';
-}
-
 /**
  * The group `radio` belongs to, if ApplyKit can answer it with certainty;
  * null otherwise.
  */
 export function radioGroupOf(
   radio: HTMLInputElement,
-  isVisible: (element: Element) => boolean = shown,
+  isVisible: (element: Element) => boolean = isShown,
 ): RadioGroup | null {
   if (!radio.name) return null;
   const radios = groupMembers(radio);

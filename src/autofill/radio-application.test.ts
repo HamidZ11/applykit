@@ -298,3 +298,33 @@ describe('confirming a radio answer', () => {
     });
   });
 });
+
+describe('exclusions for ARIA radio groups (review)', () => {
+  it.each([
+    'Are you willing to relocate abroad if we sponsor your visa?',
+    'Would you consider relocating abroad? I consent to a criminal record check.',
+    'Will you graduate before October 2027 and do you have the right to work in the UK?',
+  ])('never answers “%s” named through aria-labelledby', (question) => {
+    document.body.innerHTML = `<form><p id="q">${question}</p>
+      <div role="radiogroup" aria-labelledby="q">
+        <label><input type="radio" id="q-y" name="q" value="y"> Yes</label>
+        <label><input type="radio" name="q" value="n"> No</label>
+      </div></form>`;
+
+    expect(byId(plan(), 'q-y')).toMatchObject({ fillValue: null });
+    expect(byId(plan(), 'q-y').status).not.toBe('suggest');
+  });
+
+  it('still answers a supported question in an ARIA radio group', () => {
+    document.body.innerHTML = `<form><p id="q">Would you consider relocating outside the UK?</p>
+      <div role="radiogroup" aria-labelledby="q">
+        <label><input type="radio" id="q-y" name="q" value="y"> Yes</label>
+        <label><input type="radio" name="q" value="n"> No</label>
+      </div></form>`;
+
+    expect(byId(plan(), 'q-y')).toMatchObject({
+      status: 'suggest',
+      fillValue: 'No',
+    });
+  });
+});

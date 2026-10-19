@@ -20,6 +20,7 @@ import {
   type ManualReason,
 } from './detect';
 import { readLimits } from './answer-limits';
+import { isShown } from './visibility';
 import { radioGroupOf } from './radio-group';
 import {
   MAX_QUESTION_LENGTH,
@@ -318,34 +319,6 @@ function ownedIds(root: ParentNode): Set<string> {
 
 const DATE_TYPES = new Set(['date', 'datetime-local', 'month', 'week', 'time']);
 
-/** Smaller than this in either direction, a control is not meant to be seen. */
-const MIN_VISIBLE_PX = 2;
-
-function defaultIsVisible(element: Element): boolean {
-  if (element.closest('[hidden], [aria-hidden="true"], [inert]')) return false;
-  if (typeof element.checkVisibility !== 'function') {
-    // Older browsers: at least honour display and visibility.
-    const style = getComputedStyle(element);
-    return style.display !== 'none' && style.visibility !== 'hidden';
-  }
-  if (
-    !element.checkVisibility({
-      visibilityProperty: true,
-      opacityProperty: true,
-    })
-  ) {
-    return false;
-  }
-  // Honeypots are often shrunk to nothing or moved off the page.
-  const box = element.getBoundingClientRect();
-  return (
-    box.width >= MIN_VISIBLE_PX &&
-    box.height >= MIN_VISIBLE_PX &&
-    box.right + window.scrollX > 0 &&
-    box.bottom + window.scrollY > 0
-  );
-}
-
 /**
  * Lists every control an applicant can complete in `root`, with what the
  * engine is able to do for each. Read-only: never changes the page.
@@ -357,7 +330,7 @@ function defaultIsVisible(element: Element): boolean {
  */
 export function scanFields(
   root: ParentNode,
-  { isVisible = defaultIsVisible }: ScanOptions = {},
+  { isVisible = isShown }: ScanOptions = {},
 ): ScannedField[] {
   return duringScan(() => scanWithin(root, isVisible));
 }
@@ -483,7 +456,7 @@ function detailKey(field: AutofillField, label: string): string {
 function describe(
   element: FieldElement,
   root: ParentNode,
-  isVisible: (element: Element) => boolean = defaultIsVisible,
+  isVisible: (element: Element) => boolean = isShown,
 ): ScannedField {
   const radio = isInput(element) && element.type === 'radio';
   const question = radio ? element.closest('fieldset') : null;

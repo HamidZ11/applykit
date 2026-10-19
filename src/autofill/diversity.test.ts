@@ -765,3 +765,39 @@ describe('monitoring questions on a form', () => {
     expect(evidence).not.toMatch(/non binary|other-mixed|prefer-not-to-say/i);
   });
 });
+
+describe('lists that share option values (review)', () => {
+  it('never writes a value a disabled option shares', async () => {
+    document.body.innerHTML = `<form><label for="g">What is your gender?</label>
+      <select id="g"><option value="">Select…</option>
+      <option value="3" disabled>Man</option><option value="1">Woman</option>
+      <option value="3">Non-binary</option></select></form>`;
+    const visible = { isVisible: () => true };
+    const fields = scanFields(document, visible);
+    const store = {
+      load: () =>
+        Promise.resolve({
+          status: 'loaded' as const,
+          preferences: savedDiversity(),
+          updatedAt: '2026-10-18T12:00:00.000Z',
+          damaged: [],
+        }),
+    };
+    const planned = await withDiversityChoices(
+      planFill(
+        fields,
+        autofillValuesFrom(fullProfile(), undefined, {
+          reuse: true,
+          saved: ['gender'],
+        }),
+      ),
+      (requests) => resolveDiversity(store, requests),
+      new Set(fields.map((f) => f.element)),
+    );
+
+    const [outcome] = await fillFields(planned);
+
+    expect(outcome?.status).toBe('manual');
+    expect((document.getElementById('g') as HTMLSelectElement).value).toBe('');
+  });
+});

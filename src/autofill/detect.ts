@@ -1175,8 +1175,11 @@ function sectionText(control: DetectableControl): string {
       node instanceof HTMLFieldSetElement ||
       node.localName === 'section' ||
       role === 'group' ||
+      role === 'radiogroup' ||
       role === 'region'
     ) {
+      // A radio group's name is its question: it must reach every
+      // exclusion, as a fieldset's legend does.
       parts.push(accessibleName(node));
     }
     node = node.parentElement;

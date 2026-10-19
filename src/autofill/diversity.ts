@@ -246,8 +246,17 @@ function onlyOption(
 ): boolean {
   const [chosen, ...others] = offered.filter((o) => o.value === value);
   if (!chosen || others.length > 0) return false;
-  const now = (choiceOptions(element) ?? []).filter((o) => o.value === value);
-  return now.length === 1 && now[0]?.text === chosen.text;
+  // Every option of a list, disabled and placeholder ones too: the browser
+  // selects the first option with a value, whichever it is.
+  const now =
+    element instanceof HTMLSelectElement
+      ? [...element.options].map((o) => ({
+          value: o.value,
+          text: o.text.trim(),
+        }))
+      : (choiceOptions(element) ?? []);
+  const same = now.filter((o) => o.value === value);
+  return same.length === 1 && same[0]?.text === chosen.text;
 }
 
 /** What the background replies for one monitoring question. */

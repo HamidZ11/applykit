@@ -57,4 +57,14 @@ users chose them by hand on every form.
   stay guided.
 - A page whose own script undoes changes it did not see as a real mouse
   click, or that needs pointer events, reports the choice as not
-  accepted; the user chooses it.
+  accepted; the user chooses it. A page that cancels the click (a
+  read-only group) gets nothing: the radio is unchecked again.
+- The page's own click listeners on the radio and its ancestors run, as
+  for a user's click (no browser default action does). For monitoring
+  questions this happens on Autofill, with reuse on.
+- The result is checked once the page's scripts have run
+  (`setTimeout 0`); a page that undoes the choice later is not noticed,
+  as for text fields.
+- A radio group's accessible name counts as its question everywhere,
+  including the sensitive and consent exclusions, and options are
+  offered only if shown by the same check as the scan.

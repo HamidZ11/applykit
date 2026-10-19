@@ -264,6 +264,37 @@ describe('the radio writer', () => {
     });
   });
 
+  it('respects a page that cancels the click, as a read-only group does', async () => {
+    loadHtml(TWO);
+    for (const id of ['a-y', 'a-n']) {
+      radio(id).addEventListener('click', (event) => {
+        event.preventDefault();
+      });
+    }
+    const changes = vi.fn();
+    radio('a-n').addEventListener('change', changes);
+
+    const [outcome] = await fillFields([planned('a-y', 'No')]);
+
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      reason: 'The page did not let ApplyKit choose this. Choose it yourself.',
+    });
+    expect(checkedRadio(radio('a-y'))).toBeNull();
+    expect(changes).not.toHaveBeenCalled();
+  });
+
+  it('never chooses a hidden option', () => {
+    loadHtml(`<form><fieldset><legend>Relocate?</legend>
+      <label><input type="radio" id="move-y" name="move"> Yes</label>
+      <label hidden><input type="radio" name="move"> No</label></fieldset></form>`);
+
+    expect(optionToChoose(radio('move-y'), 'No')).toMatchObject({
+      reason:
+        'That choice is no longer offered here, so ApplyKit chose nothing.',
+    });
+  });
+
   it('reports a group the page replaced', async () => {
     loadHtml(TWO);
     const plan = planned('a-y', 'No');

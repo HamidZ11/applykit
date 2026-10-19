@@ -61,7 +61,14 @@ export async function fillFields(
       if ('reason' in choice) {
         return { ...report, status: 'rejected', reason: choice.reason };
       }
-      selectRadio(choice.radio);
+      if (!selectRadio(choice.radio)) {
+        return {
+          ...report,
+          status: 'rejected',
+          reason:
+            'The page did not let ApplyKit choose this. Choose it yourself.',
+        };
+      }
       chosen.set(report, choice.radio);
     } else if (element instanceof HTMLSelectElement) {
       setSelectValue(element, report.fillValue);
@@ -226,9 +233,18 @@ export async function replaceText(
  * a click produces, for other frameworks and plain scripts. Nothing is
  * focused, pressed or submitted, and the caller verifies the result.
  */
-export function selectRadio(radio: HTMLInputElement): void {
+export function selectRadio(radio: HTMLInputElement): boolean {
   Reflect.set(HTMLInputElement.prototype, 'checked', true, radio);
-  radio.dispatchEvent(new Event('click', { bubbles: true, composed: true }));
+  const kept = radio.dispatchEvent(
+    new Event('click', { bubbles: true, composed: true, cancelable: true }),
+  );
+  if (!kept) {
+    // The page cancelled the click, as a read-only group does: a real
+    // click would be undone, so this one is too.
+    Reflect.set(HTMLInputElement.prototype, 'checked', false, radio);
+    return false;
+  }
   radio.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
   radio.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
 }
