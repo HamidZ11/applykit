@@ -543,23 +543,24 @@ async function withTimeout<T>(
   }
 }
 
-interface PageGuard {
+export interface PageGuard {
   /** The page tried to submit a form or navigate. */
   tripped: () => boolean;
-  /** The user pressed a pointer or a key on the page. */
+  /** The user pressed a pointer or a key, or left the tab. */
   interrupted: () => boolean;
   remove: () => void;
 }
 
 /**
- * A guard for the moments ApplyKit operates a dropdown: cancels any form
- * submission and any navigation the page starts (where the browser
- * supports the Navigation API), and notices the user acting. Only event
- * listeners, added here and removed by `remove`; no browser API is
- * replaced. It cannot stop a script calling `form.submit()`, a network
- * request, or navigation in browsers without the Navigation API.
+ * A guard for the moments ApplyKit operates a dropdown or applies answers
+ * the user reviewed: cancels any form submission and any navigation the
+ * page starts (where the browser supports the Navigation API), and
+ * notices the user acting or leaving the tab. Only event listeners, added
+ * here and removed by `remove`; no browser API is replaced. It cannot
+ * stop a script calling `form.submit()`, a network request, or navigation
+ * in browsers without the Navigation API.
  */
-function guardPage(view: Window): PageGuard {
+export function guardPage(view: Window): PageGuard {
   let tripped = false;
   let interrupted = false;
   // What the user does themselves is never cancelled.
@@ -577,12 +578,16 @@ function guardPage(view: Window): PageGuard {
   const onUser = (event: Event) => {
     if (event.isTrusted) interrupted = true;
   };
+  const onHidden = () => {
+    if (view.document.hidden) interrupted = true;
+  };
   const navigation = 'navigation' in view ? view.navigation : null;
   view.addEventListener('submit', onSubmit, true);
   navigation?.addEventListener('navigate', onNavigate);
   for (const type of ['pointerdown', 'keydown']) {
     view.addEventListener(type, onUser, { capture: true, passive: true });
   }
+  view.document.addEventListener('visibilitychange', onHidden);
   return {
     tripped: () => tripped,
     interrupted: () => interrupted,
@@ -592,6 +597,7 @@ function guardPage(view: Window): PageGuard {
       for (const type of ['pointerdown', 'keydown']) {
         view.removeEventListener(type, onUser, { capture: true });
       }
+      view.document.removeEventListener('visibilitychange', onHidden);
     },
   };
 }

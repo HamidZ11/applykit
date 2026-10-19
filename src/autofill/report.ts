@@ -793,3 +793,65 @@ export function attentionQueue(reports: readonly FieldReport[]): FieldReport[] {
     ...pending.filter((r) => !isFailure(r) && !r.field.required),
   ];
 }
+
+/**
+ * Whether a field may be applied with others after one review (ADR 0022):
+ * a saved or graduation answer already suggested for a native control,
+ * with a definite value, which "Use this answer" would write through
+ * `confirmAnswer`. Never a custom dropdown, a monitoring question, a
+ * record choice, an AI draft, or anything not already a suggestion.
+ */
+export function isBatchEligible(report: FieldReport): boolean {
+  return (
+    report.status === 'suggest' &&
+    isControlField(report.field) &&
+    report.target !== null &&
+    isAnswerField(report.target) &&
+    !isDiversityField(report.target) &&
+    report.value !== null &&
+    report.fillValue !== null &&
+    report.fillValue !== ''
+  );
+}
+
+/**
+ * The kind of work a field leaves, for the panel's summary. Every field
+ * has exactly one, so the counts add up to the form's fields.
+ */
+export type WorkKind =
+  /** Autofill fills it (or filled it). */
+  | 'autofill'
+  /** A suggested answer the user can apply with others after review. */
+  | 'review'
+  /** One at a time: a custom dropdown, or choosing a saved record. */
+  | 'confirm'
+  /** An open question: drafted with AI only on request, or typed. */
+  | 'draft'
+  /** Already answered on the page, by the user or by ApplyKit. */
+  | 'done'
+  /** Everything only the user can complete, or ApplyKit cannot. */
+  | 'manual';
+
+export function workOf(report: FieldReport, ai: boolean): WorkKind {
+  switch (report.status) {
+    case 'fill':
+      return 'autofill';
+    case 'filled':
+    case 'reformatted':
+    case 'keep':
+    case 'kept':
+      return 'done';
+    case 'suggest':
+      return isBatchEligible(report) ? 'review' : 'confirm';
+    case 'ambiguous':
+      return report.candidates.length > 1 ? 'confirm' : 'manual';
+    case 'open': {
+      const { support } = report.field;
+      return ai && support.status === 'open' && support.question.aiProhibited
+        ? 'manual'
+        : 'draft';
+    }
+    default:
+      return 'manual';
+  }
+}

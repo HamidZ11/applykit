@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Graduate Analyst · Example Larch Analytics Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional UK graduate application for reviewing several suggested
+      answers and applying them together (ADR 0022). Suggested: two
+      graduation questions (a list and radio buttons), notice period,
+      start date, relocation within and outside the UK, and working
+      arrangement. Its page script behaves like a dependent form:
+      answering the notice period re-renders the start date field, and
+      answering "relocate within the UK" reveals a regions question and
+      takes "Hybrid" off the working arrangement options. Beside them: a
+      salary already typed, a graduation list with two "Yes" options,
+      numbered education and employment sections that need a saved
+      record chosen, a custom dropdown ApplyKit can choose in and one it
+      cannot, a monitoring question, an open question for AI drafting,
+      right to work, sponsorship, consent and a declaration, and the
+      submit button. Every name is invented. Used by unit tests and
+      manual testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #3b5b2f;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      h3 {
+        font-size: 15px;
+        margin: 20px 0 0;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      fieldset fieldset > legend {
+        font-size: 15px;
+        font-weight: 500;
+      }
+      section {
+        margin-top: 8px;
+        padding: 4px 16px 16px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      label,
+      .label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      label.choice {
+        display: inline-flex;
+        gap: 6px;
+        margin: 6px 16px 0 0;
+        font-weight: 400;
+      }
+      input:not([type='checkbox'], [type='radio']),
+      select,
+      textarea,
+      .combo {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      textarea {
+        min-height: 110px;
+      }
+      [role='listbox'] {
+        margin: 4px 0 0;
+        padding: 4px;
+        list-style: none;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      [role='option'] {
+        padding: 6px 8px;
+        border-radius: 4px;
+      }
+      [role='option']:hover {
+        background: #eef3f6;
+      }
+      .actions {
+        margin-top: 28px;
+      }
+      .actions button {
+        padding: 9px 16px;
+        font: inherit;
+        font-weight: 600;
+        border-radius: 6px;
+        border: 1px solid var(--brand);
+        background: var(--brand);
+        color: #fff;
+      }
+      #status {
+        margin-top: 20px;
+        font:
+          12px ui-monospace,
+          monospace;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar"><span class="logo"></span>Example Larch Analytics</div>
+    </header>
+    <main>
+      <h1>Graduate Analyst</h1>
+      <p class="meta">Example Larch Analytics · Bristol · 2027 intake</p>
+
+      <form id="application" action="/apply" method="post">
+        <fieldset>
+          <legend>Your details</legend>
+          <label for="first">First name</label>
+          <input id="first" name="firstName" autocomplete="given-name" />
+          <label for="last">Last name</label>
+          <input id="last" name="lastName" autocomplete="family-name" />
+          <label for="email">Email address</label>
+          <input id="email" name="email" type="email" autocomplete="email" />
+        </fieldset>
+
+        <fieldset>
+          <legend>Your degree</legend>
+          <label for="grad-before"
+            >Will you graduate before October 2027?</label
+          >
+          <select id="grad-before" name="graduateBefore">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <fieldset>
+            <legend>Do you expect to graduate before September 2027?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="grad-radio-yes"
+                name="gradRadio"
+                value="yes"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" name="gradRadio" value="no" /> No</label
+            >
+          </fieldset>
+          <label for="grad-in">Are you graduating in 2027?</label>
+          <select id="grad-in" name="graduatingIn">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="yes">Yes</option>
+            <option value="n">No</option>
+          </select>
+        </fieldset>
+
+        <fieldset>
+          <legend>Education history</legend>
+          <section aria-labelledby="edu-1">
+            <h3 id="edu-1">Education 1</h3>
+            <label for="e1-inst">Institution</label>
+            <input id="e1-inst" name="education[0][institution]" />
+          </section>
+          <section aria-labelledby="edu-2">
+            <h3 id="edu-2">Education 2</h3>
+            <label for="e2-inst">Institution</label>
+            <input id="e2-inst" name="education[1][institution]" />
+          </section>
+        </fieldset>
+
+        <fieldset>
+          <legend>Employment history</legend>
+          <section aria-labelledby="job-1">
+            <h3 id="job-1">Employment 1</h3>
+            <label for="j1-employer">Employer</label>
+            <input id="j1-employer" name="jobs[0][employer]" />
+            <label for="j1-title">Job title</label>
+            <input id="j1-title" name="jobs[0][title]" />
+          </section>
+          <section aria-labelledby="job-2">
+            <h3 id="job-2">Employment 2</h3>
+            <label for="j2-employer">Employer</label>
+            <input id="j2-employer" name="jobs[1][employer]" />
+            <label for="j2-title">Job title</label>
+            <input id="j2-title" name="jobs[1][title]" />
+          </section>
+        </fieldset>
+
+        <fieldset>
+          <legend>Availability and location</legend>
+          <label for="notice-weeks">Notice period in weeks</label>
+          <input id="notice-weeks" name="noticeWeeks" />
+          <div id="start-slot">
+            <label for="start-date">Earliest available start date</label>
+            <input id="start-date" name="startDate" type="date" />
+          </div>
+          <label for="relocate-uk"
+            >Are you willing to relocate within the UK?</label
+          >
+          <select id="relocate-uk" name="relocateUk">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <div id="regions-slot" hidden>
+            <label for="regions">Which UK regions would you consider?</label>
+            <input id="regions" name="regions" />
+          </div>
+          <fieldset>
+            <legend>Would you consider relocating outside the UK?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="relocate-abroad-yes"
+                name="relocateAbroad"
+                value="yes"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" name="relocateAbroad" value="no" /> No</label
+            >
+          </fieldset>
+          <label for="arrangement">Preferred working arrangement</label>
+          <select id="arrangement" name="arrangement">
+            <option value="">Select…</option>
+            <option value="office">Office based</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="remote">Fully remote</option>
+          </select>
+          <label for="salary-annual">Expected annual salary (GBP)</label>
+          <input id="salary-annual" name="salary" value="30000" />
+          <span class="label" id="country-label">Country of residence</span>
+          <div
+            id="country"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="country-label"
+            aria-controls="country-list"
+            aria-expanded="false"
+          >
+            <span class="value">Select a country</span>
+          </div>
+          <ul id="country-list" role="listbox" hidden>
+            <li role="option">Ireland</li>
+            <li role="option">United Kingdom</li>
+          </ul>
+          <span class="label" id="office-label">Preferred office</span>
+          <div
+            id="office"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="office-label"
+          >
+            Select an office
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Equal opportunities monitoring</legend>
+          <label for="gender">What is your gender?</label>
+          <select id="gender" name="gender">
+            <option value="">Select…</option>
+            <option value="m">Man</option>
+            <option value="w">Woman</option>
+            <option value="nb">Non-binary</option>
+            <option value="x">Prefer not to say</option>
+          </select>
+        </fieldset>
+
+        <fieldset>
+          <legend>About you</legend>
+          <label for="motivation"
+            >Why do you want to join Example Larch Analytics? (up to 200
+            words)</label
+          >
+          <textarea id="motivation" name="motivation"></textarea>
+        </fieldset>
+
+        <fieldset>
+          <legend>Eligibility and declarations</legend>
+          <label for="rtw">Do you have the right to work in the UK?</label>
+          <select id="rtw" name="rightToWork">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <label for="sponsorship"
+            >Will you now or in the future require visa sponsorship?</label
+          >
+          <select id="sponsorship" name="sponsorship">
+            <option value="">Select…</option>
+            <option value="y">Yes</option>
+            <option value="n">No</option>
+          </select>
+          <label class="choice"
+            ><input type="checkbox" id="consent" name="consent" /> I agree to
+            Example Larch Analytics processing my data as described in the
+            privacy notice</label
+          >
+          <label class="choice"
+            ><input type="checkbox" id="declaration" name="declaration" /> I
+            confirm the information I have given is accurate</label
+          >
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit">Submit application</button>
+        </div>
+        <p id="status" aria-live="polite"></p>
+      </form>
+    </main>
+
+    <script>
+      // Behaves like a dependent form, and reports what the page saw.
+      (() => {
+        const form = document.getElementById('application');
+        const status = document.getElementById('status');
+        let submitted = 0;
+        const render = () => {
+          status.textContent = `Fixture · submitted: ${submitted}`;
+        };
+        render();
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          submitted += 1;
+          render();
+        });
+
+        // Once a notice period is given, the start date field is rendered
+        // again, as a new element.
+        document
+          .getElementById('notice-weeks')
+          .addEventListener('change', () => {
+            document.getElementById('start-slot').innerHTML = `
+              <label for="start-date">Earliest available start date</label>
+              <input id="start-date" name="startDate" type="date" />`;
+          });
+
+        // Relocating within the UK reveals a regions question, and roles
+        // for people relocating are not offered as hybrid.
+        const relocate = document.getElementById('relocate-uk');
+        relocate.addEventListener('change', () => {
+          const willing = relocate.value === 'y';
+          document.getElementById('regions-slot').hidden = !willing;
+          if (willing) {
+            document.getElementById('arrangement').innerHTML = `
+              <option value="">Select…</option>
+              <option value="office">Office based</option>
+              <option value="remote">Fully remote</option>`;
+          }
+        });
+
+        // A select-only combobox whose list stays in the page.
+        const trigger = document.getElementById('country');
+        const list = document.getElementById('country-list');
+        const close = () => {
+          list.hidden = true;
+          trigger.setAttribute('aria-expanded', 'false');
+        };
+        trigger.addEventListener('click', () => {
+          if (trigger.getAttribute('aria-expanded') === 'true') {
+            close();
+          } else {
+            list.hidden = false;
+            trigger.setAttribute('aria-expanded', 'true');
+          }
+        });
+        list.addEventListener('click', (event) => {
+          const option = event.target.closest('[role="option"]');
+          if (!option) return;
+          for (const other of list.querySelectorAll('[role="option"]')) {
+            other.setAttribute('aria-selected', String(other === option));
+          }
+          trigger.querySelector('.value').textContent =
+            option.textContent.trim();
+          close();
+        });
+      })();
+    </script>
+  </body>
+</html>
