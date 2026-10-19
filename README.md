@@ -126,6 +126,9 @@ Limitations:
    right-to-work and consent questions;
    `open-questions.html` has open questions to draft with AI next to
    questions that must never be drafted;
+   `radio-application.html` asks graduation, saved-answer and monitoring
+   questions as radio groups next to radio questions that must never be
+   answered;
    `custom-controls.html` is built from custom dropdowns.)
 4. Click the ApplyKit toolbar button. Without a saved profile the panel
    says so and offers **Set up your profile**; it fills nothing. Save a
@@ -306,7 +309,7 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   filled one at a time. Written answers such as motivation are never
   filled automatically (AI drafting can help, only when you ask), and
   reasons for leaving are never drafted.
-- Saved answers: radio buttons, ranges and salary bands are never chosen;
+- Saved answers: ranges and salary bands are never chosen;
   questions in other units, periods or currencies, relocation questions
   that do not say where (unless both of your answers agree), text date
   fields without a stated format and past start dates are left to you.
@@ -317,8 +320,9 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   has passed, and Yes/No questions asked as text fields are left to you.
   Answers saved by a
   newer version of ApplyKit are kept but can only be edited there.
-- Diversity answers fill only native lists: radio buttons, multiple
-  selects and custom dropdowns are left to you. A gender list with Male
+- Diversity answers fill only native lists and native radio groups:
+  multiple selects, custom dropdowns and custom radio widgets are left
+  to you. A gender list with Male
   and Female fits a saved Man or Woman only, and never when the question
   or its options mention sex, birth or legal records. Recognition is English-only and limited
   to exact UK wordings; age, caring responsibilities and socio-economic
@@ -360,8 +364,12 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   Date inputs that need a day, expected leaving dates and descriptions
   longer than the field allows are left to you.
 - Country selects must offer the country by ISO code or name; custom
-  dropdown widgets, checkboxes and radios are never filled, and textareas
-  only with a saved job description.
+  dropdown widgets, custom radio widgets and checkboxes are never filled,
+  and textareas only with a saved job description. Native radio groups
+  are chosen only for saved, graduation and monitoring answers, and only
+  when the group is clearly one question with distinct labelled options;
+  a page whose script undoes a choice it did not see as a real mouse
+  click reports it as not accepted.
 - CV import reads text only: no scanned or image-only PDFs (no OCR), no
   password-protected PDFs, no older .doc files, 5 MB and 10 pages at most.
   Extraction is rule-based and conservative: unusual layouts yield fewer

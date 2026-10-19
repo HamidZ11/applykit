@@ -356,11 +356,14 @@ ADR 0017 and ADR 0018.
   calling code, education and job fields (exact or explicitly equivalent
   options only); native single selects for monitoring questions (ADR 0018);
   textareas only for a saved job description; date,
-  month and number inputs for saved answers whose units they state.
-  Never
-  hidden, disabled, read-only or password controls, checkboxes (an "I
-  currently work here" box is guided only), radios (saved answers are
-  guided only), file inputs or custom dropdowns.
+  month and number inputs for saved answers whose units they state;
+  native radio groups for saved, graduation and monitoring answers when
+  the group's boundary and labels are certain (`radio-group.ts`,
+  ADR 0020; options matched by label through `choices.ts`, chosen by
+  `selectRadio` and verified). Never hidden, disabled, read-only or
+  password controls, checkboxes (an "I currently work here" box is
+  guided only), other radio groups, custom radio widgets, file inputs or
+  custom dropdowns.
 - Preferred names use the first name only when the user chose that in
   their profile. Education records and jobs are chosen per section of the
   form; several fitting records leave the fields for the user, who can

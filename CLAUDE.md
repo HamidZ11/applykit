@@ -49,6 +49,9 @@ Read `docs/architecture.md` before changing structure, and the ADRs in
   host access needs an ADR and the user's approval.
 - No `web_accessible_resources` unless an ADR justifies it.
 - Autofill never submits, clicks, sends keys or overwrites user-entered values.
+  The one `click` it dispatches is a plain Event on a native radio it
+  chooses (ADR 0020), which React needs to notice the change; never a
+  mouse event, never on anything else.
   The one exception is "Improve my answer" (ADR 0019): the user confirms
   replacing their own text, and `replaceText` writes only if the field
   still holds exactly the text they approved.
@@ -144,8 +147,12 @@ old (pnpm enforces a minimum release age; do not add exclusions).
   `fixtures/education-application.html` covers heading-only sections,
   calling codes and education; `fixtures/interactive-education.html`
   covers choosing a record for ambiguous and numbered sections.
-- Custom controls (ARIA comboboxes, listboxes, popup buttons) are listed
-  and guided, never operated or focused: only native controls are written.
+- Custom controls (ARIA comboboxes, listboxes, popup buttons, ARIA
+  radios) are listed and guided, never operated or focused: only native
+  controls are written. Native radio groups are written only for
+  questions ApplyKit already answers, with the same approval, when the
+  group is certain (ADR 0020); `fixtures/radio-application.html` covers
+  them next to questions they must never answer.
 - Saved profiles are read by shape and saved with compare-and-set
   (ADR 0014). Never make stored data unreadable through a form-rule
   change; never overwrite or drop a profile or draft silently.
