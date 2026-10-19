@@ -490,6 +490,44 @@ describe('failing safely', () => {
   });
 });
 
+describe('the fixture’s own widgets, without ApplyKit', () => {
+  it('opens the portalled list under its trigger, where people see it', () => {
+    const trigger = element('arrangement');
+    // jsdom has no layout: give the trigger a place on the page.
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      x: 100,
+      y: 200,
+      top: 200,
+      left: 100,
+      bottom: 240,
+      right: 400,
+      width: 300,
+      height: 40,
+      toJSON: () => ({}),
+    });
+
+    trigger.click();
+
+    const holder = document.querySelector<HTMLElement>('[data-portal]');
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(holder?.querySelector('#arrangement-content')).not.toBeNull();
+    expect(holder?.style.top).toBe('240px');
+    expect(holder?.style.left).toBe('100px');
+    expect(holder?.style.width).toBe('300px');
+  });
+
+  it('chooses an option clicked by a person', () => {
+    element('arrangement').click();
+    [...document.querySelectorAll<HTMLElement>('[data-portal] [role="option"]')]
+      .find((option) => option.textContent === 'Hybrid')
+      ?.click();
+
+    expect(shows('arrangement')).toBe('Hybrid');
+    expect(document.querySelector('[data-portal]')).toBeNull();
+    expect(status()).toContain('changes: 1');
+  });
+});
+
 describe('stale questions and answers', () => {
   it('rejects a changed question before touching the page', async () => {
     const clicks = recordClicks();

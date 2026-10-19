@@ -1005,6 +1005,12 @@
               holder = document.createElement('div');
               holder.dataset.portal = '';
               holder.append(list);
+              // Placed under its trigger, as portal libraries do; left
+              // alone it would sit at the end of the page, out of view.
+              const box = trigger.getBoundingClientRect();
+              holder.style.top = `${box.bottom + window.scrollY}px`;
+              holder.style.left = `${box.left + window.scrollX}px`;
+              holder.style.width = `${box.width}px`;
               document.body.append(holder);
             } else {
               holder = list;
