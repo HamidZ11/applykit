@@ -19,6 +19,7 @@ import {
   type PhoneParts,
 } from './fields';
 import { comparable, isPlaceholderOption, usableOptions } from './options';
+import { checkedRadio, isRadio, radioLabel } from './radio-group';
 import { suggestionFor, type Suggestion } from './suggestion';
 import { chooseRecords, planEducation } from './plan-education';
 import { chooseEmployment, planEmployment } from './plan-employment';
@@ -264,7 +265,7 @@ function planField(
             field.kind === 'checkbox'
               ? 'ApplyKit never ticks boxes: many sites only notice a real click. Tick it yourself if it applies.'
               : field.kind === 'radio'
-                ? 'ApplyKit never chooses between radio buttons: many sites only notice a real click. Choose it yourself on this page.'
+                ? 'ApplyKit chooses only in standard radio groups whose question and options it can read with certainty. Choose it yourself on this page.'
                 : `${
                     target
                       ? `This looks like your ${AUTOFILL_FIELD_LABEL[target].toLowerCase()}, but it`
@@ -666,6 +667,12 @@ export function currentValue(field: ScannedField): string | null {
     const option = element.selectedOptions[0];
     if (!option || isPlaceholderOption(option)) return null;
     return option.text.trim() || option.value;
+  }
+  // A radio group is answered when any of its radios is checked, by the
+  // user, the employer's defaults or ApplyKit alike.
+  if (isRadio(element)) {
+    const checked = checkedRadio(element);
+    return checked ? radioLabel(checked) || 'Selected' : null;
   }
   const value = element.value.trim();
   return value === '' ? null : value;

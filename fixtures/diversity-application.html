@@ -11,8 +11,8 @@
       fill when the user turned on reuse; the gender list offers Male and
       Female, which fit a saved Man or Woman but not the tests' saved
       Non-binary; religion is
-      already answered; disability is radio buttons, gender identity a
-      custom dropdown and ethnic background a multiple-choice list, all
+      already answered; disability is a radio group ApplyKit answers like
+      a list (ADR 0020); gender identity a custom dropdown and ethnic background a multiple-choice list, all
       guided. Legal sex, sex registered at birth, a long-term health
       condition, reasonable adjustments, right to work, visa sponsorship,
       consent and a declaration are never answered. Every name is
@@ -340,11 +340,22 @@
               Yes</label
             >
             <label class="choice"
-              ><input type="radio" name="disability" value="no" /> No</label
+              ><input
+                type="radio"
+                id="disability-no"
+                name="disability"
+                value="no"
+              />
+              No</label
             >
             <label class="choice"
-              ><input type="radio" name="disability" value="pnts" /> Prefer not
-              to say</label
+              ><input
+                type="radio"
+                id="disability-pnts"
+                name="disability"
+                value="pnts"
+              />
+              Prefer not to say</label
             >
           </fieldset>
           <label for="identity" id="identity-label"

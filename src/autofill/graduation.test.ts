@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { EducationRecord } from '@/domain/user-profile';
 import { savedAnswers } from '@/test/answer-fixtures';
 import { educationRecords, fullProfile } from '@/test/autofill-fixtures';
+import { checkedRadio } from './radio-group';
 import { loadFixture, loadHtml } from '@/test/load-fixture';
 import { detectControl, normalise, type DetectableControl } from './detect';
 import { fillFields } from './fill';
@@ -376,21 +377,27 @@ describe('controls', () => {
     expect(byId(plan(), 'q')).toMatchObject({ status: 'no-option' });
   });
 
-  it('guides radio buttons and custom dropdowns, never fills them', () => {
+  it('suggests a native radio group’s answer and guides custom dropdowns', () => {
     loadFixture('graduation-application.html');
     const reports = plan();
 
-    for (const id of ['grad-radio-yes', 'grad-custom']) {
-      expect(byId(reports, id), id).toMatchObject({
-        status: 'unsupported',
-        fillValue: null,
-        suggestion: {
-          kind: 'value',
-          value: 'Yes',
-          note: 'Expected graduation: June 2027. Choose it yourself on this page.',
-        },
-      });
-    }
+    // A native radio group is answered like a list (ADR 0020), only when
+    // the user confirms it.
+    expect(byId(reports, 'grad-radio-yes')).toMatchObject({
+      status: 'suggest',
+      fillValue: 'Yes',
+      value: 'Yes',
+      note: 'Expected graduation: June 2027',
+    });
+    expect(byId(reports, 'grad-custom')).toMatchObject({
+      status: 'unsupported',
+      fillValue: null,
+      suggestion: {
+        kind: 'value',
+        value: 'Yes',
+        note: 'Expected graduation: June 2027. Choose it yourself on this page.',
+      },
+    });
   });
 
   it('keeps an answer already chosen', () => {
@@ -414,6 +421,8 @@ describe('the graduation fixture', () => {
       ['grad-year', '2027'],
       ['grad-done', 'n'],
       ['grad-bachelor', 'y'],
+      // A native radio group, chosen by its label (ADR 0020).
+      ['grad-radio-yes', 'Yes'],
     ]);
     for (const id of ['ceremony', 'eligible']) {
       expect(byId(reports, id).target, id).toBeNull();
@@ -437,7 +446,12 @@ describe('the graduation fixture', () => {
     // Autofill never writes a graduation answer.
     const outcomes = await fillFields(reports);
     for (const [id] of suggested) {
-      expect((document.getElementById(id) as HTMLInputElement).value).toBe('');
+      const element = document.getElementById(id) as HTMLInputElement;
+      if (element.type === 'radio') {
+        expect(checkedRadio(element), id).toBeNull();
+      } else {
+        expect(element.value, id).toBe('');
+      }
     }
     expect(summarise(outcomes).needsYou).toBeGreaterThanOrEqual(6);
   });

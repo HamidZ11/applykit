@@ -17,7 +17,8 @@ import {
 } from '@/domain/application-answers';
 import { normalise } from './detect';
 import type { AnswerField, AutofillValues } from './fields';
-import { comparable, usableOptions } from './options';
+import { choiceOptions } from './choices';
+import { comparable } from './options';
 import type { ControlField, ScannedField } from './scan';
 
 /**
@@ -235,8 +236,9 @@ function planNotice(
 ): AnswerPlan {
   if (!saved) return NOT_SAVED;
   const { element } = field;
-  if (element instanceof HTMLSelectElement) {
-    const matching = usableOptions(element).filter((option) => {
+  const choices = choiceOptions(element);
+  if (choices) {
+    const matching = choices.filter((option) => {
       const offered = noticeOption(option.text);
       return (
         offered !== null &&
@@ -246,7 +248,7 @@ function planNotice(
     });
     const [only] = matching;
     return matching.length === 1 && only
-      ? { display: only.text.trim(), fillValue: only.value }
+      ? { display: only.text, fillValue: only.value }
       : {
           status: 'no-option',
           reason: `None of the options is exactly ${noticeText(saved)}. ApplyKit does not choose a range or convert units.`,
@@ -386,14 +388,12 @@ function planOption(
   words: string,
   option: RegExp,
 ): AnswerPlan {
-  const { element } = field;
-  if (!(element instanceof HTMLSelectElement)) return text(words);
-  const matching = usableOptions(element).filter((o) =>
-    option.test(comparable(o.text)),
-  );
+  const choices = choiceOptions(field.element);
+  if (!choices) return text(words);
+  const matching = choices.filter((o) => option.test(comparable(o.text)));
   const [only] = matching;
   return matching.length === 1 && only
-    ? { display: only.text.trim(), fillValue: only.value }
+    ? { display: only.text, fillValue: only.value }
     : {
         status: 'no-option',
         reason:
@@ -463,7 +463,7 @@ function planStartDate(
       fillValue: `${year}-${month}`,
     };
   }
-  if (element instanceof HTMLSelectElement) {
+  if (element instanceof HTMLSelectElement || choiceOptions(element)) {
     return {
       status: 'unusable',
       reason:
@@ -603,7 +603,7 @@ function salaryFit(
 function planSalary(field: ControlField, saved: Salary | null): AnswerPlan {
   if (!saved) return NOT_SAVED;
   const { element } = field;
-  if (element instanceof HTMLSelectElement) {
+  if (choiceOptions(element)) {
     return {
       status: 'no-option',
       reason: 'ApplyKit does not choose salary bands. Choose one yourself.',

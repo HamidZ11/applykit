@@ -366,13 +366,21 @@ describe('monitoring questions on a form', () => {
     expect(select('religion').selectedOptions[0]?.text).toBe(
       'Prefer not to say',
     );
+    // A native radio group is answered like a list (ADR 0020): the saved
+    // "No", and nothing else.
     expect(
       [
         ...document.querySelectorAll<HTMLInputElement>(
           '[type="radio"], [type="checkbox"]',
         ),
-      ].some((box) => box.checked),
-    ).toBe(false);
+      ]
+        .filter((box) => box.checked)
+        .map((box) => box.id),
+    ).toEqual(['disability-no']);
+    expect(byId(outcomes, 'disability-yes')).toMatchObject({
+      status: 'filled',
+      value: null,
+    });
     expect(select('background').selectedOptions).toHaveLength(0);
     for (const id of ['sex', 'birth-sex', 'health', 'sponsorship']) {
       expect(select(id).value, id).toBe('');
@@ -383,12 +391,26 @@ describe('monitoring questions on a form', () => {
       'email',
       'ethnicity',
       'orientation',
+      'disability-no',
     ]);
-    // The background was asked only about the lists, with the page's options.
+    // The background was asked only about lists and the native radio
+    // group, with the page's own option labels, never raw values.
     expect(calls).toHaveLength(1);
-    expect((calls[0] as { category: string }[]).map((r) => r.category)).toEqual(
-      ['ethnicity', 'sexualOrientation', 'gender'],
-    );
+    const asked = calls[0] as {
+      category: string;
+      options: { value: string; text: string }[];
+    }[];
+    expect(asked.map((r) => r.category)).toEqual([
+      'ethnicity',
+      'sexualOrientation',
+      'gender',
+      'disability',
+    ]);
+    expect(asked[3]?.options).toEqual([
+      { value: 'Yes', text: 'Yes' },
+      { value: 'No', text: 'No' },
+      { value: 'Prefer not to say', text: 'Prefer not to say' },
+    ]);
   });
 
   it('never writes an option the page did not offer, or without a reply', async () => {
@@ -450,12 +472,20 @@ describe('monitoring questions on a form', () => {
     expect(byId(outcomes, 'ethnicity').status).toBe('rejected');
   });
 
-  it('never submits, clicks or presses keys', async () => {
+  it('never submits, presses keys or clicks with a mouse', async () => {
     loadFixture('diversity-application.html');
     const onSubmit = vi.fn((event: Event) => {
       event.preventDefault();
     });
-    const onClick = vi.fn();
+    // A radio's choice is reported with a plain click Event (ADR 0020),
+    // only on the chosen radio, never a mouse click.
+    const clicks: { target: string; mouse: boolean }[] = [];
+    const onClick = vi.fn((event: Event) => {
+      clicks.push({
+        target: (event.target as HTMLElement).id,
+        mouse: event instanceof MouseEvent,
+      });
+    });
     const onKey = vi.fn();
     document
       .getElementById('application')
@@ -468,7 +498,7 @@ describe('monitoring questions on a form', () => {
     );
 
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(onClick).not.toHaveBeenCalled();
+    expect(clicks).toEqual([{ target: 'disability-no', mouse: false }]);
     expect(onKey).not.toHaveBeenCalled();
   });
 

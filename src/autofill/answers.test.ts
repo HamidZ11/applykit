@@ -499,14 +499,15 @@ describe('saved answers are suggested, never filled by autofill', () => {
     });
   });
 
-  it('guides radio groups and custom dropdowns without choosing', () => {
+  it('suggests a native radio group’s answer and guides custom dropdowns', () => {
     loadFixture('reusable-answers.html');
     const reports = plan();
 
+    // Answered by the option's label, only when the user confirms it.
     expect(byId(reports, 'relocate-abroad-yes')).toMatchObject({
-      status: 'unsupported',
-      fillValue: null,
-      suggestion: { kind: 'value', value: 'No' },
+      status: 'suggest',
+      fillValue: 'No',
+      value: 'No',
     });
     expect(byId(reports, 'arrangement')).toMatchObject({
       status: 'unsupported',

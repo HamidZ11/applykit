@@ -19,7 +19,8 @@ import {
   type Deadline,
   type Relation,
 } from './graduation-question';
-import { comparable, usableOptions } from './options';
+import { choiceOptions } from './choices';
+import { comparable } from './options';
 import type { ControlField, ScannedField } from './scan';
 
 /**
@@ -218,30 +219,35 @@ export function planGraduation(
   const { element } = field;
   if (answer === 'yes' || answer === 'no') {
     const words = answer === 'yes' ? 'Yes' : 'No';
-    if (!(element instanceof HTMLSelectElement)) {
+    const options = choiceOptions(element);
+    if (!options) {
       return {
         status: 'manual',
-        reason: `The likely answer is ${words}, based on your expected graduation. ApplyKit fills Yes or No only into a list offering them; answer it yourself.`,
+        reason: `The likely answer is ${words}, based on your expected graduation. ApplyKit fills Yes or No only into a list or radio group offering them; answer it yourself.`,
       };
     }
-    const options = usableOptions(element);
     const choices = options.map((o) => comparable(o.text)).sort();
     const chosen = options.find((o) => comparable(o.text) === answer);
     return choices.join('|') === 'no|yes' && chosen
-      ? { display: chosen.text.trim(), fillValue: chosen.value, basis }
+      ? { display: chosen.text, fillValue: chosen.value, basis }
       : {
           status: 'no-option',
           reason:
-            'This list does not offer just Yes and No, so ApplyKit leaves the choice to you.',
+            'These choices are not just Yes and No, so ApplyKit leaves the choice to you.',
         };
   }
-  if (element instanceof HTMLSelectElement) {
-    const matching = usableOptions(element).filter(
-      (o) => comparable(o.text) === answer || comparable(o.value) === answer,
+  const options = choiceOptions(element);
+  if (options) {
+    // A list's values may count ("2027"); a radio group's never do.
+    const matching = options.filter(
+      (o) =>
+        comparable(o.text) === answer ||
+        (element instanceof HTMLSelectElement &&
+          comparable(o.value) === answer),
     );
     const [only] = matching;
     return matching.length === 1 && only
-      ? { display: only.text.trim(), fillValue: only.value, basis }
+      ? { display: only.text, fillValue: only.value, basis }
       : { status: 'no-option', reason: `None of the options is ${answer}.` };
   }
   const format = dateFormatOf(element, field.label);

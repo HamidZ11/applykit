@@ -5,7 +5,8 @@ import {
   type DiversityCategory,
 } from '@/domain/diversity';
 import { DIVERSITY_CATEGORY, isDiversityField } from './fields';
-import { comparable, usableOptions } from './options';
+import { choiceOptions } from './choices';
+import { comparable } from './options';
 import type { FieldReport } from './report';
 
 /**
@@ -245,9 +246,8 @@ function onlyOption(
 ): boolean {
   const [chosen, ...others] = offered.filter((o) => o.value === value);
   if (!chosen || others.length > 0) return false;
-  if (!(element instanceof HTMLSelectElement)) return false;
-  const now = [...element.options].filter((o) => o.value === value);
-  return now.length === 1 && now[0]?.text.trim() === chosen.text;
+  const now = (choiceOptions(element) ?? []).filter((o) => o.value === value);
+  return now.length === 1 && now[0]?.text === chosen.text;
 }
 
 /** What the background replies for one monitoring question. */
@@ -316,13 +316,8 @@ export async function withDiversityChoices(
   if (pending.length === 0) {
     return plan.map((report) => decided.get(report) ?? report);
   }
-  const lists = pending.map(({ report }) =>
-    report.field.element instanceof HTMLSelectElement
-      ? usableOptions(report.field.element).map((o) => ({
-          value: o.value,
-          text: o.text.trim(),
-        }))
-      : [],
+  const lists = pending.map(
+    ({ report }) => choiceOptions(report.field.element) ?? [],
   );
   const reply = await request(
     pending.map(({ category }, index) => ({

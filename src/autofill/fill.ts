@@ -1,4 +1,5 @@
 import { isDiversityField } from './fields';
+import { groupMembers, isRadio, optionToChoose } from './radio-group';
 import { comparable } from './options';
 import { isFormControl } from './scan';
 import { currentValue, type FieldReport } from './report';
@@ -22,6 +23,8 @@ export async function fillFields(
   settle: () => Promise<void> = afterPageScripts,
 ): Promise<FieldReport[]> {
   const written = new Set<FieldReport>();
+  /** The radio chosen for each radio group written, to verify. */
+  const chosen = new Map<FieldReport, HTMLInputElement>();
   const reports = plan.map((report): FieldReport => {
     if (report.status !== 'fill' || report.fillValue === null) return report;
     const { element } = report.field;
@@ -53,7 +56,14 @@ export async function fillFields(
       };
     }
 
-    if (element instanceof HTMLSelectElement) {
+    if (isRadio(element)) {
+      const choice = optionToChoose(element, report.fillValue);
+      if ('reason' in choice) {
+        return { ...report, status: 'rejected', reason: choice.reason };
+      }
+      selectRadio(choice.radio);
+      chosen.set(report, choice.radio);
+    } else if (element instanceof HTMLSelectElement) {
       setSelectValue(element, report.fillValue);
     } else {
       setInputValue(element, report.fillValue);
@@ -64,9 +74,27 @@ export async function fillFields(
 
   if (written.size === 0) return reports;
   await settle();
-  return reports.map((report) =>
-    written.has(report) ? verify(report) : report,
-  );
+  return reports.map((report) => {
+    if (!written.has(report)) return report;
+    const radio = chosen.get(report);
+    return radio ? verifyRadio(report, radio) : verify(report);
+  });
+}
+
+/** Whether the page kept the one radio ApplyKit chose, and only it. */
+function verifyRadio(
+  report: FieldReport,
+  radio: HTMLInputElement,
+): FieldReport {
+  if (!radio.isConnected) return detached(report);
+  const checked = groupMembers(radio).filter((member) => member.checked);
+  return checked.length === 1 && checked[0] === radio
+    ? { ...report, status: 'filled' }
+    : {
+        ...report,
+        status: 'rejected',
+        reason: 'The site did not keep this choice. Choose it yourself.',
+      };
 }
 
 /** Whether the page kept the value ApplyKit wrote. */
@@ -186,4 +214,21 @@ export async function replaceText(
   // The page may have removed the field while it handled the input.
   if (!element.ownerDocument.contains(element)) return 'unavailable';
   return element.value === value ? 'replaced' : 'rejected';
+}
+
+/**
+ * Checks one radio button the way a user's choice is reported, without a
+ * mouse event (ADR 0020). The prototype's `checked` setter bypasses the
+ * override React uses to track the last state it saw, so React notices
+ * the change; React reports a radio's change on the `click` event, so a
+ * plain `click` Event (not a MouseEvent, which would also run the
+ * browser's activation behaviour) follows, then `input` and `change`, as
+ * a click produces, for other frameworks and plain scripts. Nothing is
+ * focused, pressed or submitted, and the caller verifies the result.
+ */
+export function selectRadio(radio: HTMLInputElement): void {
+  Reflect.set(HTMLInputElement.prototype, 'checked', true, radio);
+  radio.dispatchEvent(new Event('click', { bubbles: true, composed: true }));
+  radio.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  radio.dispatchEvent(new Event('change', { bubbles: true }));
 }

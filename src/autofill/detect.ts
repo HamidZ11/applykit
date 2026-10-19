@@ -1040,10 +1040,7 @@ function questionTexts(
   if (!(control instanceof HTMLInputElement && control.type === 'radio')) {
     return questions;
   }
-  const legend =
-    control.closest('fieldset')?.querySelector(':scope > legend')
-      ?.textContent ?? '';
-  const raw = legend.replace(/\s+/g, ' ').trim();
+  const raw = radioQuestionText(control);
   return raw
     ? [
         {
@@ -1186,6 +1183,26 @@ function sectionText(control: DetectableControl): string {
   }
   return normalise(parts.join(' '));
 }
+
+/**
+ * The question a radio button answers: its group's legend, or the
+ * accessible name of an ARIA radio group or group around it. The button's
+ * own label is an option, such as "Yes".
+ */
+export function radioQuestionText(radio: HTMLInputElement): string {
+  const container = radio.closest(RADIO_CONTAINERS);
+  if (!container) return '';
+  const legend =
+    container instanceof HTMLFieldSetElement
+      ? (container.querySelector(':scope > legend')?.textContent ?? '')
+      : '';
+  return (legend.trim() || accessibleName(container))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** What holds one radio question: a fieldset or an ARIA group. */
+export const RADIO_CONTAINERS = 'fieldset, [role="radiogroup"], [role="group"]';
 
 /** `aria-label`, or the text of the elements named by `aria-labelledby`. */
 function accessibleName(element: Element): string {

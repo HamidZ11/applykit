@@ -1152,7 +1152,8 @@ describe('saved application answers', () => {
   });
 
   it('fills one question after the user confirms it', async () => {
-    expect(useButtons()).toHaveLength(4);
+    // Four fields and the native radio group about relocating abroad.
+    expect(useButtons()).toHaveLength(5);
 
     act(() => {
       useIn(/^Notice period in weeks/)?.click();
@@ -1169,7 +1170,7 @@ describe('saved application answers', () => {
     );
     // One answer at a time: the others still wait for the user, and focus
     // moves on to the next.
-    expect(useButtons()).toHaveLength(3);
+    expect(useButtons()).toHaveLength(4);
     expect(useIn(/^Notice period in weeks/)).toBeUndefined();
     expect(document.activeElement).toBe(useIn(/^Earliest available start/));
     click(/^Notice period in weeks/);
@@ -1241,16 +1242,27 @@ describe('saved application answers', () => {
     expect(findButton(/Edit your profile$/)).toBeUndefined();
   });
 
-  it('guides a radio group without choosing', () => {
+  it('chooses a native radio option only after the user confirms it', async () => {
+    const radio = (id: string) =>
+      document.getElementById(id) as HTMLInputElement;
     click(/^Would you consider relocating outside the UK/);
-
-    expect(dialog().textContent).toContain(
-      'ApplyKit never chooses between radio buttons',
-    );
     expect(dialog().textContent).toContain('From your saved answers');
-    expect(
-      useIn(/^Would you consider relocating outside the UK/),
-    ).toBeUndefined();
+    expect(radio('relocate-abroad-yes').checked).toBe(false);
+
+    act(() => {
+      useIn(/^Would you consider relocating outside the UK/)?.click();
+    });
+    await settle();
+
+    const checked = [
+      ...document.querySelectorAll<HTMLInputElement>(
+        'input[name="relocateAbroad"]:checked',
+      ),
+    ];
+    expect(checked.map((r) => r.value)).toEqual(['no']);
+    expect(announcement()).toBe(
+      'Filled your saved answer. Nothing was submitted.',
+    );
   });
 
   it('keeps the compact mode free of answer actions', () => {
@@ -1287,7 +1299,7 @@ describe('suggested answers in the compact panel', () => {
     // typed, radio buttons, custom dropdowns, the hourly rate and every
     // sensitive or consent question are not counted.
     expect(line()?.textContent).toBe(
-      'Suggested answers · 4 availableReview answers',
+      'Suggested answers · 5 availableReview answers',
     );
   });
 
@@ -1336,7 +1348,7 @@ describe('suggested answers in the compact panel', () => {
     expect((document.getElementById('first') as HTMLInputElement).value).toBe(
       'Alex',
     );
-    expect(line()?.textContent).toContain('4 available');
+    expect(line()?.textContent).toContain('5 available');
     click('Review answers');
     await settle();
     expect(focusedUse()).toMatch(/^Notice period in weeks/);
@@ -1352,14 +1364,14 @@ describe('suggested answers in the compact panel', () => {
     });
     await settle();
     click('Show summary');
-    expect(line()?.textContent).toContain('3 available');
+    expect(line()?.textContent).toContain('4 available');
 
     (document.getElementById('salary-annual') as HTMLInputElement).value =
       'Typed';
     click('Rescan the page');
     await settle();
     // The filled answer and the typed one are no longer suggestions.
-    expect(line()?.textContent).toContain('2 available');
+    expect(line()?.textContent).toContain('3 available');
   });
 
   it('is a button the keyboard reaches, with a clear name', async () => {
@@ -1543,7 +1555,7 @@ describe('graduation answers', () => {
     expect(
       host.querySelector('section[aria-label="Suggested answers"]')
         ?.textContent,
-    ).toContain('6 available');
+    ).toContain('7 available');
   });
 
   it('shows the answer with the saved fact it rests on', async () => {
@@ -1835,9 +1847,14 @@ describe('diversity questions', () => {
     expect(select('gender').value).toBe('');
     // A choice already made on the page is kept.
     expect(select('religion').value).toBe('Prefer not to say');
+    // A native radio group is answered like a list, with reuse on.
     expect(
-      document.querySelectorAll('input[name="disability"]:checked'),
-    ).toHaveLength(0);
+      [
+        ...document.querySelectorAll<HTMLInputElement>(
+          'input[name="disability"]:checked',
+        ),
+      ].map((r) => r.value),
+    ).toEqual(['no']);
   });
 
   it('never fills a monitoring list the panel had not listed', async () => {

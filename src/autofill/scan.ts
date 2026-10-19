@@ -12,6 +12,7 @@ import {
   SECTIONS,
   formOf,
   nameOf,
+  radioQuestionText,
   placeholderOf,
   labelText,
   normalise,
@@ -19,6 +20,7 @@ import {
   type ManualReason,
 } from './detect';
 import { readLimits } from './answer-limits';
+import { radioGroupOf } from './radio-group';
 import {
   MAX_QUESTION_LENGTH,
   openQuestionKind,
@@ -365,7 +367,9 @@ function scanWithin(
   isVisible: (element: Element) => boolean,
 ): ScannedField[] {
   const fields: ScannedField[] = [];
-  const radioGroups = new Set<string>();
+  // One field per radio group: per form element (not its id, which two
+  // forms may lack) and name.
+  const radioGroups = new Map<HTMLFormElement | null, Set<string>>();
   const owned = ownedIds(root);
 
   for (const element of root.querySelectorAll<HTMLElement>(
@@ -386,15 +390,16 @@ function scanWithin(
     if (isInput(element)) {
       if (IGNORED_INPUT_TYPES.has(element.type) || element.readOnly) continue;
       if (element.type === 'radio' && element.name) {
-        const key = `${element.form?.id ?? ''}\u0000${element.name}`;
-        if (radioGroups.has(key)) continue;
-        radioGroups.add(key);
+        const names = radioGroups.get(element.form) ?? new Set<string>();
+        radioGroups.set(element.form, names);
+        if (names.has(element.name)) continue;
+        names.add(element.name);
       }
     } else if (isTextArea(element) && element.readOnly) {
       continue;
     }
 
-    fields.push(describe(element, root));
+    fields.push(describe(element, root, isVisible));
   }
 
   return firstOfEachDetail(withinApplicationForm(fields));
@@ -475,27 +480,35 @@ function detailKey(field: AutofillField, label: string): string {
   return month === year ? field : `${field}:${month ? 'month' : 'year'}`;
 }
 
-function describe(element: FieldElement, root: ParentNode): ScannedField {
-  const question =
-    isInput(element) && element.type === 'radio'
-      ? element.closest('fieldset')
-      : null;
+function describe(
+  element: FieldElement,
+  root: ParentNode,
+  isVisible: (element: Element) => boolean = defaultIsVisible,
+): ScannedField {
+  const radio = isInput(element) && element.type === 'radio';
+  const question = radio ? element.closest('fieldset') : null;
 
   const context = controlContext(element);
-  const label = fieldLabel(element, question);
+  const label =
+    (radio && cleanLabel(radioQuestionText(element))) ||
+    fieldLabel(element, question);
   return {
     element,
     label,
     section: sectionOf(element, question),
     kind: kindOf(element),
     required: isRequired(element, root),
-    support: supportOf(element, label),
+    support: supportOf(element, label, isVisible),
     context: context.text,
     group: context.group,
   };
 }
 
-function supportOf(element: FieldElement, label: string): FieldSupport {
+function supportOf(
+  element: FieldElement,
+  label: string,
+  isVisible: (element: Element) => boolean,
+): FieldSupport {
   const detection = detectControl(element);
   if (detection.kind === 'manual') {
     return { status: 'manual', reason: detection.reason };
@@ -505,25 +518,26 @@ function supportOf(element: FieldElement, label: string): FieldSupport {
   }
 
   // Custom dropdowns built on a text input commit a choice through their own
-  // scripts; typing into them would not select anything. Checkboxes and
-  // radio buttons are only guided: many sites register them only from a
-  // real click.
-  // Monitoring questions are written only into a native list allowing one
-  // choice (ADR 0018); as text, several choices, boxes or buttons they are
-  // guided.
-  const monitoring =
-    detection.kind === 'match' && isDiversityField(detection.field);
+  // scripts; typing into them would not select anything. Checkboxes are
+  // only guided. A radio group is answered only for a saved answer or a
+  // monitoring question, and only when it is a native group whose
+  // boundary and labels are certain (ADR 0020); otherwise it is guided.
+  // Monitoring questions are otherwise written only into a native list
+  // allowing one choice (ADR 0018).
+  const matched = detection.kind === 'match' ? detection.field : null;
+  const monitoring = matched !== null && isDiversityField(matched);
+  const answerable = matched !== null && (isAnswerField(matched) || monitoring);
+  const radio = isInput(element) && element.type === 'radio';
+  const certainGroup =
+    radio && answerable && radioGroupOf(element, isVisible) !== null;
   if (
     !isFormControl(element) ||
     isCustomDropdown(element) ||
     (monitoring &&
-      !(element instanceof HTMLSelectElement && !element.multiple)) ||
-    (detection.kind === 'match' &&
-      (detection.field === 'currentlyEmployed' ||
-        // Radio groups are never answered, only guided.
-        (isAnswerField(detection.field) &&
-          isInput(element) &&
-          element.type === 'radio')))
+      !(element instanceof HTMLSelectElement && !element.multiple) &&
+      !certainGroup) ||
+    (radio && answerable && !certainGroup) ||
+    matched === 'currentlyEmployed'
   ) {
     return {
       status: 'unsupported',
@@ -541,9 +555,9 @@ function supportOf(element: FieldElement, label: string): FieldSupport {
 
   // What the engine can write: text-like inputs, and native selects whose
   // options it can match exactly.
-  const matched = detection.kind === 'match' ? detection.field : null;
   const writable = isInput(element)
-    ? TEXT_INPUT_TYPES.has(element.type) ||
+    ? certainGroup ||
+      TEXT_INPUT_TYPES.has(element.type) ||
       (DATE_INPUT_TYPES.has(element.type) &&
         matched !== null &&
         (DATE_FIELDS.has(matched) ||
