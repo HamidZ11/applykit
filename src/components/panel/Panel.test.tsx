@@ -2085,6 +2085,7 @@ describe('AI drafting', () => {
         words: { min: null, max: null },
         characters: { min: null, max: null },
         sentences: { min: 2, max: 2 },
+        conflict: null,
       },
       role: '',
       employer: '',
@@ -2189,6 +2190,34 @@ describe('AI drafting', () => {
     expect(findButton('Try again')).toBeDefined();
     expect(field('q-skills').value).toBe('');
     expect(drafting.draft).toHaveBeenCalledTimes(1);
+  });
+
+  it('says when a question’s requirements conflict, never claiming full compliance', async () => {
+    await openWith(true, () => {
+      const label = document.querySelector('label[for="q-experience"]');
+      if (label) {
+        label.textContent =
+          'What relevant experience do you have? Write at least 200 words, maximum 15 words.';
+      }
+    });
+    draftReply = {
+      status: 'draft',
+      text: 'I served customers and ran the till.',
+    };
+    await startDraft(/^What relevant experience do you have/);
+    await send();
+
+    expect(dialog().textContent).toContain(
+      'This question’s requirements conflict (at least 200 words and at most 15 words), so no answer can meet them all.',
+    );
+    // The maximum still applies.
+    act(() => {
+      setInputValue(
+        draftBox(),
+        Array.from({ length: 16 }, () => 'word').join(' '),
+      );
+    });
+    expect(button('Insert answer').disabled).toBe(true);
   });
 
   it('keeps what the user typed on the page meanwhile', async () => {

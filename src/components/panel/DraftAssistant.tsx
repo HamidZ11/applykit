@@ -700,6 +700,14 @@ function DraftReview({
         className="block w-full resize-y rounded-sm border border-line-strong bg-white px-2 py-1.5 text-xs leading-5 text-ink outline-none focus:border-accent"
       />
       <p className="text-ink-3">{counts.join(' · ')}</p>
+      {limits.conflict && (
+        <p className="text-warning">
+          This question&rsquo;s requirements conflict ({limits.conflict}), so no
+          answer can meet them all. ApplyKit checks against the maximum; check
+          what the employer wants before {replacing ? 'replacing' : 'inserting'}
+          .
+        </p>
+      )}
       {violations.length > 0 && (
         <p className="text-danger">
           Does not meet the question&rsquo;s requirements.{' '}

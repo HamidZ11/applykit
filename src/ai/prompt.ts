@@ -71,7 +71,10 @@ export function limitText(limits: AnswerLimits): string {
       ];
     },
   );
-  return `${parts.join(' ')} These are the employer's requirements and override any other guidance.`;
+  const conflict = limits.conflict
+    ? ` The form also asks for ${limits.conflict}, which cannot both be met; meet the maximum.`
+    : '';
+  return `${parts.join(' ')} These are the employer's requirements and override any other guidance.${conflict}`;
 }
 
 export interface PromptParts {

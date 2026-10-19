@@ -16,9 +16,15 @@ export interface AnswerLimits {
   words: Bound;
   characters: Bound;
   sentences: Bound;
+  /**
+   * Requirements that contradict each other ("at least 200 words and at
+   * most 150 words"), when the form states any. The minimum was dropped
+   * so an answer is possible; no answer can meet every requirement.
+   */
+  conflict: string | null;
 }
 
-export type LimitUnit = keyof AnswerLimits;
+export type LimitUnit = 'words' | 'characters' | 'sentences';
 
 const OPEN: Bound = { min: null, max: null };
 
@@ -26,11 +32,12 @@ export const NO_LIMITS: AnswerLimits = {
   words: OPEN,
   characters: OPEN,
   sentences: OPEN,
+  conflict: null,
 };
 
 export function hasLimits(limits: AnswerLimits): boolean {
-  return Object.values(limits).some(
-    (bound: Bound) => bound.min !== null || bound.max !== null,
+  return [limits.words, limits.characters, limits.sentences].some(
+    (bound) => bound.min !== null || bound.max !== null,
   );
 }
 
@@ -185,42 +192,51 @@ export function readLimits(
     words: boundOf(lower, 'words'),
     characters,
     sentences: boundOf(lower, 'sentences'),
+    conflict: null,
   });
 }
 
 /**
  * Requirements a text can meet. Where they contradict ("At least 300
  * words (max 250 words)", or more words than `maxlength` can hold), the
- * minimum is dropped and the maximum kept: a maximum is what the form
- * enforces, and an impossible target would block every answer.
+ * maximum is kept, since the form enforces it, and the minimum dropped so
+ * an answer is possible; the contradiction is recorded in `conflict` so
+ * it is shown to the user and no answer is presented as meeting every
+ * requirement.
  */
 function satisfiable(limits: AnswerLimits): AnswerLimits {
-  const { words, characters, sentences } = limits;
-  const fixed = (bound: Bound): Bound =>
-    bound.min !== null && bound.max !== null && bound.min > bound.max
-      ? { min: null, max: bound.max }
-      : bound;
-  const result = {
-    words: fixed(words),
-    characters: fixed(characters),
-    sentences: fixed(sentences),
+  const result = { ...limits };
+  const conflicts: string[] = [];
+  const drop = (unit: LimitUnit, against: Bound, againstUnit: LimitUnit) => {
+    const minimum = describeBound({ min: result[unit].min, max: null }, unit);
+    const maximum = describeBound({ min: null, max: against.max }, againstUnit);
+    if (minimum && maximum) conflicts.push(`${minimum} and ${maximum}`);
+    result[unit] = { min: null, max: result[unit].max };
   };
+  for (const unit of ['sentences', 'words', 'characters'] as const) {
+    const { min, max } = result[unit];
+    if (min !== null && max !== null && min > max)
+      drop(unit, result[unit], unit);
+  }
   // A word needs at least two characters with its space.
   if (
     result.words.min !== null &&
     result.characters.max !== null &&
     result.words.min * 2 > result.characters.max
   ) {
-    result.words = { ...result.words, min: null };
+    drop('words', result.characters, 'characters');
   }
   if (
     result.sentences.min !== null &&
     result.words.max !== null &&
     result.sentences.min > result.words.max
   ) {
-    result.sentences = { ...result.sentences, min: null };
+    drop('sentences', result.words, 'words');
   }
-  return result;
+  return {
+    ...result,
+    conflict: conflicts.length > 0 ? conflicts.join('; ') : limits.conflict,
+  };
 }
 
 /** Abbreviations whose full stop does not end a sentence. */

@@ -177,14 +177,21 @@ describe('limits found in review', () => {
     expect(readLimits(text, null)).toEqual(limits(expected));
   });
 
-  it('keeps the maximum when requirements contradict', () => {
+  it('keeps the maximum when requirements contradict, and says so', () => {
     expect(
-      readLimits('At least 300 words (max 250 words)', null).words,
-    ).toEqual(atMost(250));
+      readLimits('Write at least 200 words, maximum 150 words.', null),
+    ).toEqual({
+      ...NO_LIMITS,
+      words: atMost(150),
+      conflict: 'at least 200 words and at most 150 words',
+    });
     // 400 words cannot fit in 300 characters.
-    expect(readLimits('At least 400 words.', 300)).toEqual(
-      limits({ characters: atMost(300) }),
-    );
+    expect(readLimits('At least 400 words.', 300)).toEqual({
+      ...NO_LIMITS,
+      characters: atMost(300),
+      conflict: 'at least 400 words and at most 300 characters',
+    });
+    expect(readLimits('Write 150–200 words.', null).conflict).toBeNull();
   });
 
   it.each([

@@ -214,6 +214,7 @@ describe('AI drafting messages', () => {
       words: { min: null, max: null },
       characters: { min: null, max: 500 },
       sentences: { min: 2, max: 2 },
+      conflict: null,
     },
     role: '',
     employer: '',

@@ -574,6 +574,8 @@ function isContextRequest(value: Record<string, unknown>): boolean {
     isLimit(limits.words) &&
     isLimit(limits.characters) &&
     isLimit(limits.sentences) &&
+    (limits.conflict === null ||
+      (typeof limits.conflict === 'string' && limits.conflict.length <= 300)) &&
     typeof value.role === 'string' &&
     value.role.length <= MAX_ROLE_LENGTH &&
     typeof value.employer === 'string' &&

@@ -73,6 +73,7 @@ describe('the prompt', () => {
         words: { min: 150, max: 200 },
         characters: { min: null, max: 500 },
         sentences: { min: 2, max: 2 },
+        conflict: null,
       }),
     ).toBe(
       "Exactly 2 sentences. Between 150 and 200 words. At most 500 characters, including spaces. These are the employer's requirements and override any other guidance.",
@@ -152,5 +153,17 @@ describe('the prompt', () => {
     );
     expect(prompt).toContain('<applicant_facts>\n["Skills: Python"]');
     expect(buildPrompt(BASE)).not.toContain('<writing_preferences>');
+  });
+
+  it('tells the model when the form’s requirements conflict', () => {
+    expect(
+      limitText({
+        ...NO_LIMITS,
+        words: { min: null, max: 150 },
+        conflict: 'at least 200 words and at most 150 words',
+      }),
+    ).toBe(
+      "At most 150 words. These are the employer's requirements and override any other guidance. The form also asks for at least 200 words and at most 150 words, which cannot both be met; meet the maximum.",
+    );
   });
 });
