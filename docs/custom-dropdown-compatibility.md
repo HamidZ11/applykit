@@ -1,6 +1,7 @@
 # Custom dropdowns: compatibility research and architecture
 
-- Status: Research and proposal (nothing here is implemented)
+- Status: Research and proposal; the first slice is implemented
+  (ADR 0021, Accepted), with the differences noted at the end
 - Date: 2026-10-19
 - Decision record: [ADR 0021](decisions/0021-operating-custom-dropdowns.md)
   (Proposed)
@@ -512,6 +513,27 @@ dependencies.
    widget.
 5. Later and separately: hidden-control paths for MUI and Radix; and
    whether react-select (focus plus `mousedown`) is ever acceptable.
+
+## Implementation notes (first slice)
+
+What the implementation changed from the proposal above, after review:
+
+- Clicks are plain `click` Events, not `MouseEvent`s, so the browser runs
+  no activation behaviour even if a target were misidentified. Libraries
+  that read `event.button` on click (rare) will not respond, and are
+  reported as not accepted rather than counted.
+- Ownership uses `aria-controls` only, never `aria-owns`. The attribute
+  may be missing before opening (Headless UI, React Select add it only
+  while open); it is required once the list is open.
+- Options must read the same twice, a step apart, before one is chosen,
+  and a choice must still show one step after it first does.
+- The option is worked out by the native-list planners through a detached
+  stand-in list, so country aliases, calling codes, saved answers,
+  education and monitoring answers follow exactly the native rules.
+- The guard also stops the operation when the user presses a pointer or a
+  key on the page; ApplyKit then does not close the list.
+- Waits are 25 ms steps, up to 1 s for opening and 1 s for the choice to
+  show; working out the option is limited to 5 s.
 
 [apg-select-only]: https://www.w3.org/WAI/ARIA/apg/patterns/combobox/examples/combobox-select-only/
 [apg-editable]: https://www.w3.org/WAI/ARIA/apg/patterns/combobox/examples/combobox-autocomplete-list/

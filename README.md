@@ -129,7 +129,10 @@ Limitations:
    `radio-application.html` asks graduation, saved-answer and monitoring
    questions as radio groups next to radio questions that must never be
    answered;
-   `custom-controls.html` is built from custom dropdowns.)
+   `custom-controls.html` is built from custom dropdowns;
+   `custom-dropdowns.html` has working custom dropdowns of several kinds,
+   some ApplyKit can choose in on request and some it must leave, next to
+   questions never answered.)
 4. Click the ApplyKit toolbar button. Without a saved profile the panel
    says so and offers **Set up your profile**; it fills nothing. Save a
    profile with fictional details (see below), then click the rescan button
@@ -251,6 +254,12 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   them, show "From your saved profile" with the value to choose, plus
   "Go to field" to jump to any field that needs you (custom dropdowns are
   scrolled to, never focused or opened).
+- Standard custom dropdowns (a select-only ARIA combobox, or a button
+  opening a listbox it names) show **Choose this option** next to the
+  suggested answer. Only when you click it, ApplyKit opens that one
+  dropdown, chooses the one option that says your saved answer, and
+  checks the page kept it; anything uncertain is left to you, with the
+  reason. Autofill never operates them.
 - With the profile open in two tabs, a save never overwrites a newer save
   from the other tab: you choose which version to keep. Saved profiles stay
   readable if ApplyKit's checks become stricter.
@@ -321,9 +330,10 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   has passed, and Yes/No questions asked as text fields are left to you.
   Answers saved by a
   newer version of ApplyKit are kept but can only be edited there.
-- Diversity answers fill only native lists and native radio groups:
-  multiple selects, custom dropdowns and custom radio widgets are left
-  to you. A gender list with Male
+- Diversity answers fill only native lists and native radio groups, and
+  standard custom dropdowns when you choose **Choose this option**:
+  multiple selects, other custom dropdowns and custom radio widgets are
+  left to you. A gender list with Male
   and Female fits a saved Man or Woman only, and never when the question
   or its options mention sex, birth or legal records. Recognition is English-only and limited
   to exact UK wordings; age, caring responsibilities and socio-economic
@@ -340,13 +350,19 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   miss a relevant item; check the ticks. Detecting a form's ban on AI is
   English-only and needs the ban near the question. AI drafting has not
   been tried in Safari, and needs Safari 17.1 or later.
-- Custom dropdowns and date pickers (common on SAP SuccessFactors, Workday
-  and similar platforms) are listed and never filled: the full list shows
-  the saved value to choose and a "Go to field" button. Only standard ARIA
-  comboboxes, listboxes and popup buttons are recognised; widgets built
-  without those roles are not listed. See
-  `docs/research/custom-dropdowns.md`. Compatibility has been tried on one
-  real application only.
+- Custom dropdowns are chosen in only on request, one at a time, and only
+  when they open on a click and name their list with `aria-controls`
+  (ADR 0021). Widgets that open on a mouse press or need typing (React
+  Select, used by Greenhouse; MUI), searchable, multi-select, virtual
+  or loading lists, Workday and SuccessFactors widgets, and date pickers
+  are listed and never filled: the full list shows the saved value to
+  choose and a "Go to field" button. Only standard ARIA comboboxes,
+  listboxes and popup buttons are recognised; widgets built without those
+  roles are not listed. The guard against a page submitting or leaving
+  while ApplyKit chooses relies on the Navigation API for navigation, and
+  cannot stop a script's own `form.submit()`. Choosing has been tested in
+  jsdom and on fixtures only, not yet in Chrome or Safari, nor on a real
+  application. See `docs/custom-dropdown-compatibility.md`.
 - A record you choose for a section is used for that section only, and is
   not remembered for other forms.
 - Education dates are filled only where the field's format is clear (month
@@ -365,7 +381,8 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   Date inputs that need a day, expected leaving dates and descriptions
   longer than the field allows are left to you.
 - Country selects must offer the country by ISO code or name; custom
-  dropdown widgets, custom radio widgets and checkboxes are never filled,
+  dropdown widgets (except on request, as above), custom radio widgets
+  and checkboxes are never filled,
   and textareas only with a saved job description. Native radio groups
   are chosen only for saved, graduation and monitoring answers, and only
   when the group is clearly one question with distinct labelled options;

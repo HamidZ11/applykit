@@ -323,7 +323,10 @@ ADR 0017 and ADR 0018.
   to use), `answers` (what a saved answer gives one question, or why
   not), `graduation` (what a saved degree's expected graduation says about
   a graduation question), `diversity` (monitoring questions and
-  which option says a saved answer), `open-question` (open questions AI drafting may help with, and their
+  which option says a saved answer), `custom-choice` (custom dropdowns
+  ApplyKit may choose in on request: the contract, the list a trigger
+  names, its options, what it shows and whether a choice was kept),
+  `open-question` (open questions AI drafting may help with, and their
   limits), `suggestion` (saved values shown
   as guidance for fields ApplyKit cannot fill), `fill` (write and verify),
   plus pure rules in `education`, `dates`, `options` and `categories`.
@@ -332,8 +335,17 @@ ADR 0017 and ADR 0018.
   controls, which some widgets open on focus.
 - Fields are native controls or custom controls (`FieldElement`). Custom
   comboboxes, popup buttons and listboxes are listed once each, from ARIA
-  roles and relationships only, and are never written: the panel shows
-  what the saved profile says instead (ADR 0013). The background
+  roles and relationships only, and are never written by Autofill: the
+  panel shows what the saved profile says instead (ADR 0013). A
+  select-only combobox or listbox popup button that meets the contract in
+  `custom-choice.ts` (ADR 0021) is suggested instead, and chosen in only
+  when the user asks for that field: `chooseSuggestedOption` (resolve)
+  re-checks it, and `chooseCustomOption` (fill) clicks the trigger and the
+  one matching option of the list it names with `aria-controls`, under a
+  temporary guard against submission and navigation, and reports success
+  only when the dropdown verifiably shows the choice. The option is
+  worked out by the native-list planners, through a detached stand-in
+  list of the options' labels. The background
   derives `AutofillValues` in `profile-values` (phone parsing, record
   levels).
 - Detection signals: `autocomplete` token, input `type`, label text
@@ -363,7 +375,7 @@ ADR 0017 and ADR 0018.
   `selectRadio` and verified). Never hidden, disabled, read-only or
   password controls, checkboxes (an "I currently work here" box is
   guided only), other radio groups, custom radio widgets, file inputs or
-  custom dropdowns.
+  custom dropdowns (except, on request, those of ADR 0021).
 - Preferred names use the first name only when the user chose that in
   their profile. Education records and jobs are chosen per section of the
   form; several fitting records leave the fields for the user, who can

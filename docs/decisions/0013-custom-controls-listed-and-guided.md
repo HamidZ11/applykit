@@ -1,7 +1,14 @@
 # 0013: Custom controls are listed and guided, never operated
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0021](0021-operating-custom-dropdowns.md)
 - Date: 2026-10-17
+
+> Amendment (ADR 0021): a custom dropdown of one of two supported
+> patterns (a select-only ARIA combobox, or a popup button, opening a
+> single-select listbox it names with `aria-controls`) may be chosen in
+> when the user asks for that one field. Its shown text is then read as
+> an answer, and it is planned as a suggestion instead of guidance.
+> Everything else here still applies to all other custom controls.
 
 ## Context
 

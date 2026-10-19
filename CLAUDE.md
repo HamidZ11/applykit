@@ -21,10 +21,11 @@ saved degree's expected graduation date, suggested the same way
 monitoring questions (ADR 0018), Skills & projects, optional AI
 drafting of open questions with the user's own Anthropic key (ADR 0019),
 and native radio groups for those same questions, with the same
-approval (ADR 0020).
+approval (ADR 0020), and choosing in standard custom dropdowns, only when
+the user asks for that one field (ADR 0021).
 
-Still to come (build only when asked, one at a time): custom dropdown
-widgets; review
+Still to come (build only when asked, one at a time): other custom
+dropdown widgets; review
 of uncertain fields. A separate marketing website comes later.
 
 No authentication, subscriptions, backend or external databases. ApplyKit
@@ -51,9 +52,13 @@ Read `docs/architecture.md` before changing structure, and the ADRs in
   host access needs an ADR and the user's approval.
 - No `web_accessible_resources` unless an ADR justifies it.
 - Autofill never submits, clicks, sends keys or overwrites user-entered values.
-  The one `click` it dispatches is a plain Event on a native radio it
-  chooses (ADR 0020), which React needs to notice the change; never a
-  mouse event, never on anything else.
+  The `click` Events it dispatches are plain Events, never mouse events:
+  one on a native radio it chooses (ADR 0020), which React needs to
+  notice the change; and, only when the user asks for that one custom
+  dropdown (ADR 0021), one on its verified trigger and one on the single
+  matching option of the list the trigger names with `aria-controls`,
+  under a temporary guard against submission and navigation. Never on
+  anything else, never during Autofill.
   The one exception is "Improve my answer" (ADR 0019): the user confirms
   replacing their own text, and `replaceText` writes only if the field
   still holds exactly the text they approved.
@@ -151,7 +156,11 @@ old (pnpm enforces a minimum release age; do not add exclusions).
   covers choosing a record for ambiguous and numbered sections.
 - Custom controls (ARIA comboboxes, listboxes, popup buttons, ARIA
   radios) are listed and guided, never operated or focused: only native
-  controls are written. Native radio groups are written only for
+  controls are written. The exception is a custom dropdown meeting the
+  contract in `custom-choice.ts` (ADR 0021): always only `suggest`ed,
+  chosen in only by "Choose this option" through `chooseSuggestedOption`,
+  and reported filled only when verified; `fixtures/custom-dropdowns.html`
+  covers it next to dropdowns and questions it must never operate. Native radio groups are written only for
   questions ApplyKit already answers, with the same approval, when the
   group is certain (ADR 0020); `fixtures/radio-application.html` covers
   them next to questions they must never answer.
