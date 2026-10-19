@@ -7,10 +7,12 @@ import {
   useRef,
   useState,
 } from 'react';
+import { applyReviewed, type BatchResult } from '@/autofill/batch';
 import { withDiversityChoices } from '@/autofill/diversity';
 import { fillFields, replaceText } from '@/autofill/fill';
 import {
   attentionQueue,
+  isBatchEligible,
   planFill,
   summarise,
   type FieldReport,
@@ -86,6 +88,22 @@ export interface PanelModel extends PanelState {
   reviewAnswers: () => void;
   /** True once after `reviewAnswers`, for the list to move focus. */
   takeAnswerFocus: () => boolean;
+  /**
+   * Whether the expanded panel shows the review of suggested answers to
+   * apply together (ADR 0022) instead of the field list.
+   */
+  reviewing: boolean;
+  closeReview: () => void;
+  /**
+   * Applies the answers the user reviewed and selected, one at a time,
+   * each re-checked as "Use this answer" would; stops at the first that
+   * cannot be applied as reviewed. Never submits.
+   */
+  applyAnswers: (
+    reviewed: readonly FieldReport[],
+  ) => Promise<
+    { ok: true; result: BatchResult } | { ok: false; message: string }
+  >;
   collapse: () => void;
   setFilter: (filter: FieldFilter) => void;
   /** Selects a field, or clears the selection when it is already selected. */
@@ -426,6 +444,61 @@ export function usePanel(
     [loadValues, root, chooseDiversity],
   );
 
+  const applyAnswers = useCallback(
+    async (
+      reviewed: readonly FieldReport[],
+    ): Promise<
+      { ok: true; result: BatchResult } | { ok: false; message: string }
+    > => {
+      if (filling.current) {
+        return { ok: false, message: 'ApplyKit is still filling. Try again.' };
+      }
+      filling.current = true;
+      try {
+        const request = ++latestRequest.current;
+        const latest = await loadValues();
+        if (request === latestRequest.current) {
+          dispatch({ type: 'values', values: latest });
+        }
+        if (latest.status !== 'ready') {
+          return {
+            ok: false,
+            message:
+              'Your saved profile could not be read. Nothing was filled.',
+          };
+        }
+        const result = await applyReviewed(reviewed, {
+          scan: () => scanFields(root),
+          values: latest.values,
+        });
+        const total = reviewed.length;
+        const done = result.applied.length;
+        dispatch({
+          type: 'resolved',
+          outcomes: [
+            ...result.applied,
+            ...(result.stopped?.outcome &&
+            !result.applied.includes(result.stopped.outcome)
+              ? [result.stopped.outcome]
+              : []),
+          ],
+          notice: result.stopped
+            ? `Applied ${String(done)} of ${plural(total, 'answer')}, then stopped: ${result.stopped.reason} Nothing was submitted.`
+            : `Applied ${plural(done, 'answer')}. Nothing was submitted.`,
+        });
+        return { ok: true, result };
+      } catch {
+        return {
+          ok: false,
+          message: 'Something went wrong. Nothing more was filled.',
+        };
+      } finally {
+        filling.current = false;
+      }
+    },
+    [loadValues, root],
+  );
+
   const insertDraft = useCallback(
     async (
       previewed: FieldReport,
@@ -546,13 +619,27 @@ export function usePanel(
     void refreshValues();
   }, [root, refreshValues]);
 
+  // The review is open only until the user goes anywhere else.
+  const [reviewing, setReviewing] = useState(false);
   const expand = useCallback((filter?: FieldFilter) => {
+    setReviewing(false);
     dispatch(filter ? { type: 'expand', filter } : { type: 'expand' });
   }, []);
   const answerFocus = useRef(false);
+  // Answers that can be applied together open their review; otherwise
+  // the list, focused on the first answer to confirm on its own.
+  const batchable = reports.some(isBatchEligible);
   const reviewAnswers = useCallback(() => {
+    if (batchable) {
+      setReviewing(true);
+      dispatch({ type: 'expand' });
+      return;
+    }
     answerFocus.current = true;
     dispatch({ type: 'expand', filter: 'you' });
+  }, [batchable]);
+  const closeReview = useCallback(() => {
+    setReviewing(false);
   }, []);
   const takeAnswerFocus = useCallback(() => {
     const pending = answerFocus.current;
@@ -560,6 +647,7 @@ export function usePanel(
     return pending;
   }, []);
   const collapse = useCallback(() => {
+    setReviewing(false);
     dispatch({ type: 'collapse' });
   }, []);
   const setFilter = useCallback((filter: FieldFilter) => {
@@ -600,6 +688,9 @@ export function usePanel(
     expand,
     reviewAnswers,
     takeAnswerFocus,
+    reviewing,
+    closeReview,
+    applyAnswers,
     collapse,
     setFilter,
     toggleSelect,

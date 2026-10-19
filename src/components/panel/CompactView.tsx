@@ -2,15 +2,15 @@ import type { ReactNode } from 'react';
 import {
   ChevronRight,
   CircleDashed,
-  ShieldCheck,
   MessageSquareText,
+  MousePointerClick,
+  ShieldCheck,
 } from 'lucide-react';
 import { isAnswerField } from '@/autofill/fields';
+import { workOf, type WorkKind } from '@/autofill/report';
 import { FieldRow, fieldKey } from './FieldRow';
 import { Icon } from '@/components/ui/icons';
-import { SecondaryButton } from '@/components/ui/primitives';
 import { StatusGlyph } from './icons';
-import type { FieldFilter } from './panel-state';
 import type { PanelModel } from './usePanel';
 import { plural } from './vocabulary';
 
@@ -34,10 +34,7 @@ function ReadyBody({ model }: { model: PanelModel }) {
     <div className="px-3.5 pt-3 pb-3">
       <PageIdentity model={model} />
       {model.values.status === 'ready' ? (
-        <>
-          <Plan model={model} />
-          <SuggestedAnswers model={model} />
-        </>
+        <Plan model={model} />
       ) : (
         <ProfileNotice model={model} />
       )}
@@ -50,76 +47,108 @@ function ReadyBody({ model }: { model: PanelModel }) {
 }
 
 /**
- * Before autofill: what ApplyKit will fill, keep and leave for you. Open
- * questions are counted apart from other fields left to the user: they
- * are never autofilled, and with AI drafting connected the user can ask
- * for a draft of each.
+ * Before autofill: every field once, by the work it leaves: what Autofill
+ * fills, answers to review and apply together, answers confirmed one at a
+ * time, open questions, what only the user can complete, and what is
+ * already answered. The lines add up to the form's fields.
  */
 function Plan({ model }: { model: PanelModel }) {
-  const { reports, queue, expand } = model;
-  const willFill = reports.filter((r) => r.status === 'fill').length;
-  const willKeep = reports.filter((r) => r.status === 'keep').length;
-  // With AI drafting, only questions the form does not forbid it for.
-  const isOpen = (r: (typeof queue)[number]) =>
-    r.status === 'open' &&
-    !(
-      model.ai &&
-      r.field.support.status === 'open' &&
-      r.field.support.question.aiProhibited
-    );
-  const open = queue.filter(isOpen).length;
-  const others = queue.length - open;
-  const requiredOthers = queue.filter(
-    (r) => !isOpen(r) && r.field.required,
-  ).length;
-
   return (
-    <ul className="-mx-1.5 mt-2.5">
-      {willFill > 0 && (
-        <PlanLine
-          glyph={<StatusGlyph status="fill" />}
-          title={`Fill ${plural(willFill, 'field')} from your profile`}
-          filter="handled"
-          onOpen={expand}
-        />
-      )}
-      {willKeep > 0 && (
-        <PlanLine
-          glyph={<StatusGlyph status="keep" />}
-          title={`Keep ${plural(willKeep, 'entry', 'entries')} you already typed`}
-          filter="handled"
-          onOpen={expand}
-        />
-      )}
-      {open > 0 && (
-        <PlanLine
-          glyph={
-            <Icon icon={MessageSquareText} size={14} className="text-ink-3" />
-          }
-          title={`${plural(open, 'open question')} ${
-            model.ai ? 'you can draft with AI' : 'to answer in your own words'
-          }`}
-          filter="you"
-          onOpen={expand}
-        />
-      )}
-      {others > 0 && (
-        <PlanLine
-          glyph={<Icon icon={CircleDashed} size={14} className="text-ink-3" />}
-          title={
-            open > 0
-              ? `Leave ${plural(others, 'other field')} for you`
-              : `Leave ${String(others)} for you`
-          }
-          meta={
-            requiredOthers > 0
-              ? `${String(requiredOthers)} required`
-              : undefined
-          }
-          filter="you"
-          onOpen={expand}
-        />
-      )}
+    <WorkLines
+      model={model}
+      kinds={['autofill', 'review', 'confirm', 'draft', 'manual', 'done']}
+    />
+  );
+}
+
+/** One line per kind of work with fields, each opening where it is done. */
+function WorkLines({
+  model,
+  kinds,
+}: {
+  model: PanelModel;
+  kinds: readonly WorkKind[];
+}) {
+  const counts = new Map<WorkKind, number>();
+  let required = 0;
+  for (const report of model.reports) {
+    const kind = workOf(report, model.ai);
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+    if (kind === 'manual' && report.field.required) required++;
+  }
+  const count = (kind: WorkKind) => counts.get(kind) ?? 0;
+  const lines: Record<WorkKind, () => ReactNode> = {
+    autofill: () => (
+      <PlanLine
+        key="autofill"
+        glyph={<StatusGlyph status="fill" />}
+        title={`Fill ${plural(count('autofill'), 'field')} from your profile`}
+        onOpen={() => {
+          model.expand('handled');
+        }}
+      />
+    ),
+    review: () => (
+      <PlanLine
+        key="review"
+        glyph={<StatusGlyph status="suggest" />}
+        title={`${plural(count('review'), 'answer')} ready to review`}
+        onOpen={model.reviewAnswers}
+      />
+    ),
+    confirm: () => (
+      <PlanLine
+        key="confirm"
+        glyph={
+          <Icon icon={MousePointerClick} size={14} className="text-ink-3" />
+        }
+        title={`${String(count('confirm'))} to confirm one at a time`}
+        onOpen={() => {
+          model.expand('you');
+        }}
+      />
+    ),
+    draft: () => (
+      <PlanLine
+        key="draft"
+        glyph={
+          <Icon icon={MessageSquareText} size={14} className="text-ink-3" />
+        }
+        title={`${plural(count('draft'), 'open question')} ${
+          model.ai ? 'you can draft with AI' : 'to answer in your own words'
+        }`}
+        onOpen={() => {
+          model.expand('you');
+        }}
+      />
+    ),
+    manual: () => (
+      <PlanLine
+        key="manual"
+        glyph={<Icon icon={CircleDashed} size={14} className="text-ink-3" />}
+        title={`${plural(count('manual'), 'field')} for you to answer`}
+        meta={required > 0 ? `${String(required)} required` : undefined}
+        onOpen={() => {
+          model.expand('you');
+        }}
+      />
+    ),
+    done: () => (
+      <PlanLine
+        key="done"
+        glyph={<StatusGlyph status="keep" />}
+        title={`${plural(count('done'), 'field')} already answered`}
+        onOpen={() => {
+          model.expand('handled');
+        }}
+      />
+    ),
+  };
+  const shown = kinds.filter((kind) => count(kind) > 0);
+  if (shown.length === 0) return null;
+  return (
+    <ul aria-label="What is left" className="-mx-1.5 mt-2.5">
+      {shown.map((kind) => lines[kind]())}
     </ul>
   );
 }
@@ -165,52 +194,23 @@ function ProfileNotice({ model }: { model: PanelModel }) {
   );
 }
 
-/**
- * Saved answers the user can use on this form, one click from the list
- * that shows them. Counts only answers that fit a field that can take
- * them; reviewing them writes nothing.
- */
-function SuggestedAnswers({ model }: { model: PanelModel }) {
-  const count = model.reports.filter((r) => r.status === 'suggest').length;
-  if (count === 0) return null;
-  return (
-    <section
-      aria-label="Suggested answers"
-      className="mt-2.5 flex items-center gap-2.5 rounded-sm border border-line bg-white py-1.5 pr-1.5 pl-2.5"
-    >
-      <StatusGlyph status="suggest" />
-      <p className="min-w-0 flex-1 truncate">
-        Suggested answers
-        <span className="text-ink-3"> · {count} available</span>
-      </p>
-      <SecondaryButton size="sm" onClick={model.reviewAnswers}>
-        Review answers
-      </SecondaryButton>
-    </section>
-  );
-}
-
 /** One line of the plan; opens the full list on the matching filter. */
 function PlanLine({
   glyph,
   title,
   meta,
-  filter,
   onOpen,
 }: {
   glyph: ReactNode;
   title: string;
   meta?: string | undefined;
-  filter: FieldFilter;
-  onOpen: (filter: FieldFilter) => void;
+  onOpen: () => void;
 }) {
   return (
     <li>
       <button
         type="button"
-        onClick={() => {
-          onOpen(filter);
-        }}
+        onClick={onOpen}
         className="group flex h-8 w-full items-center gap-2.5 rounded-sm px-1.5 text-left transition-colors duration-100 hover:bg-hover"
       >
         {glyph}
@@ -263,7 +263,9 @@ function ResultsBody({ model }: { model: PanelModel }) {
             .filter(Boolean)
             .join(' · ')}
         </p>
-        <SuggestedAnswers model={model} />
+      </div>
+      <div className="px-3.5">
+        <WorkLines model={model} kinds={['review', 'confirm', 'draft']} />
       </div>
 
       {queue.length > 0 && (
@@ -310,8 +312,9 @@ function ResultsBody({ model }: { model: PanelModel }) {
           <PlanLine
             glyph={<StatusGlyph status="filled" />}
             title={`Done · ${String(done)}`}
-            filter="handled"
-            onOpen={expand}
+            onOpen={() => {
+              expand('handled');
+            }}
           />
         </ul>
       )}

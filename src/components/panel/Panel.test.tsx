@@ -180,9 +180,11 @@ describe('Panel with a saved profile', () => {
 
   it('opens compact with the plan, having scanned once and filled nothing', () => {
     expect(dialog().dataset.mode).toBe('compact');
+    // Every field once, by the work it leaves: 6 + 8 + 1 = 15.
+    expect(dialog().textContent).toContain('15 fields on this form');
     expect(dialog().textContent).toContain('Fill 6 fields from your profile');
-    expect(dialog().textContent).toContain('Keep 1 entry you already typed');
-    expect(dialog().textContent).toContain('Leave 8 for you');
+    expect(dialog().textContent).toContain('8 fields for you to answer');
+    expect(dialog().textContent).toContain('1 field already answered');
     expect(dialog().textContent).toContain('Your saved profile');
     expect(scanFields).toHaveBeenCalledTimes(1);
     expect(loadValues).toHaveBeenCalledTimes(1);
@@ -342,7 +344,7 @@ describe('Panel with a saved profile', () => {
   });
 
   it('opens the full list on the filter a plan line refers to', () => {
-    click(/^Leave 8 for you/);
+    click(/^8 fields for you to answer/);
 
     expect(dialog().dataset.mode).toBe('expanded');
     const selectedTab = host.querySelector(
@@ -392,7 +394,7 @@ describe('Panel with a saved profile', () => {
   });
 
   it('keeps focus in the panel when a mode switch removes the focused control', () => {
-    const planLine = button(/^Leave 8 for you/);
+    const planLine = button(/^8 fields for you to answer/);
     planLine.focus();
 
     act(() => {
@@ -1280,27 +1282,18 @@ describe('suggested answers in the compact panel', () => {
     await open(ready(autofillValuesFrom(fullProfile(), answers)));
   }
 
-  function line(): HTMLElement | null {
-    return host.querySelector('section[aria-label="Suggested answers"]');
-  }
-
-  function focusedUse(): string {
-    const focused = document.activeElement;
-    return focused?.textContent.trim() === 'Use this answer'
-      ? (focused.closest('li')?.querySelector(':scope > button')?.textContent ??
-          '')
-      : '';
+  /** The plan line that opens the review of answers to apply together. */
+  function line(): HTMLButtonElement | undefined {
+    return findButton(/ready to review$/);
   }
 
   it('counts only answers that fit a field that can take them', async () => {
     await openWith();
 
-    // Four fit; ranges, other units, "after an offer", the entry already
-    // typed, radio buttons, custom dropdowns, the hourly rate and every
-    // sensitive or consent question are not counted.
-    expect(line()?.textContent).toBe(
-      'Suggested answers · 5 availableReview answers',
-    );
+    // Five fit; ranges, other units, "after an offer", the entry already
+    // typed, custom dropdowns, the hourly rate and every sensitive or
+    // consent question are not counted.
+    expect(line()?.textContent).toBe('5 answers ready to review');
   });
 
   it('counts a single answer', async () => {
@@ -1309,7 +1302,7 @@ describe('suggested answers in the compact panel', () => {
       noticePeriod: { amount: 4, unit: 'weeks' },
     });
 
-    expect(line()?.textContent).toContain('1 available');
+    expect(line()?.textContent).toBe('1 answer ready to review');
   });
 
   it('shows nothing when no saved answer fits', async () => {
@@ -1318,22 +1311,24 @@ describe('suggested answers in the compact panel', () => {
       salary: { amount: 15, currency: 'EUR', period: 'hour' },
     });
 
-    expect(line()).toBeNull();
-    expect(findButton('Review answers')).toBeUndefined();
+    expect(line()).toBeUndefined();
   });
 
-  it('opens the suggested answers, focused, without writing anything', async () => {
+  it('opens the review, focused, without writing anything', async () => {
     await openWith();
 
-    click('Review answers');
+    act(() => {
+      line()?.click();
+    });
     await settle();
 
     expect(dialog().dataset.mode).toBe('expanded');
-    const sections = [...host.querySelectorAll('section[aria-label]')].map(
-      (section) => section.getAttribute('aria-label'),
+    expect(
+      host.querySelector('[aria-label="Answers to apply"]'),
+    ).not.toBeNull();
+    expect(document.activeElement?.closest('label')?.textContent).toMatch(
+      /^Notice period in weeks/,
     );
-    expect(sections[0]).toBe('Suggested answers');
-    expect(focusedUse()).toMatch(/^Notice period in weeks/);
     expect(fillFields).not.toHaveBeenCalled();
     for (const id of ['notice-weeks', 'start-date', 'relocate-uk']) {
       expect((document.getElementById(id) as HTMLInputElement).value).toBe('');
@@ -1348,38 +1343,261 @@ describe('suggested answers in the compact panel', () => {
     expect((document.getElementById('first') as HTMLInputElement).value).toBe(
       'Alex',
     );
-    expect(line()?.textContent).toContain('5 available');
-    click('Review answers');
-    await settle();
-    expect(focusedUse()).toMatch(/^Notice period in weeks/);
+    expect(line()?.textContent).toBe('5 answers ready to review');
   });
 
   it('updates the count after an answer is used and after a rescan', async () => {
     await openWith();
-    click('Review answers');
-    await settle();
-
+    click('Show all fields');
     act(() => {
-      (document.activeElement as HTMLButtonElement).click();
+      [
+        ...host.querySelectorAll<HTMLButtonElement>('[data-use-answer]'),
+      ][0]?.click();
     });
     await settle();
     click('Show summary');
-    expect(line()?.textContent).toContain('4 available');
+    expect(line()?.textContent).toBe('4 answers ready to review');
 
     (document.getElementById('salary-annual') as HTMLInputElement).value =
       'Typed';
     click('Rescan the page');
     await settle();
     // The filled answer and the typed one are no longer suggestions.
-    expect(line()?.textContent).toContain('3 available');
+    expect(line()?.textContent).toBe('3 answers ready to review');
   });
 
   it('is a button the keyboard reaches, with a clear name', async () => {
     await openWith();
 
-    const review = button('Review answers');
-    expect(review.type).toBe('button');
-    expect(review.disabled).toBe(false);
+    const review = line();
+    expect(review?.type).toBe('button');
+    expect(review?.disabled).toBe(false);
+  });
+});
+
+describe('reviewing answers together', () => {
+  async function openWith(scripts = false) {
+    loadFixture('batch-answers.html');
+    if (scripts) runFixtureScripts(document);
+    document.body.append(host);
+    const saved = fullProfile();
+    saved.education = educationRecords();
+    saved.employment = employmentRecords();
+    await open(
+      ready(
+        autofillValuesFrom(saved, savedAnswers(), {
+          reuse: true,
+          saved: ['gender'],
+        }),
+      ),
+    );
+  }
+
+  const value = (id: string) =>
+    (document.getElementById(id) as HTMLInputElement | HTMLSelectElement).value;
+
+  function boxes(): HTMLInputElement[] {
+    return [
+      ...host.querySelectorAll<HTMLInputElement>(
+        '[aria-label="Answers to apply"] input[type="checkbox"]',
+      ),
+    ];
+  }
+
+  function toggle(index: number) {
+    act(() => {
+      boxes()[index]?.click();
+    });
+  }
+
+  /** Waits, in real time, for the answers to be applied. */
+  async function until(check: () => boolean) {
+    for (let i = 0; i < 300 && !check(); i++) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+    }
+    expect(check()).toBe(true);
+  }
+
+  it('sums every field once, by the work it leaves', async () => {
+    await openWith();
+
+    const text = dialog().textContent;
+    // 4 + 7 + 7 + 1 + 6 + 1 = 26.
+    expect(text).toContain('26 fields on this form');
+    expect(text).toContain('Fill 4 fields from your profile');
+    expect(text).toContain('7 answers ready to review');
+    expect(text).toContain('7 to confirm one at a time');
+    expect(text).toContain('1 open question to answer in your own words');
+    expect(text).toContain('6 fields for you to answer');
+    expect(text).toContain('1 field already answered');
+  });
+
+  it('opens with every answer ticked and writes nothing', async () => {
+    await openWith();
+
+    click('7 answers ready to review');
+
+    expect(boxes()).toHaveLength(7);
+    expect(boxes().every((box) => box.checked)).toBe(true);
+    expect(document.activeElement).toBe(boxes()[0]);
+    const text = host.querySelector(
+      '[aria-label="Answers to apply"]',
+    )?.textContent;
+    expect(text).toContain('Will you graduate before October 2027?');
+    expect(text).toContain('Expected graduation: June 2027');
+    expect(text).toContain('Hybrid');
+    // Never the dropdown, records, monitoring, drafts or declarations.
+    expect(text).not.toMatch(
+      /Country of residence|Institution|gender|Why do you want|right to work/i,
+    );
+    expect(button('Apply 7 selected answers').disabled).toBe(false);
+    expect(fillFields).not.toHaveBeenCalled();
+    expect(value('grad-before')).toBe('');
+  });
+
+  it('counts what is ticked, and selects or clears all', async () => {
+    await openWith();
+    click('7 answers ready to review');
+
+    toggle(2);
+    expect(findButton('Apply 6 selected answers')).toBeDefined();
+
+    click('Select all');
+    expect(boxes().every((box) => box.checked)).toBe(true);
+
+    click('Deselect all');
+    expect(boxes().some((box) => box.checked)).toBe(false);
+    expect(button('Apply 0 selected answers').disabled).toBe(true);
+  });
+
+  it('applies the ticked answers with one confirmation', async () => {
+    await openWith();
+    // One by one, each would take its own "Use this answer".
+    click('Show all fields');
+    expect(host.querySelectorAll('[data-use-answer]')).toHaveLength(8);
+    click('Show summary');
+
+    let clicks = 0;
+    host.addEventListener('click', () => {
+      clicks++;
+    });
+    click('7 answers ready to review');
+    toggle(2);
+    click('Apply 6 selected answers');
+    await until(() => dialog().textContent.includes('Applied 6 answers'));
+
+    // Two clicks for six answers, plus the one that unticked an answer.
+    expect(clicks).toBe(3);
+    expect(value('grad-before')).toBe('y');
+    expect(value('notice-weeks')).toBe('');
+    expect(value('arrangement')).toBe('hybrid');
+    expect(announcement()).toBe('Applied 6 answers. Nothing was submitted.');
+
+    click('Back to fields');
+    expect(tabCounts()).toEqual(['All 26', 'Fillable 11', 'Needs you 15']);
+    expect(button(/^Preferred working arrangement/).textContent).toContain(
+      'Hybrid',
+    );
+  });
+
+  it('writes nothing when cancelled', async () => {
+    await openWith();
+    click('7 answers ready to review');
+
+    click('Cancel');
+
+    expect(host.querySelector('[aria-label="Answers to apply"]')).toBeNull();
+    expect(fillFields).not.toHaveBeenCalled();
+
+    click('Show summary');
+    click('7 answers ready to review');
+    press('Escape');
+    expect(host.querySelector('[aria-label="Answers to apply"]')).toBeNull();
+    expect(dialog().dataset.mode).toBe('expanded');
+  });
+
+  it('closes the review when the panel goes elsewhere, keeping focus inside', async () => {
+    await openWith();
+    click('7 answers ready to review');
+
+    click('Cancel');
+    expect(dialog().contains(document.activeElement)).toBe(true);
+
+    click('Show summary');
+    click('7 answers ready to review');
+    click('Show summary');
+    click('6 fields for you to answer');
+
+    expect(host.querySelector('[aria-label="Answers to apply"]')).toBeNull();
+    expect(
+      host.querySelector('[aria-label="Fields on this form"]'),
+    ).not.toBeNull();
+    expect(dialog().contains(document.activeElement)).toBe(true);
+  });
+
+  it('asks for a fresh review when the answers change while it is open', async () => {
+    await openWith();
+    click('7 answers ready to review');
+
+    (document.getElementById('notice-weeks') as HTMLInputElement).value = '6';
+    click('Rescan the page');
+    await settle();
+
+    expect(dialog().textContent).toContain(
+      'The answers on this form have changed.',
+    );
+    expect(button('Apply 7 selected answers').disabled).toBe(true);
+
+    click('Refresh the review');
+    await settle();
+    expect(boxes()).toHaveLength(6);
+    expect(button('Apply 6 selected answers').disabled).toBe(false);
+  });
+
+  it('reports a partial result and offers to review what is left', async () => {
+    await openWith(true);
+    click('7 answers ready to review');
+
+    click('Apply 7 selected answers');
+    await until(() => dialog().textContent.includes('Applied 3 of 7'));
+
+    const text = dialog().textContent;
+    expect(text).toContain('Stopped at “Earliest available start date”');
+    expect(text).toContain('no longer on the page');
+    expect(text).toContain('3 answers not attempted.');
+    expect(value('notice-weeks')).toBe('4');
+    expect(value('relocate-uk')).toBe('');
+
+    // A fresh scan finds the start date field the page rendered again.
+    click('Review 4 remaining answers');
+    await settle();
+    expect(boxes()).toHaveLength(4);
+    click('Apply 4 selected answers');
+    await until(() => dialog().textContent.includes('Applied 3 of 4'));
+    expect(dialog().textContent).toContain(
+      'Stopped at “Preferred working arrangement”',
+    );
+    expect(value('arrangement')).toBe('');
+    expect(value('regions')).toBe('');
+    expect(document.getElementById('status')?.textContent).toContain(
+      'submitted: 0',
+    );
+  });
+
+  it('never runs Autofill while answers are applied', async () => {
+    await openWith();
+    click('7 answers ready to review');
+
+    act(() => {
+      button('Apply 7 selected answers').click();
+      button(/^Autofill/).click();
+    });
+    await until(() => dialog().textContent.includes('Applied 7 answers'));
+
+    expect(value('first')).toBe('');
+    expect(fillFields).toHaveBeenCalledTimes(7);
   });
 });
 
@@ -1552,15 +1770,11 @@ describe('graduation answers', () => {
   }
 
   it('counts the answers the saved degree settles', () => {
-    expect(
-      host.querySelector('section[aria-label="Suggested answers"]')
-        ?.textContent,
-    ).toContain('7 available');
+    expect(dialog().textContent).toContain('7 answers ready to review');
   });
 
-  it('shows the answer with the saved fact it rests on', async () => {
-    click('Review answers');
-    await settle();
+  it('shows the answer with the saved fact it rests on', () => {
+    click('Show all fields');
 
     const row = rowOf(/^Will you graduate before October 2027/);
     expect(row?.textContent).toContain('Based on your saved education');
@@ -1655,9 +1869,11 @@ describe('custom dropdowns', () => {
   it('counts every question once, and fills only native fields', () => {
     expect(dialog().textContent).toContain('12 fields on this form');
     expect(dialog().textContent).toContain('Fill 3 fields from your profile');
+    // Supported dropdowns are chosen one at a time, never by Autofill.
+    expect(dialog().textContent).toContain('3 to confirm one at a time');
+    expect(dialog().textContent).toContain('4 fields for you to answer');
     // The typed email, and the answer the gender dropdown already shows.
-    expect(dialog().textContent).toContain('Keep 2 entries you already typed');
-    expect(dialog().textContent).toContain('Leave 7 for you');
+    expect(dialog().textContent).toContain('2 fields already answered');
 
     click('Show all fields');
 
@@ -2148,7 +2364,7 @@ describe('AI drafting', () => {
     const text = dialog().textContent;
     expect(text).toContain('Fill 2 fields from your profile');
     expect(text).toContain('8 open questions you can draft with AI');
-    expect(text).toMatch(/Leave \d+ other fields for you/);
+    expect(text).toMatch(/\d+ fields for you to answer/);
     expect(text).not.toContain('Fill 10');
   });
 

@@ -5,7 +5,8 @@ import {
   categoryOf,
   type FieldCategory,
 } from '@/autofill/categories';
-import type { FieldReport } from '@/autofill/report';
+import { isBatchEligible, type FieldReport } from '@/autofill/report';
+import { AnswerReview } from './AnswerReview';
 import { PageIdentity } from './CompactView';
 import { FieldActions } from './FieldActions';
 import { FieldRow, fieldKey } from './FieldRow';
@@ -44,6 +45,19 @@ export function ExpandedView({ model }: { model: PanelModel }) {
       ?.focus({ preventScroll: true });
   });
 
+  if (model.reviewing) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="shrink-0 px-3.5 pt-3 pb-2.5">
+          <PageIdentity model={model} />
+        </div>
+        <AnswerReview model={model} />
+      </div>
+    );
+  }
+
+  const batchable = model.reports.filter(isBatchEligible).length;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 px-3.5 pt-3 pb-2.5">
@@ -75,6 +89,15 @@ export function ExpandedView({ model }: { model: PanelModel }) {
               <div className="sticky top-0 z-10 flex h-7 items-center bg-canvas/95 px-3.5 text-2xs font-medium tracking-[0.01em] text-ink-3 backdrop-blur-[2px]">
                 <span className="truncate">{GROUP_LABEL[category]}</span>
                 <span className="flex-1" />
+                {category === 'suggested' && batchable > 1 && (
+                  <button
+                    type="button"
+                    onClick={model.reviewAnswers}
+                    className="mr-2 rounded-xs px-1 font-medium text-accent-hover hover:bg-hover"
+                  >
+                    Review {batchable} together
+                  </button>
+                )}
                 <span className="font-mono tabular-nums">{items.length}</span>
               </div>
               <ul className="px-1.5">

@@ -82,13 +82,18 @@ export function Panel({
     if (!node) return;
     const root = node.getRootNode() as Document | ShadowRoot;
     if (!node.contains(root.activeElement)) node.focus({ preventScroll: true });
-  }, [mode]);
+    // Also when the review closes, taking the focused control with it.
+  }, [mode, model.reviewing]);
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
       event.preventDefault();
-      if (mode === 'expanded') model.collapse();
+      if (model.reviewing) model.closeReview();
+      else if (mode === 'expanded') model.collapse();
       else onClose();
+    } else if (model.reviewing) {
+      // The review's own controls handle their keys; nothing else runs.
+      return;
     } else if (event.key === 'Enter') {
       if (event.target instanceof HTMLButtonElement) return;
       // A control inside the list (a record choice) handles its own keys.
