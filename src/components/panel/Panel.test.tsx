@@ -2551,3 +2551,84 @@ describe('AI drafting', () => {
     );
   });
 });
+
+describe('native radio groups', () => {
+  async function openRadios(reuse = true) {
+    loadFixture('radio-application.html');
+    document.body.append(host);
+    const preferences = { ...savedDiversity(), reuse };
+    const store = {
+      load: () =>
+        Promise.resolve({
+          status: 'loaded' as const,
+          preferences,
+          updatedAt: '2026-10-18T12:00:00.000Z',
+          damaged: [],
+        }),
+    };
+    const profile = fullProfile();
+    profile.education = educationRecords();
+    profile_ = ready(
+      autofillValuesFrom(
+        profile,
+        savedAnswers(),
+        await loadDiversityStatus(store),
+      ),
+    );
+    root = createRoot(host);
+    act(() => {
+      root.render(
+        <Panel
+          onClose={onClose}
+          loadValues={() => Promise.resolve(profile_)}
+          chooseDiversity={(requests) => resolveDiversity(store, requests)}
+        />,
+      );
+    });
+    await settle();
+  }
+  let profile_: AutofillValuesResponse;
+
+  const checked = (name: string) =>
+    document.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)
+      ?.value ?? null;
+
+  it('offers to use a graduation answer on a radio group, and chooses it only then', async () => {
+    await openRadios();
+    click('Show all fields');
+    click(/^Will you graduate before October 2027/);
+
+    expect(dialog().textContent).toContain('Based on your saved education');
+    expect(checked('gradBefore')).toBeNull();
+
+    click('Use this answer');
+    await settle();
+
+    expect(checked('gradBefore')).toBe('y');
+    expect(checked('relocateAbroad')).toBeNull();
+  });
+
+  it('chooses monitoring answers on Autofill without showing them', async () => {
+    await openRadios();
+
+    await autofill();
+
+    expect(checked('religion')).toBe('none');
+    expect(checked('gradBefore')).toBeNull();
+    click('Show all fields');
+    click(/^What is your religion/);
+    expect(dialog().textContent).toContain(
+      'Filled from your saved diversity preferences.',
+    );
+    expect(dialog().textContent).not.toContain('No religion');
+  });
+
+  it('chooses no monitoring answer with reuse off', async () => {
+    await openRadios(false);
+
+    await autofill();
+
+    expect(checked('religion')).toBeNull();
+    expect(checked('disability')).toBeNull();
+  });
+});

@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Housing Officer · Example Larkspur Housing Trust Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional UK application built from native radio groups (ADR 0020).
+      Answerable groups: a graduation question, saved-answer questions
+      (relocation abroad, working arrangement) and monitoring questions
+      (religion, disability, sexual orientation, gender). Beside them: two
+      groups with the same Yes/No labels, a group already answered, a
+      disabled group, a hidden group, an unlabelled group, a group a button
+      replaces, a group whose page script undoes changes it did not see as
+      a click (as a controlled component does), and questions never
+      answered: consent, right to work, visa sponsorship, health,
+      reasonable adjustments and criminal convictions. Every name is
+      invented. Used by unit tests and manual testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #1d4f91;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 19px;
+        margin: 32px 0 0;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+      }
+      h3 {
+        font-size: 15px;
+        margin: 20px 0 0;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      section {
+        margin-top: 8px;
+        padding: 4px 16px 16px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 16px;
+      }
+      label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      .req {
+        color: #cf222e;
+      }
+      input:not([type='checkbox'], [type='radio']),
+      select,
+      textarea,
+      .combo {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      input:disabled {
+        background: #f6f8fa;
+        color: var(--muted);
+      }
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+      .choice {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 400;
+        margin-top: 10px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 4px 0 0;
+      }
+      [role='listbox'] {
+        margin: 4px 0 0;
+        padding: 4px 0;
+        list-style: none;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      [role='option'] {
+        padding: 4px 10px;
+      }
+      button.link {
+        margin: 6px 0 0;
+        padding: 0;
+        color: var(--brand);
+        background: none;
+        font-weight: 500;
+      }
+      button {
+        margin-top: 28px;
+        padding: 10px 18px;
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--brand);
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      output {
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar">
+        <span class="logo"></span>Example Larkspur Housing Trust
+      </div>
+    </header>
+    <main>
+      <h1>Housing Officer</h1>
+      <p class="meta">
+        Example Larkspur Housing Trust · Norwich · Graduate scheme
+      </p>
+
+      <form id="application" action="/submitted" method="post">
+        <fieldset>
+          <legend>About you</legend>
+          <div class="row">
+            <div>
+              <label for="first">First name</label>
+              <input id="first" name="firstName" />
+            </div>
+            <div>
+              <label for="email">Email address</label>
+              <input id="email" name="email" type="email" />
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Your circumstances</legend>
+          <fieldset>
+            <legend>Will you graduate before October 2027?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="gradBefore-y"
+                name="gradBefore"
+                value="y"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="gradBefore-n"
+                name="gradBefore"
+                value="n"
+              />
+              No</label
+            >
+          </fieldset>
+          <fieldset>
+            <legend>Would you consider relocating outside the UK?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="relocateAbroad-y"
+                name="relocateAbroad"
+                value="y"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="relocateAbroad-n"
+                name="relocateAbroad"
+                value="n"
+              />
+              No</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="relocateAbroad-d"
+                name="relocateAbroad"
+                value="d"
+              />
+              It depends</label
+            >
+          </fieldset>
+          <fieldset>
+            <legend>Would you consider relocating within the UK?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="relocateUk-y"
+                name="relocateUk"
+                value="y"
+                checked
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="relocateUk-n"
+                name="relocateUk"
+                value="n"
+              />
+              No</label
+            >
+          </fieldset>
+          <fieldset>
+            <legend>What is your preferred working arrangement?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="arrangement-remote"
+                name="arrangement"
+                value="remote"
+              />
+              Remote</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="arrangement-hybrid"
+                name="arrangement"
+                value="hybrid"
+              />
+              Hybrid</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="arrangement-onsite"
+                name="arrangement"
+                value="onsite"
+              />
+              On-site</label
+            >
+          </fieldset>
+          <fieldset disabled>
+            <legend>Will you have completed your degree by June 2027?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="gradDisabled-y"
+                name="gradDisabled"
+                value="y"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="gradDisabled-n"
+                name="gradDisabled"
+                value="n"
+              />
+              No</label
+            >
+          </fieldset>
+          <fieldset hidden>
+            <legend>Do you expect to graduate in 2027?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="gradHidden-y"
+                name="gradHidden"
+                value="y"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="gradHidden-n"
+                name="gradHidden"
+                value="n"
+              />
+              No</label
+            >
+          </fieldset>
+          <div class="question">
+            <input type="radio" id="mystery-a" name="mystery" value="a" />
+            <input type="radio" id="mystery-b" name="mystery" value="b" />
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Equal opportunities monitoring</legend>
+          <p class="hint">Optional. Kept separately from your application.</p>
+          <div id="religion-slot">
+            <fieldset>
+              <legend>What is your religion?</legend>
+              <label class="choice"
+                ><input
+                  type="radio"
+                  id="religion-c"
+                  name="religion"
+                  value="c"
+                />
+                Christian</label
+              >
+              <label class="choice"
+                ><input
+                  type="radio"
+                  id="religion-m"
+                  name="religion"
+                  value="m"
+                />
+                Muslim</label
+              >
+              <label class="choice"
+                ><input
+                  type="radio"
+                  id="religion-none"
+                  name="religion"
+                  value="none"
+                />
+                No religion</label
+              >
+              <label class="choice"
+                ><input
+                  type="radio"
+                  id="religion-pnts"
+                  name="religion"
+                  value="pnts"
+                />
+                Prefer not to say</label
+              >
+            </fieldset>
+          </div>
+          <button type="button" id="replace-religion">
+            Update the religion list
+          </button>
+          <fieldset>
+            <legend>Do you consider yourself to have a disability?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="disability-y"
+                name="disability"
+                value="y"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="disability-n"
+                name="disability"
+                value="n"
+              />
+              No</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="disability-pnts"
+                name="disability"
+                value="pnts"
+              />
+              Prefer not to say</label
+            >
+          </fieldset>
+          <fieldset id="controlled">
+            <legend>What is your sexual orientation?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="orientation-h"
+                name="orientation"
+                value="h"
+              />
+              Heterosexual or straight</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="orientation-g"
+                name="orientation"
+                value="g"
+              />
+              Gay or lesbian</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="orientation-b"
+                name="orientation"
+                value="b"
+              />
+              Bisexual</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="orientation-p"
+                name="orientation"
+                value="p"
+              />
+              Prefer not to say</label
+            >
+          </fieldset>
+          <fieldset>
+            <legend>What is your gender?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="gender-male"
+                name="gender"
+                value="male"
+              />
+              Male</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="gender-female"
+                name="gender"
+                value="female"
+              />
+              Female</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="gender-pnts"
+                name="gender"
+                value="pnts"
+              />
+              Prefer not to say</label
+            >
+          </fieldset>
+        </fieldset>
+
+        <fieldset>
+          <legend>Eligibility</legend>
+          <fieldset>
+            <legend>Do you have the right to work in the UK?</legend>
+            <label class="choice"
+              ><input type="radio" id="rtw-y" name="rtw" value="y" /> Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" id="rtw-n" name="rtw" value="n" /> No</label
+            >
+          </fieldset>
+          <fieldset>
+            <legend>
+              Will you now or in the future require visa sponsorship?
+            </legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="sponsorship-y"
+                name="sponsorship"
+                value="y"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="sponsorship-n"
+                name="sponsorship"
+                value="n"
+              />
+              No</label
+            >
+          </fieldset>
+          <fieldset>
+            <legend>Do you have a long-term health condition?</legend>
+            <label class="choice"
+              ><input type="radio" id="health-y" name="health" value="y" />
+              Yes</label
+            >
+            <label class="choice"
+              ><input type="radio" id="health-n" name="health" value="n" />
+              No</label
+            >
+          </fieldset>
+          <fieldset>
+            <legend>Do you require any reasonable adjustments?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="adjustments-y"
+                name="adjustments"
+                value="y"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="adjustments-n"
+                name="adjustments"
+                value="n"
+              />
+              No</label
+            >
+          </fieldset>
+          <fieldset>
+            <legend>Do you have any unspent criminal convictions?</legend>
+            <label class="choice"
+              ><input
+                type="radio"
+                id="convictions-y"
+                name="convictions"
+                value="y"
+              />
+              Yes</label
+            >
+            <label class="choice"
+              ><input
+                type="radio"
+                id="convictions-n"
+                name="convictions"
+                value="n"
+              />
+              No</label
+            >
+          </fieldset>
+        </fieldset>
+
+        <fieldset>
+          <legend>Declaration</legend>
+          <label class="choice"
+            ><input type="checkbox" id="consent" name="consent" required /> I
+            confirm the information I have given is true, and agree to it being
+            processed.</label
+          >
+        </fieldset>
+
+        <button type="submit">Submit application</button>
+      </form>
+
+      <output id="status">Fixture · submitted: no · input events: 0</output>
+    </main>
+
+    <script>
+      // Lets reviewers confirm what the page observed.
+      const form = document.getElementById('application');
+      const status = document.getElementById('status');
+      let submitted = false;
+      let inputEvents = 0;
+      const render = () => {
+        status.textContent = `Fixture · submitted: ${submitted ? 'YES' : 'no'} · input events: ${inputEvents}`;
+      };
+      form.addEventListener('input', () => {
+        inputEvents += 1;
+        render();
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitted = true;
+        render();
+      });
+
+      // Replaces the religion group with new elements, as some forms do
+      // when a list is refreshed.
+      document
+        .getElementById('replace-religion')
+        .addEventListener('click', () => {
+          document.getElementById('religion-slot').innerHTML = `
+          <fieldset>
+            <legend>What is your religion?</legend>
+            <label class="choice"><input type="radio" id="religion2-none" name="religion" value="none" /> No religion</label>
+            <label class="choice"><input type="radio" id="religion2-other" name="religion" value="other" /> Any other religion or belief</label>
+          </fieldset>`;
+        });
+
+      // Like a controlled component: the page keeps its own state, updated
+      // only by click events, and puts the radios back after any change.
+      const controlled = document.getElementById('controlled');
+      let orientation = '';
+      controlled.addEventListener('click', (event) => {
+        if (event.target.type === 'radio') orientation = event.target.value;
+      });
+      controlled.addEventListener('change', () => {
+        setTimeout(() => {
+          for (const radio of controlled.querySelectorAll(
+            'input[type="radio"]',
+          )) {
+            radio.checked = radio.value === orientation;
+          }
+        }, 0);
+      });
+    </script>
+  </body>
+</html>
