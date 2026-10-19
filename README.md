@@ -130,6 +130,8 @@ Limitations:
    questions as radio groups next to radio questions that must never be
    answered;
    `custom-controls.html` is built from custom dropdowns;
+   `batch-answers.html` has several suggested answers to review and apply
+   together, on a page that re-renders and changes fields as you answer;
    `custom-dropdowns.html` has working custom dropdowns of several kinds,
    some ApplyKit can choose in on request and some it must leave, next to
    questions never answered.)
@@ -233,9 +235,14 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
 - Saved application answers: notice period, relocation (within your
   country and abroad), working arrangement, earliest start date and salary
   expectation, saved under **Application answers** on the profile page.
-  On a form the compact panel shows **Suggested answers** with how many fit,
-  and **Review answers** lists them with **Use this answer**; Autofill
-  never fills them, and each is filled only when you choose it. Units, pay periods and currencies are never converted: a
+  On a form the compact panel shows how many answers are ready to review;
+  **Review answers** lists them together, each ticked, with the question,
+  the answer and why it fits. Untick any, then **Apply N selected
+  answers**: each is checked again and filled one at a time, and if the
+  page changes underneath (a field re-rendered, options changed, your own
+  typing) ApplyKit stops there, keeps what it applied and offers a fresh
+  review. Each can also be used on its own with **Use this answer** in the
+  full list. Autofill never fills them. Units, pay periods and currencies are never converted: a
   question that asks differently says why your answer does not fit.
 - Graduation questions ("Will you graduate before October 2027?",
   "What year do you expect to graduate?") are answered from your saved
@@ -250,6 +257,10 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   panel never shows your answers, and **Clear all diversity
   preferences** deletes them.
 - Fields your profile has no value for link to your profile page.
+- The compact panel counts every field once, by what it needs: filled by
+  Autofill, answers ready to review, answers to confirm one at a time
+  (custom dropdowns, saved records), open questions, fields for you to
+  answer, and fields already answered.
 - Custom dropdowns are counted as fields and, when ApplyKit recognises
   them, show "From your saved profile" with the value to choose, plus
   "Go to field" to jump to any field that needs you (custom dropdowns are
@@ -316,7 +327,11 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
 
 - Autofill covers personal, contact, address, link, education and
   employment fields; saved answers cover five factual questions and are
-  filled one at a time. Written answers such as motivation are never
+  filled only after you review them, one at a time or several together.
+  Applying several stops at the first answer the page changed or did not
+  keep: what was applied stays, nothing is undone, and a dependent form
+  may need more than one review. Custom dropdowns, saved records and
+  monitoring answers are never part of it. Written answers such as motivation are never
   filled automatically (AI drafting can help, only when you ask), and
   reasons for leaving are never drafted.
 - Saved answers: ranges and salary bands are never chosen;

@@ -21,8 +21,9 @@ saved degree's expected graduation date, suggested the same way
 monitoring questions (ADR 0018), Skills & projects, optional AI
 drafting of open questions with the user's own Anthropic key (ADR 0019),
 and native radio groups for those same questions, with the same
-approval (ADR 0020), and choosing in standard custom dropdowns, only when
-the user asks for that one field (ADR 0021).
+approval (ADR 0020), choosing in standard custom dropdowns, only when
+the user asks for that one field (ADR 0021), and applying several
+reviewed suggestions with one confirmation (ADR 0022).
 
 Still to come (build only when asked, one at a time): other custom
 dropdown widgets; review
@@ -179,6 +180,13 @@ old (pnpm enforces a minimum release age; do not add exclusions).
   writes them, and each is written only after `confirmAnswer` re-checks
   it. `fixtures/reusable-answers.html` covers them next to the questions
   they must never answer.
+- Several suggested answers may be applied after one review (ADR 0022),
+  only those `isBatchEligible` (what "Use this answer" could write; never
+  custom dropdowns, monitoring answers, record choices, drafts or anything
+  already answered), each through a fresh scan, `confirmAnswer` and
+  `fillFields`, stopping at the first that fails. One approval covers only
+  the answers shown and ticked; a changed form needs a fresh review.
+  `fixtures/batch-answers.html` covers it on a dependent form.
 - Tests fill from `src/test/autofill-fixtures.ts` (fictional); the extension
   itself has no sample data.
 - Browser tests and design captures run headless only, in a throwaway

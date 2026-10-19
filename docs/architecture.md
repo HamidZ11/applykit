@@ -50,12 +50,16 @@ handled so a duplicate can never appear.
 
 One floating panel with two presentation modes:
 
-- **Compact** (default): the plan before autofill, then the fields left for
-  the user, required first, stepped through with ↵. When saved answers fit
-  questions on the page, "Suggested answers" opens the expanded list with
-  them first (ADR 0016).
+- **Compact** (default): the plan before autofill, every field counted
+  once by the work it leaves (`workOf`: Autofill, ready to review, one at a
+  time, open questions, for the user, already answered), then the fields
+  left for the user, required first, stepped through with ↵. "Answers
+  ready to review" opens the review (ADR 0022).
 - **Expanded**: every field grouped by topic (`categories.ts`), with filters and
-  a per-field explanation of status and detection.
+  a per-field explanation of status and detection. While reviewing
+  answers, the review (`AnswerReview`) takes the list's place: the
+  eligible answers ticked, "Apply N selected answers", then what was
+  applied and where it stopped; Escape closes it.
 
 Both modes are 380 px wide and anchored bottom-right; expanding only grows
 the panel upward, to at most 600 px or the viewport height. The height
@@ -327,7 +331,9 @@ ADR 0017 and ADR 0018.
   ApplyKit may choose in on request: the contract, the list a trigger
   names, its options, what it shows and whether a choice was kept),
   `open-question` (open questions AI drafting may help with, and their
-  limits), `suggestion` (saved values shown
+  limits), `batch` (applying answers the user reviewed together, one at
+  a time through `confirmAnswer` and `fillFields`, stopping at the first
+  that fails, ADR 0022), `suggestion` (saved values shown
   as guidance for fields ApplyKit cannot fill), `fill` (write and verify),
   plus pure rules in `education`, `dates`, `options` and `categories`.
   `src/page/navigate.ts` takes the user to a field ("Go to field"): it
