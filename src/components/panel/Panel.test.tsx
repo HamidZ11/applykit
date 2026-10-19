@@ -43,7 +43,7 @@ import {
 } from '@/storage/diversity-source';
 import { savedDiversity } from '@/test/diversity-fixtures';
 import { savedAnswers } from '@/test/answer-fixtures';
-import { loadFixture } from '@/test/load-fixture';
+import { loadFixture, runFixtureScripts } from '@/test/load-fixture';
 import { Panel } from './Panel';
 
 // Count real engine calls without changing what the engine does.
@@ -1643,20 +1643,31 @@ describe('custom dropdowns', () => {
     ]);
   }
 
-  it('counts every question once, and only native fields as fillable', () => {
+  /** The expanded row whose button starts with `label`. */
+  function row(label: string): HTMLElement {
+    const found = [...host.querySelectorAll<HTMLElement>('li')].find((li) =>
+      li.querySelector(':scope > button')?.textContent.startsWith(label),
+    );
+    if (!found) throw new Error(`No row ${label}`);
+    return found;
+  }
+
+  it('counts every question once, and fills only native fields', () => {
     expect(dialog().textContent).toContain('12 fields on this form');
     expect(dialog().textContent).toContain('Fill 3 fields from your profile');
-    expect(dialog().textContent).toContain('Keep 1 entry you already typed');
-    expect(dialog().textContent).toContain('Leave 8 for you');
+    // The typed email, and the answer the gender dropdown already shows.
+    expect(dialog().textContent).toContain('Keep 2 entries you already typed');
+    expect(dialog().textContent).toContain('Leave 7 for you');
 
     click('Show all fields');
 
-    expect(tabCounts()).toEqual(['All 12', 'Fillable 4', 'Needs you 8']);
+    expect(tabCounts()).toEqual(['All 12', 'Fillable 5', 'Needs you 7']);
+    // Supported dropdowns are suggested, to be chosen only on request.
     expect(groups()).toEqual([
+      ['Suggested answers', 3],
       ['Personal information', 2],
-      ['Contact details', 2],
-      ['Address', 1],
-      ['Education', 5],
+      ['Contact details', 1],
+      ['Education', 4],
       ['Sensitive disclosures', 1],
       ['Other fields', 1],
     ]);
@@ -1664,12 +1675,12 @@ describe('custom dropdowns', () => {
 
   it('shows the saved value for a custom dropdown and goes to it', () => {
     click('Show all fields');
-    click(/^Country of residence/);
 
-    const text = dialog().textContent;
-    expect(text).toContain('Choose it yourself on this page.');
+    const text = row('Country of residence').textContent;
+    expect(text).toContain('Suggested answer available.');
     expect(text).toContain('From your saved profile');
     expect(text).toContain('United Kingdom');
+    expect(text).toContain('Choose this option');
 
     click('Go to field');
 
@@ -1692,10 +1703,12 @@ describe('custom dropdowns', () => {
         ?.click();
     });
 
-    expect(dialog().textContent).toContain(
+    const text = row('Institution').textContent;
+    expect(text).toContain(
       'Several of your saved education records could fit.',
     );
-    expect(dialog().textContent).not.toContain('From your saved profile');
+    expect(text).not.toContain('From your saved profile');
+    expect(text).toContain('Go to field');
     expect(findButton('Choose a saved record')).toBeUndefined();
   });
 
@@ -1703,8 +1716,12 @@ describe('custom dropdowns', () => {
     click('Show all fields');
     click(/^Gender/);
 
-    expect(dialog().textContent).not.toContain('From your saved profile');
-    expect(dialog().textContent).toContain('Go to field');
+    const text = row('Gender').textContent;
+    expect(text).toContain('You already chose an answer.');
+    expect(text).not.toContain('From your saved profile');
+    // Neither the page's answer nor a saved one is repeated.
+    expect(text).not.toContain('Prefer not to say');
+    expect(text).not.toContain('Choose this option');
   });
 
   it('reports a field that has left the page', () => {
@@ -1752,6 +1769,102 @@ describe('custom dropdowns', () => {
 
     expect(dialog().textContent).not.toContain('United Kingdom');
     expect(dialog().textContent).not.toContain('From your saved profile');
+  });
+});
+
+describe('choosing in custom dropdowns', () => {
+  beforeEach(async () => {
+    loadFixture('custom-dropdowns.html');
+    runFixtureScripts(document);
+    document.body.append(host);
+    Element.prototype.scrollIntoView = () => undefined;
+    await open(
+      ready(
+        autofillValuesFrom(fullProfile(), savedAnswers(), {
+          reuse: true,
+          saved: ['gender'],
+        }),
+      ),
+    );
+    click('Show all fields');
+  });
+
+  function row(label: string): HTMLElement {
+    const found = [...host.querySelectorAll<HTMLElement>('li')].find((li) =>
+      li.querySelector(':scope > button')?.textContent.startsWith(label),
+    );
+    if (!found) throw new Error(`No row ${label}`);
+    return found;
+  }
+
+  function chooseIn(label: string) {
+    const choose = [...row(label).querySelectorAll('button')].find(
+      (b) => b.textContent.trim() === 'Choose this option',
+    );
+    if (!choose) throw new Error(`No Choose this option in ${label}`);
+    act(() => {
+      choose.click();
+    });
+  }
+
+  /** Waits, in real time, for the bounded operation to finish. */
+  async function until(check: () => boolean) {
+    for (let i = 0; i < 200 && !check(); i++) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+    }
+    expect(check()).toBe(true);
+  }
+
+  const shows = (id: string) =>
+    document.getElementById(id)?.querySelector('.value')?.textContent.trim();
+
+  it('chooses in a dropdown only when the user asks, and says so', async () => {
+    expect(shows('country')).toBe('Select a country');
+
+    chooseIn('Country of residence');
+    await until(() => announcement().includes('Chose your answer'));
+
+    expect(shows('country')).toBe('United Kingdom');
+    click(/^Country of residence/);
+    expect(row('Country of residence').textContent).toContain(
+      'Filled · your choice',
+    );
+    expect(announcement()).toContain('Chose your answer in the dropdown');
+    expect(document.getElementById('status')?.textContent).toContain(
+      'submitted: 0',
+    );
+  });
+
+  it('never operates a dropdown on Autofill', async () => {
+    await autofill();
+
+    expect(input('email').value).toBe('alex.sample@example.com');
+    expect(shows('country')).toBe('Select a country');
+    expect(document.getElementById('status')?.textContent).toContain(
+      'changes: 0',
+    );
+  });
+
+  it('explains briefly when a dropdown needs choosing by hand', async () => {
+    chooseIn('Expected annual salary');
+    await until(() =>
+      row('Expected annual salary').textContent.includes('Not accepted'),
+    );
+
+    expect(row('Expected annual salary').textContent).toContain(
+      'This dropdown needs manual selection',
+    );
+    expect(shows('salary')).toBe('Select a band');
+  });
+
+  it('suggests a monitoring answer without showing it', () => {
+    const text = row('What is your gender?').textContent;
+
+    expect(text).toContain('Suggested answer available');
+    expect(text).toContain('Choose this option');
+    expect(dialog().textContent).not.toMatch(/non.?binary/i);
   });
 });
 

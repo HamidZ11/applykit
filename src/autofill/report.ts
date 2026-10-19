@@ -20,6 +20,7 @@ import {
 } from './fields';
 import { comparable, isPlaceholderOption, usableOptions } from './options';
 import { checkedRadio, isRadio, radioLabel } from './radio-group';
+import { shownValue } from './custom-choice';
 import { suggestionFor, type Suggestion } from './suggestion';
 import { chooseRecords, planEducation } from './plan-education';
 import { chooseEmployment, planEmployment } from './plan-employment';
@@ -283,12 +284,12 @@ function planField(
     target: support.field,
     evidence: support.evidence,
   };
-  // Only native controls are matched for filling (see scan.ts).
-  if (!isControlField(field)) {
-    return { ...matched, status: 'unsupported', reason: REASON.unsupported };
-  }
   if (!context) {
     return { ...matched, status: 'no-profile', reason: REASON.noProfile };
+  }
+  // A supported custom dropdown (see scan.ts): only ever suggested.
+  if (!isControlField(field)) {
+    return planCustom(matched, support.field, context);
   }
 
   if (
@@ -402,6 +403,57 @@ function planDiversity(
     fillValue: null,
     note: 'From your saved diversity preferences.',
   };
+}
+
+/**
+ * A custom dropdown ApplyKit may choose in (ADR 0021). Its options are
+ * not known until it opens, so it is planned from the saved value alone,
+ * and always as `suggest`: chosen only when the user asks, whatever the
+ * source, with the option worked out then by the native-list rules. A
+ * monitoring answer is never shown, and needs reuse turned on.
+ */
+function planCustom(
+  matched: Omit<FieldReport, 'status'>,
+  target: AutofillField,
+  context: FormContext,
+): FieldReport {
+  const { field } = matched;
+  const existing = currentValue(field);
+  if (existing !== null) {
+    return {
+      ...matched,
+      status: 'keep',
+      value: isDiversityField(target) ? null : existing,
+      reason: 'You already chose an answer. ApplyKit leaves it as it is.',
+    };
+  }
+  if (isDiversityField(target)) {
+    const planned = planDiversity(matched, target, context.values.diversity);
+    return planned.status === 'fill'
+      ? { ...planned, status: 'suggest' }
+      : planned;
+  }
+  const suggestion = suggestionFor(field, target, {
+    values: context.values,
+    education: context.education.get(field),
+    employment: context.employment.get(field),
+    now: context.now,
+  });
+  switch (suggestion.kind) {
+    case 'value':
+      return {
+        ...matched,
+        status: 'suggest',
+        value: suggestion.value,
+        note: suggestion.note,
+      };
+    case 'missing':
+      return { ...matched, status: 'no-value', reason: suggestion.reason };
+    case 'ambiguous':
+      return { ...matched, status: 'ambiguous', reason: suggestion.reason };
+    case 'unsuitable':
+      return { ...matched, status: 'unusable', reason: suggestion.reason };
+  }
 }
 
 /**
@@ -661,8 +713,11 @@ function implicitFirstOption(select: HTMLSelectElement): boolean {
 /** The user's own entry, or null when the control is empty. */
 export function currentValue(field: ScannedField): string | null {
   const { element } = field;
-  // A custom control's visible text is not proof of an answer.
-  if (!isFormControl(element)) return null;
+  // A custom control's visible text is proof of an answer only for the
+  // dropdowns ApplyKit may choose in, whose display it knows how to read.
+  if (!isFormControl(element)) {
+    return field.support.status === 'match' ? shownValue(element) : null;
+  }
   if (element instanceof HTMLSelectElement) {
     const option = element.selectedOptions[0];
     if (!option || isPlaceholderOption(option)) return null;

@@ -3,6 +3,20 @@ import { groupMembers, isRadio, optionToChoose } from './radio-group';
 import { comparable } from './options';
 import { isFormControl } from './scan';
 import { currentValue, type FieldReport } from './report';
+import {
+  committed,
+  isSafeToClick,
+  listOptions,
+  openList,
+  openListProblem,
+  sameOptions,
+  shownLists,
+  shownText,
+  shownValue,
+  triggerProblem,
+  type CustomOption,
+} from './custom-choice';
+import { isShown } from './visibility';
 
 /** Lets the page's own scripts react before results are checked. */
 export const afterPageScripts = () =>
@@ -247,4 +261,337 @@ export function selectRadio(radio: HTMLInputElement): boolean {
   radio.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
   radio.dispatchEvent(new Event('change', { bubbles: true }));
   return true;
+}
+
+/** What happened when ApplyKit chose in a custom dropdown. */
+export type CustomChoiceOutcome =
+  | { status: 'filled'; label: string }
+  /** The dropdown already showed an answer, so nothing was done. */
+  | { status: 'kept'; value: string }
+  | { status: 'rejected'; reason: string }
+  | { status: 'detached' };
+
+/**
+ * The option to choose among those the open list shows, worked out by the
+ * caller with its own rules (possibly asking the background), or why none.
+ */
+export type OptionPicker = (
+  options: readonly CustomOption[],
+) => Promise<{ label: string } | { reason: string }>;
+
+export interface ChooseTiming {
+  /** One step of waiting for the page's scripts. */
+  step?: () => Promise<void>;
+  /** Steps to wait for the list to open, and again for the choice to show. */
+  steps?: number;
+  /** How long the picker may take, in milliseconds. */
+  pickTimeout?: number;
+  isVisible?: (element: Element) => boolean;
+}
+
+const CHOOSE_STEP_MS = 25;
+const CHOOSE_STEPS = 40;
+const PICK_TIMEOUT_MS = 5000;
+
+const CHOICE_FAILURE = {
+  changed:
+    'This dropdown changed before ApplyKit could choose. Nothing was chosen; choose it yourself.',
+  closed:
+    'This dropdown needs manual selection: it did not open its list for ApplyKit. Choose it yourself.',
+  ownership:
+    'ApplyKit could not confirm which list belongs to this dropdown, so it chose nothing. Choose it yourself.',
+  kind: 'This dropdown needs manual selection: ApplyKit does not choose in lists like this one. Choose it yourself.',
+  options:
+    'The available choices changed while ApplyKit was choosing. Nothing was chosen; choose it yourself.',
+  same: 'Several choices here read the same, so ApplyKit chose nothing. Choose it yourself.',
+  unavailable:
+    'That choice is not available here, so ApplyKit chose nothing. Choose it yourself.',
+  interrupted:
+    'You used the page while ApplyKit was choosing, so it stopped. Choose it yourself.',
+  unverified:
+    'ApplyKit could not verify the selection, so it does not count as filled. Check this dropdown and choose it yourself.',
+  guarded:
+    'The page tried to submit the form or leave it after this choice. ApplyKit stopped that; check this dropdown and the form before you continue.',
+  slow: 'Your saved answer could not be checked in time. Nothing was chosen; choose it yourself.',
+  failed:
+    'ApplyKit stopped choosing because something went wrong. Check this dropdown and choose it yourself.',
+  stillOpen:
+    'If its list is still open, press Escape or click elsewhere on the page to close it.',
+} as const;
+
+/**
+ * Chooses one option in a custom dropdown the user asked ApplyKit to
+ * answer (ADR 0021), and reports only what the page verifiably kept.
+ *
+ * One plain `click` Event (not a mouse event, so the browser runs no
+ * activation behaviour) goes to the verified trigger; if the list it
+ * names with `aria-controls` opens, settles and is one ApplyKit may
+ * choose in, `pick` names an option, and one more plain `click` goes to
+ * the single option with that label. Success needs the dropdown to close
+ * and show that label, and, where its list stays in the page, to mark
+ * exactly that option selected. On any failure a list ApplyKit opened is
+ * closed with one more click on the trigger, if it is still open.
+ *
+ * While it runs (a second or two at most), a temporary guard cancels
+ * form submission and navigation the page attempts, and a real pointer
+ * press or key press by the user stops the operation. The guard is
+ * removed when it ends, however it ends. Never focuses, presses keys or
+ * waits on anything unbounded.
+ */
+export async function chooseCustomOption(
+  trigger: HTMLElement,
+  pick: OptionPicker,
+  {
+    step = () =>
+      new Promise((resolve) => {
+        setTimeout(resolve, CHOOSE_STEP_MS);
+      }),
+    steps = CHOOSE_STEPS,
+    pickTimeout = PICK_TIMEOUT_MS,
+    isVisible = isShown,
+  }: ChooseTiming = {},
+): Promise<CustomChoiceOutcome> {
+  if (gone(trigger)) return { status: 'detached' };
+  const existing = shownValue(trigger);
+  if (existing !== null) return { status: 'kept', value: existing };
+  if (triggerProblem(trigger, isVisible) !== null) {
+    return { status: 'rejected', reason: CHOICE_FAILURE.changed };
+  }
+  const view = trigger.ownerDocument.defaultView;
+  if (!view) return { status: 'rejected', reason: CHOICE_FAILURE.changed };
+
+  const guard = guardPage(view);
+  try {
+    // Whatever goes wrong, the list ApplyKit opened is still closed.
+    const outcome = await operate(
+      trigger,
+      pick,
+      guard,
+      { step, steps, pickTimeout },
+      isVisible,
+    ).catch((): CustomChoiceOutcome => ({
+      status: 'rejected',
+      reason: CHOICE_FAILURE.failed,
+    }));
+    if (outcome.status === 'filled' || outcome.status === 'kept') {
+      return outcome;
+    }
+    // Close what ApplyKit opened, never anything else, and nothing once the
+    // user is acting on the page. A trigger the page replaced cannot be
+    // closed through.
+    if (guard.interrupted()) return outcome;
+    // A page that already tried to submit or leave gets no further click.
+    if (gone(trigger) || guard.tripped()) return withHint(outcome);
+    if (trigger.getAttribute('aria-expanded') === 'true') {
+      activate(trigger);
+      const closed = await until(
+        () => trigger.getAttribute('aria-expanded') !== 'true' || null,
+        step,
+        steps,
+      );
+      // The guard stays for one more step, for what closing sets off.
+      await step();
+      if (!closed) return withHint(outcome);
+    }
+    return outcome;
+  } finally {
+    guard.remove();
+  }
+}
+
+async function operate(
+  trigger: HTMLElement,
+  pick: OptionPicker,
+  guard: PageGuard,
+  { step, steps, pickTimeout }: Required<Omit<ChooseTiming, 'isVisible'>>,
+  isVisible: (element: Element) => boolean,
+): Promise<CustomChoiceOutcome> {
+  const fail = (reason: keyof typeof CHOICE_FAILURE) => ({
+    status: 'rejected' as const,
+    reason: CHOICE_FAILURE[reason],
+  });
+  const document = trigger.ownerDocument;
+  const before = new Set(shownLists(document, isVisible));
+
+  activate(trigger);
+  const list = await until(() => openList(trigger, isVisible), step, steps);
+  if (guard.tripped()) return fail('guarded');
+  if (guard.interrupted()) return fail('interrupted');
+  if (gone(trigger)) return fail('changed');
+  if (!list) {
+    if (trigger.getAttribute('aria-expanded') !== 'true') return fail('closed');
+    const [id] = (trigger.getAttribute('aria-controls') ?? '').split(/\s+/);
+    const named = id ? document.getElementById(id) : null;
+    return named && openListProblem(named) !== null
+      ? fail('kind')
+      : fail('ownership');
+  }
+  // Another list opening at the same moment makes ownership uncertain.
+  if (
+    shownLists(document, isVisible).some(
+      (shown) => shown !== list && !before.has(shown),
+    )
+  ) {
+    return fail('ownership');
+  }
+
+  // Options may still be arriving: they must read the same twice.
+  const first = listOptions(list, isVisible);
+  await step();
+  const options = listOptions(list, isVisible);
+  if (!first || !options) return fail('kind');
+  if (!sameOptions(first, options) || options.length === 0) {
+    return fail('options');
+  }
+
+  const picked = await withTimeout(pick(options), pickTimeout);
+  if (!picked) return fail('slow');
+  if ('reason' in picked) return { status: 'rejected', reason: picked.reason };
+
+  // The page, or the user, may have acted while the answer was worked out.
+  if (guard.tripped()) return fail('guarded');
+  if (guard.interrupted()) return fail('interrupted');
+  if (gone(trigger) || openList(trigger, isVisible) !== list) {
+    return fail('changed');
+  }
+  const now = listOptions(list, isVisible);
+  if (!now || !sameOptions(options, now)) return fail('options');
+  // An answer chosen meanwhile, by anyone, is kept.
+  if (shownText(trigger) !== null) return fail('changed');
+  const matching = now.filter(
+    (option) => comparable(option.label) === comparable(picked.label),
+  );
+  const [option] = matching;
+  if (!option || picked.label.trim() === '') return fail('unavailable');
+  if (matching.length > 1) return fail('same');
+  if (option.disabled || !isSafeToClick(option.element)) {
+    return fail('unavailable');
+  }
+
+  activate(option.element);
+  const kept = await until(
+    () =>
+      guard.tripped() || committed(trigger, list, option.label) ? true : null,
+    step,
+    steps,
+  );
+  // Kept means still kept once the page's own scripts have run again.
+  if (kept) await step();
+  if (guard.tripped()) return fail('guarded');
+  if (gone(trigger) || !kept || !committed(trigger, list, option.label)) {
+    return fail('unverified');
+  }
+  return { status: 'filled', label: option.label };
+}
+
+/** A failure, with how to close a list ApplyKit may have left open. */
+function withHint(outcome: CustomChoiceOutcome): CustomChoiceOutcome {
+  return outcome.status === 'rejected'
+    ? { ...outcome, reason: `${outcome.reason} ${CHOICE_FAILURE.stillOpen}` }
+    : outcome;
+}
+
+/**
+ * Whether the element has left the page. Read afresh each time: the page
+ * changes while ApplyKit waits.
+ */
+function gone(element: Element): boolean {
+  return !element.isConnected;
+}
+
+/**
+ * One plain `click` Event, as ADR 0020 sends to a radio: page scripts see
+ * a click, but without a MouseEvent the browser runs no activation
+ * behaviour (following a link, submitting a form).
+ */
+function activate(element: HTMLElement): void {
+  element.dispatchEvent(
+    new Event('click', { bubbles: true, cancelable: true, composed: true }),
+  );
+}
+
+/** Waits up to `steps` steps for `check` to return something. */
+async function until<T>(
+  check: () => T | null,
+  step: () => Promise<void>,
+  steps: number,
+): Promise<T | null> {
+  for (let i = 0; i <= steps; i++) {
+    const found = check();
+    if (found !== null) return found;
+    if (i < steps) await step();
+  }
+  return null;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  milliseconds: number,
+): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => {
+          resolve(null);
+        }, milliseconds);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+interface PageGuard {
+  /** The page tried to submit a form or navigate. */
+  tripped: () => boolean;
+  /** The user pressed a pointer or a key on the page. */
+  interrupted: () => boolean;
+  remove: () => void;
+}
+
+/**
+ * A guard for the moments ApplyKit operates a dropdown: cancels any form
+ * submission and any navigation the page starts (where the browser
+ * supports the Navigation API), and notices the user acting. Only event
+ * listeners, added here and removed by `remove`; no browser API is
+ * replaced. It cannot stop a script calling `form.submit()`, a network
+ * request, or navigation in browsers without the Navigation API.
+ */
+function guardPage(view: Window): PageGuard {
+  let tripped = false;
+  let interrupted = false;
+  // What the user does themselves is never cancelled.
+  const onSubmit = (event: Event) => {
+    if (interrupted) return;
+    tripped = true;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  const onNavigate = (event: Event) => {
+    if (interrupted || (event as NavigateEvent).userInitiated) return;
+    tripped = true;
+    if (event.cancelable) event.preventDefault();
+  };
+  const onUser = (event: Event) => {
+    if (event.isTrusted) interrupted = true;
+  };
+  const navigation = 'navigation' in view ? view.navigation : null;
+  view.addEventListener('submit', onSubmit, true);
+  navigation?.addEventListener('navigate', onNavigate);
+  for (const type of ['pointerdown', 'keydown']) {
+    view.addEventListener(type, onUser, { capture: true, passive: true });
+  }
+  return {
+    tripped: () => tripped,
+    interrupted: () => interrupted,
+    remove: () => {
+      view.removeEventListener('submit', onSubmit, true);
+      navigation?.removeEventListener('navigate', onNavigate);
+      for (const type of ['pointerdown', 'keydown']) {
+        view.removeEventListener(type, onUser, { capture: true });
+      }
+    },
+  };
 }

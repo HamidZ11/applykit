@@ -17,6 +17,7 @@ import {
   type ReportSummary,
 } from '@/autofill/report';
 import {
+  chooseSuggestedOption,
   confirmAnswer,
   confirmChoice,
   confirmDraft,
@@ -109,6 +110,12 @@ export interface PanelModel extends PanelState {
    * re-checking the question and the saved answer (`previewed`).
    */
   applyAnswer: (previewed: FieldReport) => Promise<ChoiceResult>;
+  /**
+   * Chooses the suggested answer in one custom dropdown the user asked
+   * about (ADR 0021), after re-checking it, and reports only what the
+   * page verifiably kept. Never submits.
+   */
+  chooseOption: (previewed: FieldReport) => Promise<ChoiceResult>;
   /** Opens the profile page; a failure is reported in `problem`. */
   openProfile: () => void;
   /** Opens the saved application answers; failures as for the profile. */
@@ -372,6 +379,53 @@ export function usePanel(
     [confirmAndFill],
   );
 
+  const chooseOption = useCallback(
+    async (previewed: FieldReport): Promise<ChoiceResult> => {
+      if (filling.current) {
+        return { ok: false, message: 'ApplyKit is still filling. Try again.' };
+      }
+      filling.current = true;
+      try {
+        const request = ++latestRequest.current;
+        const latest = await loadValues();
+        if (request === latestRequest.current) {
+          dispatch({ type: 'values', values: latest });
+        }
+        if (latest.status !== 'ready') {
+          return {
+            ok: false,
+            message:
+              'Your saved profile could not be read. Nothing was chosen.',
+          };
+        }
+        const result = await chooseSuggestedOption(
+          scanFields(root),
+          latest.values,
+          previewed,
+          chooseDiversity,
+        );
+        if (!result.ok) return result;
+        const filled = result.report.status === 'filled' ? 1 : 0;
+        dispatch({
+          type: 'resolved',
+          outcomes: [result.report],
+          notice: filled
+            ? 'Chose your answer in the dropdown. Other questions may have changed: rescan to check. Nothing was submitted.'
+            : 'ApplyKit could not choose in this dropdown. Nothing was submitted.',
+        });
+        return { ok: true, filled, total: 1 };
+      } catch {
+        return {
+          ok: false,
+          message: 'Something went wrong. Nothing more was chosen.',
+        };
+      } finally {
+        filling.current = false;
+      }
+    },
+    [loadValues, root, chooseDiversity],
+  );
+
   const insertDraft = useCallback(
     async (
       previewed: FieldReport,
@@ -554,6 +608,7 @@ export function usePanel(
     previewChoice: preview,
     applyChoice,
     applyAnswer,
+    chooseOption,
     goToField: goTo,
     diagnostics,
     openProfile: openProfileAction,

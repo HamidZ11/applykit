@@ -389,18 +389,21 @@ describe('custom controls', () => {
   it('lists each question of a custom-control form once', () => {
     loadFixture('custom-controls.html');
 
+    // Dropdowns of the supported patterns (collapsed, `aria-expanded`
+    // given) are matched, to be chosen in only on request (ADR 0021);
+    // the others are guided.
     expect(listed()).toEqual([
       ['first', 'text', 'firstName'],
       ['last', 'text', 'lastName'],
       ['email', 'email', 'email'],
-      ['residence', 'custom', 'unsupported:country'],
-      ['calling-code', 'custom', 'unsupported:phoneCountryCode'],
+      ['residence', 'custom', 'country'],
+      ['calling-code', 'custom', 'phoneCountryCode'],
       ['nativeSelect', 'select', 'institution'],
-      ['qual-button', 'custom', 'unsupported:qualification'],
+      ['qual-button', 'custom', 'qualification'],
       ['grad-year', 'text', 'unsupported:educationEnd'],
       ['edu-1-inst', 'custom', 'unsupported:institution'],
       ['edu-2-inst', 'custom', 'unsupported:institution'],
-      ['gender', 'custom', 'unsupported:diversityGender'],
+      ['gender', 'custom', 'diversityGender'],
       ['start-month', 'custom', 'unsupported'],
     ]);
   });

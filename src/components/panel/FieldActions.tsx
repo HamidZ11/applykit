@@ -69,6 +69,10 @@ export function FieldActions({
   return (
     <>
       {suggestion && <Guidance suggestion={suggestion} source={source} />}
+      {status === 'suggest' && report.value === null && (
+        // A monitoring answer is never shown, only that one is saved.
+        <p className="mt-1 text-ink-2">Suggested answer available.</p>
+      )}
       {status === 'suggest' && report.value !== null && (
         <Guidance
           suggestion={{
@@ -180,7 +184,8 @@ function Guidance({
 
 /**
  * Writes the saved answer into this one field, after the panel re-checks
- * the question and the saved answer. The only way an answer is filled.
+ * the question and the saved answer. The only way an answer is filled,
+ * and, in a custom dropdown, the only way ApplyKit chooses (ADR 0021).
  */
 function UseAnswerButton({
   report,
@@ -191,6 +196,8 @@ function UseAnswerButton({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dropdown = report.field.kind === 'custom';
+  const apply = dropdown ? model.chooseOption : model.applyAnswer;
   return (
     <>
       <PrimaryButton
@@ -202,7 +209,7 @@ function UseAnswerButton({
           const key = String(fieldKey(report.field.element));
           setBusy(true);
           setError(null);
-          void model.applyAnswer(report).then((result) => {
+          void apply(report).then((result) => {
             setBusy(false);
             if (result.ok && result.filled > 0) {
               // The filled row leaves the suggested answers: continue with
@@ -215,6 +222,12 @@ function UseAnswerButton({
                   )
                 )?.focus({ preventScroll: true });
               }, 0);
+            } else if (result.ok && dropdown) {
+              // The row now says why ApplyKit could not choose: keep it
+              // open where it moved to.
+              if (model.selected !== report.field.element) {
+                model.toggleSelect(report.field.element);
+              }
             } else {
               setError(
                 result.ok
@@ -225,7 +238,13 @@ function UseAnswerButton({
           });
         }}
       >
-        {busy ? 'Filling…' : 'Use this answer'}
+        {busy
+          ? dropdown
+            ? 'Choosing…'
+            : 'Filling…'
+          : dropdown
+            ? 'Choose this option'
+            : 'Use this answer'}
       </PrimaryButton>
       {error && (
         <p role="alert" className="basis-full text-danger">
@@ -500,6 +519,10 @@ function outcomeOf(report: FieldReport): string {
       return 'Saved value does not fit';
     case 'manual':
       return 'Answer yourself';
+    case 'suggest':
+      return report.field.kind === 'custom'
+        ? 'Choose on request'
+        : 'Left to you';
     case 'unsupported':
       return report.field.kind === 'checkbox'
         ? 'Tick it yourself'

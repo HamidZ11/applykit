@@ -22,3 +22,15 @@ export function loadHtml(html: string): Document {
   document.body.innerHTML = html;
   return document;
 }
+
+/**
+ * Runs the inline scripts of a fixture loaded with `loadFixture`, for
+ * fixtures whose widgets need them. Each script runs again on every call.
+ */
+export function runFixtureScripts(document: Document): void {
+  for (const script of document.body.querySelectorAll('script')) {
+    const copy = document.createElement('script');
+    copy.textContent = script.textContent;
+    script.replaceWith(copy);
+  }
+}

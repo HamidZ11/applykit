@@ -1,4 +1,5 @@
 import {
+  isDiversityField,
   isEducationField,
   isEmploymentField,
   type AutofillValues,
@@ -8,7 +9,14 @@ import {
 import { currentValue, needsYou, planFill, type FieldReport } from './report';
 import { limitViolations } from './answer-limits';
 import type { OpenQuestion } from './open-question';
-import { isFormControl, type ScannedField } from './scan';
+import { isControlField, isFormControl, type ScannedField } from './scan';
+import {
+  chooseCustomOption,
+  type ChooseTiming,
+  type CustomChoiceOutcome,
+} from './fill';
+import { optionList, type CustomOption } from './custom-choice';
+import { withDiversityChoices } from './diversity';
 
 /**
  * User-approved record choices. When several saved education records or
@@ -204,7 +212,9 @@ export function confirmAnswer(
       message: 'You entered an answer here, so ApplyKit left it as it is.',
     };
   }
+  // Custom dropdowns are chosen in by `chooseSuggestedOption` only.
   if (
+    !isControlField(previewed.field) ||
     current?.status !== 'suggest' ||
     current.target !== previewed.target ||
     current.field.label !== previewed.field.label ||
@@ -386,4 +396,174 @@ export function confirmReplace(
   if (!report)
     return { ok: false, message: 'This field cannot be written to.' };
   return { ok: true, element, report };
+}
+
+/** Asks the background which option says a saved monitoring answer. */
+export type DiversityRequest = Parameters<typeof withDiversityChoices>[1];
+
+/**
+ * Re-checks a custom dropdown the user asked ApplyKit to answer, against
+ * a fresh scan and freshly read values, before anything on the page is
+ * touched: the same element, still a dropdown ApplyKit may choose in,
+ * the same question, still empty, and still suggested with exactly the
+ * saved value the user saw (for a monitoring question, still with reuse
+ * on and an answer saved).
+ */
+export function confirmCustomChoice(
+  fields: readonly ScannedField[],
+  values: AutofillValues,
+  previewed: FieldReport,
+  now: Date = new Date(),
+):
+  | { ok: true; field: ScannedField; report: FieldReport }
+  | { ok: false; message: string } {
+  const { element } = previewed.field;
+  const field = fields.find((f) => f.element === element);
+  if (!element.isConnected || !field) {
+    return {
+      ok: false,
+      message:
+        'This question is no longer on the page. Rescan to see the form as it is now.',
+    };
+  }
+  const current = planFill(fields, values, now).find(
+    (report) => report.field === field,
+  );
+  if (current?.status === 'keep') {
+    return {
+      ok: false,
+      message: 'You chose an answer here, so ApplyKit left it as it is.',
+    };
+  }
+  if (
+    isFormControl(element) ||
+    previewed.status !== 'suggest' ||
+    current?.status !== 'suggest' ||
+    current.target !== previewed.target ||
+    current.field.label !== previewed.field.label ||
+    current.value !== previewed.value
+  ) {
+    return {
+      ok: false,
+      message:
+        'This question or your saved answer has changed. Nothing was chosen; check it again.',
+    };
+  }
+  return { ok: true, field, report: current };
+}
+
+/**
+ * How the option to choose is worked out once the dropdown is open: the
+ * options stand in for a native list, and the field is planned again by
+ * exactly the rules a native list gets, with the same saved values and
+ * section records. A monitoring question asks the background, which
+ * never shares the saved answer, only the option that says it.
+ */
+export function optionPicker(
+  fields: readonly ScannedField[],
+  values: AutofillValues,
+  field: ScannedField,
+  requestDiversity: DiversityRequest,
+  now: Date = new Date(),
+): (
+  options: readonly CustomOption[],
+) => Promise<{ label: string } | { reason: string }> {
+  return async (options) => {
+    const list = optionList(field.element.ownerDocument, options);
+    const standIn: ScannedField = { ...field, element: list, kind: 'select' };
+    let planned = planFill(
+      fields.map((f) => (f === field ? standIn : f)),
+      values,
+      now,
+    ).find((report) => report.field === standIn);
+    if (
+      planned?.status === 'fill' &&
+      planned.fillValue === null &&
+      planned.target !== null &&
+      isDiversityField(planned.target)
+    ) {
+      [planned] = await withDiversityChoices(
+        [planned],
+        requestDiversity,
+        new Set([list]),
+      );
+    }
+    if (
+      (planned?.status === 'fill' || planned?.status === 'suggest') &&
+      planned.fillValue !== null &&
+      planned.fillValue !== ''
+    ) {
+      return { label: planned.fillValue };
+    }
+    return {
+      reason:
+        planned?.status === 'no-option' || !planned?.reason
+          ? 'None of the choices here says the same as your saved answer, so ApplyKit chose nothing. Choose it yourself.'
+          : planned.reason,
+    };
+  };
+}
+
+/**
+ * Chooses the suggested answer in one custom dropdown, after the user
+ * asked for it (ADR 0021): re-checks it (`confirmCustomChoice`), then
+ * `chooseCustomOption` opens it, picks with `optionPicker` and verifies.
+ * The result is the field's report: `filled` only when the page
+ * verifiably kept the choice. A monitoring answer is never shown.
+ */
+export async function chooseSuggestedOption(
+  fields: readonly ScannedField[],
+  values: AutofillValues,
+  previewed: FieldReport,
+  requestDiversity: DiversityRequest,
+  { now = new Date(), timing }: { now?: Date; timing?: ChooseTiming } = {},
+): Promise<{ ok: true; report: FieldReport } | { ok: false; message: string }> {
+  const checked = confirmCustomChoice(fields, values, previewed, now);
+  if (!checked.ok) return checked;
+  const outcome = await chooseCustomOption(
+    checked.field.element,
+    optionPicker(fields, values, checked.field, requestDiversity, now),
+    timing,
+  );
+  return { ok: true, report: customReport(checked.report, outcome) };
+}
+
+/** The field's report after ApplyKit tried to choose in it. */
+function customReport(
+  report: FieldReport,
+  outcome: CustomChoiceOutcome,
+): FieldReport {
+  const hidden = report.target !== null && isDiversityField(report.target);
+  switch (outcome.status) {
+    case 'filled':
+      return {
+        ...report,
+        status: 'filled',
+        value: hidden ? null : outcome.label,
+        fillValue: null,
+        chosen: true,
+        reason: null,
+      };
+    case 'kept':
+      return {
+        ...report,
+        status: 'kept',
+        value: hidden ? null : outcome.value,
+        reason: 'You chose an answer here first, so ApplyKit left it.',
+      };
+    case 'detached':
+      return {
+        ...report,
+        status: 'detached',
+        reason:
+          'The field disappeared from the page. Rescan to see the current form.',
+      };
+    case 'rejected':
+      return {
+        ...report,
+        status: 'rejected',
+        value: null,
+        reason: outcome.reason,
+      };
+  }
 }

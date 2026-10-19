@@ -61,6 +61,11 @@ export function explain(report: FieldReport): string {
     case 'fill':
       return withNote(`ApplyKit will fill this with your ${target}.`, report);
     case 'suggest':
+      if (report.field.kind === 'custom') {
+        return report.value === null
+          ? 'Suggested answer available from your saved diversity preferences. ApplyKit chooses it in this dropdown only if you ask, then checks the page kept it.'
+          : 'Suggested answer available. ApplyKit chooses it in this dropdown only if you ask, then checks the page kept it.';
+      }
       return report.target === 'graduation'
         ? 'Worked out from your expected graduation date. ApplyKit fills it only if you choose to use it.'
         : 'Your saved answer fits this question. ApplyKit fills it only if you choose to use it.';

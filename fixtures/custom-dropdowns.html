@@ -1,0 +1,1082 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Graduate Data Analyst · Example Kestrel Water Careers</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional UK application whose lists are custom dropdowns (ADR 0021),
+      built by the small script at the end the way common libraries build
+      them: a select-only combobox whose list stays in the page (as the
+      ARIA practices example), a popup button that renders its list only
+      while open (as Headless UI), and a combobox whose list is portalled
+      to the end of the page with a hidden native list for the form (as
+      Radix Select). Beside them: an answer already chosen, a disabled
+      matching option, two options reading the same, three Yes/No
+      dropdowns in one section, a second form, two controls naming one
+      list, an id used twice, a multi-select list, a searchable combobox,
+      a list whose options change after opening, a trigger replaced when
+      clicked, a widget that opens only on a mouse press (as MUI and React
+      Select), a list offering only a placeholder, a dependent question,
+      links posing as options, a widget that submits the form when chosen,
+      one that navigates, a submit button posing as a dropdown, hidden and
+      disabled dropdowns, and questions never answered: right to work,
+      visa sponsorship, criminal convictions, adjustments and consent.
+      Every name is invented. Used by unit tests and manual testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #0f6e74;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f6f8fa;
+      }
+      header {
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: var(--brand);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      form {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 28px 28px;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 24px 0 0;
+      }
+      fieldset > legend {
+        font-size: 17px;
+        font-weight: 600;
+        padding: 0;
+        margin-bottom: 4px;
+      }
+      label,
+      .label {
+        display: block;
+        margin-top: 14px;
+        font-weight: 500;
+      }
+      input:not([type='hidden']),
+      .combo {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        text-align: left;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        cursor: default;
+      }
+      .combo[aria-disabled='true'] {
+        background: #f6f8fa;
+        color: var(--muted);
+      }
+      .combo[data-placeholder] .value,
+      .combo .value:empty::before {
+        color: var(--muted);
+      }
+      [role='listbox'] {
+        margin: 4px 0 0;
+        padding: 4px;
+        list-style: none;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        box-shadow: 0 6px 18px rgb(31 35 40 / 12%);
+      }
+      [data-portal] {
+        position: absolute;
+        z-index: 10;
+        min-width: 240px;
+      }
+      [role='option'] {
+        display: block;
+        padding: 6px 8px;
+        border-radius: 4px;
+        color: inherit;
+        text-decoration: none;
+      }
+      [role='option']:hover {
+        background: #eef3f6;
+      }
+      [role='option'][aria-selected='true'] {
+        font-weight: 600;
+      }
+      [role='option'][aria-disabled='true'] {
+        color: var(--muted);
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 4px 0 0;
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .actions {
+        margin-top: 28px;
+        display: flex;
+        gap: 12px;
+      }
+      .actions button {
+        padding: 9px 16px;
+        font: inherit;
+        font-weight: 600;
+        border-radius: 6px;
+        border: 1px solid var(--brand);
+        background: var(--brand);
+        color: #fff;
+      }
+      #status {
+        margin-top: 20px;
+        font:
+          12px ui-monospace,
+          monospace;
+        color: var(--muted);
+      }
+      aside {
+        margin-top: 32px;
+        padding: 16px 20px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar"><span class="logo"></span>Example Kestrel Water</div>
+    </header>
+    <main>
+      <h1>Graduate Data Analyst</h1>
+      <p class="meta">Example Kestrel Water · Leeds · Graduate scheme 2027</p>
+
+      <form id="application" action="/apply" method="post">
+        <fieldset>
+          <legend>Your details</legend>
+          <label for="first">First name</label>
+          <input id="first" name="firstName" autocomplete="given-name" />
+          <label for="last">Last name</label>
+          <input id="last" name="lastName" autocomplete="family-name" />
+          <label for="email">Email address</label>
+          <input id="email" name="email" type="email" autocomplete="email" />
+        </fieldset>
+
+        <fieldset>
+          <legend>Where you live</legend>
+          <span class="label" id="country-label">Country of residence</span>
+          <!-- Select-only combobox: its list stays in the page. -->
+          <div
+            id="country"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="country-label"
+            aria-controls="country-list"
+            aria-expanded="false"
+            aria-haspopup="listbox"
+            data-widget="combobox"
+            data-reveals="region-slot"
+          >
+            <span class="value">Select a country</span
+            ><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="country-list" role="listbox" hidden>
+            <li role="option">France</li>
+            <li role="option">Ireland</li>
+            <li role="option">United Kingdom</li>
+            <li role="option">United States</li>
+          </ul>
+          <input type="hidden" name="country" value="" />
+          <div id="region-slot" hidden>
+            <span class="label" id="region-label">Region</span>
+            <div
+              id="region"
+              class="combo"
+              role="combobox"
+              tabindex="0"
+              aria-labelledby="region-label"
+              aria-controls="region-list"
+              aria-expanded="false"
+              data-widget="combobox"
+            >
+              <span class="value">Select a region</span
+              ><span aria-hidden="true">▾</span>
+            </div>
+            <ul id="region-list" role="listbox" hidden>
+              <li role="option">England</li>
+              <li role="option">Northern Ireland</li>
+              <li role="option">Scotland</li>
+              <li role="option">Wales</li>
+            </ul>
+          </div>
+
+          <span class="label" id="calling-label">Country calling code</span>
+          <!-- Popup button: renders its list only while open. -->
+          <button
+            id="calling-code"
+            class="combo"
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            aria-labelledby="calling-label calling-code"
+            data-widget="popup"
+            data-options="+33 France|+353 Ireland|+44 United Kingdom|+1 United States"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </button>
+          <input type="hidden" name="callingCode" value="" />
+        </fieldset>
+
+        <fieldset>
+          <legend>Working with us</legend>
+          <span class="label" id="arrangement-label"
+            >Preferred working arrangement</span
+          >
+          <!-- Combobox with a portalled list and a hidden native list. -->
+          <button
+            id="arrangement"
+            class="combo"
+            type="button"
+            role="combobox"
+            aria-labelledby="arrangement-label"
+            aria-controls="arrangement-content"
+            aria-expanded="false"
+            aria-autocomplete="none"
+            data-placeholder=""
+            data-widget="portal"
+            data-options="Office-based|Hybrid|Fully remote"
+          >
+            <span class="value">Choose an arrangement</span
+            ><span aria-hidden="true">▾</span>
+          </button>
+          <select
+            name="arrangement"
+            aria-hidden="true"
+            tabindex="-1"
+            class="visually-hidden"
+          >
+            <option value=""></option>
+            <option value="Office-based">Office-based</option>
+            <option value="Hybrid">Hybrid</option>
+            <option value="Fully remote">Fully remote</option>
+          </select>
+
+          <span class="label" id="notice-label">Notice period</span>
+          <!-- The option that says the saved answer is disabled. -->
+          <button
+            id="notice"
+            class="combo"
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            aria-labelledby="notice-label"
+            data-widget="popup"
+            data-options="2 weeks|4 weeks!|8 weeks|12 weeks or more"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </button>
+
+          <span class="label" id="graduation-label"
+            >When do you expect to graduate?</span
+          >
+          <!-- Two options read the same. -->
+          <button
+            id="graduation"
+            class="combo"
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            aria-labelledby="graduation-label"
+            data-widget="popup"
+            data-options="2026|2027|2027|2028 or later"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </button>
+
+          <span class="label" id="start-label">Earliest start date</span>
+          <!-- Its options change just after it opens, as a list refreshing. -->
+          <button
+            id="start"
+            class="combo"
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            aria-labelledby="start-label"
+            data-widget="popup"
+            data-refresh="January 2027|March 2027|May 2027"
+            data-options="September 2026|October 2026|November 2026"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </button>
+
+          <span class="label" id="salary-label">Expected annual salary</span>
+          <!-- Opens only on a mouse press, as MUI Select and React Select. -->
+          <div
+            id="salary"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="salary-label"
+            aria-controls="salary-list"
+            aria-expanded="false"
+            aria-haspopup="listbox"
+            data-widget="mousedown"
+          >
+            <span class="value">Select a band</span
+            ><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="salary-list" role="listbox" hidden>
+            <li role="option">£25,000–£29,999</li>
+            <li role="option">£30,000–£34,999</li>
+            <li role="option">£35,000 or more</li>
+          </ul>
+
+          <span class="label" id="notice-weeks-label"
+            >How much notice do you need to give?</span
+          >
+          <!-- Clicking renders a new trigger in place of this one. -->
+          <div id="notice-weeks-slot">
+            <div
+              id="notice-weeks"
+              class="combo"
+              role="combobox"
+              tabindex="0"
+              aria-labelledby="notice-weeks-label"
+              aria-controls="notice-weeks-list"
+              aria-expanded="false"
+              data-widget="replace"
+            >
+              <span class="value">Select…</span
+              ><span aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <ul id="notice-weeks-list" role="listbox" hidden>
+            <li role="option">Less than 1 month</li>
+            <li role="option">1–3 months</li>
+          </ul>
+
+          <span class="label" id="degree-label">University</span>
+          <!-- Its list offers nothing but a placeholder. -->
+          <button
+            id="degree"
+            class="combo"
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            aria-labelledby="degree-label"
+            data-widget="popup"
+            data-options="Please select"
+          >
+            <span class="value">Please select</span
+            ><span aria-hidden="true">▾</span>
+          </button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Relocation and travel</legend>
+          <span class="label" id="relocate-uk-label"
+            >Are you willing to relocate within the UK?</span
+          >
+          <!-- Answered before ApplyKit was opened. -->
+          <div
+            id="relocate-uk"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="relocate-uk-label"
+            aria-controls="relocate-uk-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">No</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="relocate-uk-list" role="listbox" hidden>
+            <li role="option" aria-selected="false">Yes</li>
+            <li role="option" aria-selected="true">No</li>
+          </ul>
+
+          <span class="label" id="relocate-abroad-label"
+            >Would you consider relocating outside the UK?</span
+          >
+          <div
+            id="relocate-abroad"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="relocate-abroad-label"
+            aria-controls="relocate-abroad-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="relocate-abroad-list" role="listbox" hidden>
+            <li role="option">Yes</li>
+            <li role="option">No</li>
+          </ul>
+
+          <span class="label" id="licence-label"
+            >Do you hold a full UK driving licence?</span
+          >
+          <div
+            id="licence"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="licence-label"
+            aria-controls="licence-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="licence-list" role="listbox" hidden>
+            <li role="option">Yes</li>
+            <li role="option">No</li>
+          </ul>
+        </fieldset>
+
+        <fieldset>
+          <legend>Lists ApplyKit must not choose in</legend>
+          <span class="label" id="first-year-label"
+            >Working arrangement in your first year</span
+          >
+          <div
+            id="first-year"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="first-year-label"
+            aria-controls="shared-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <span class="label" id="later-years-label"
+            >Working arrangement after your first year</span
+          >
+          <div
+            id="later-years"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="later-years-label"
+            aria-controls="shared-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="shared-list" role="listbox" hidden>
+            <li role="option">Office-based</li>
+            <li role="option">Hybrid</li>
+          </ul>
+
+          <span class="label" id="site-label"
+            >Working arrangement at a second site</span
+          >
+          <div
+            id="site"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="site-label"
+            aria-controls="site-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="site-list" role="listbox" hidden>
+            <li role="option">Office-based</li>
+          </ul>
+          <ul id="site-list" role="listbox" hidden>
+            <li role="option">Hybrid</li>
+          </ul>
+
+          <span class="label" id="considered-label"
+            >Working arrangements you would consider</span
+          >
+          <div
+            id="considered"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="considered-label"
+            aria-controls="considered-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select any…</span
+            ><span aria-hidden="true">▾</span>
+          </div>
+          <ul
+            id="considered-list"
+            role="listbox"
+            aria-multiselectable="true"
+            hidden
+          >
+            <li role="option">Office-based</li>
+            <li role="option">Hybrid</li>
+            <li role="option">Fully remote</li>
+          </ul>
+
+          <label for="arrangement-search"
+            >Working arrangement (type to search)</label
+          >
+          <input
+            id="arrangement-search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls="arrangement-search-list"
+            aria-expanded="false"
+          />
+          <ul id="arrangement-search-list" role="listbox" hidden>
+            <li role="option">Office-based</li>
+            <li role="option">Hybrid</li>
+          </ul>
+
+          <span class="label" id="office-label"
+            >Working arrangement at your home office</span
+          >
+          <!-- Its options are links to other pages. -->
+          <button
+            id="office"
+            class="combo"
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            aria-labelledby="office-label"
+            data-widget="popup"
+            data-links="true"
+            data-options="Office-based|Hybrid|Fully remote"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </button>
+
+          <span class="label" id="pattern-label"
+            >Working arrangement on project placements</span
+          >
+          <!-- Submits the form as soon as an option is chosen. -->
+          <div
+            id="pattern"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="pattern-label"
+            aria-controls="pattern-list"
+            aria-expanded="false"
+            data-widget="combobox"
+            data-after="submit"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="pattern-list" role="listbox" hidden>
+            <li role="option">Office-based</li>
+            <li role="option">Hybrid</li>
+          </ul>
+
+          <span class="label" id="team-label"
+            >Working arrangement in your second rotation</span
+          >
+          <!-- Leaves the page as soon as an option is chosen. -->
+          <div
+            id="team"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="team-label"
+            aria-controls="team-list"
+            aria-expanded="false"
+            data-widget="combobox"
+            data-after="navigate"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="team-list" role="listbox" hidden>
+            <li role="option">Office-based</li>
+            <li role="option">Hybrid</li>
+          </ul>
+
+          <span class="label" id="campus-label"
+            >Working arrangement on campus days</span
+          >
+          <!-- A submit button posing as a dropdown. -->
+          <button
+            id="campus"
+            class="combo"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            aria-labelledby="campus-label"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </button>
+
+          <div
+            id="hidden-arrangement"
+            class="combo"
+            role="combobox"
+            aria-label="Preferred working arrangement (old form)"
+            aria-expanded="false"
+            hidden
+          ></div>
+          <span class="label" id="closed-label"
+            >Working arrangement (applications closed)</span
+          >
+          <div
+            id="closed"
+            class="combo"
+            role="combobox"
+            aria-labelledby="closed-label"
+            aria-expanded="false"
+            aria-disabled="true"
+          >
+            <span class="value">Select…</span>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Equal opportunities monitoring</legend>
+          <p class="hint">
+            Optional. Seen only by our recruitment monitoring team.
+          </p>
+          <span class="label" id="gender-label">What is your gender?</span>
+          <div
+            id="gender"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="gender-label"
+            aria-controls="gender-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="gender-list" role="listbox" hidden>
+            <li role="option">Man</li>
+            <li role="option">Woman</li>
+            <li role="option">Non-binary</li>
+            <li role="option">Prefer not to say</li>
+          </ul>
+        </fieldset>
+
+        <fieldset>
+          <legend>Eligibility and declarations</legend>
+          <span class="label" id="rtw-label"
+            >Do you have the right to work in the UK?</span
+          >
+          <div
+            id="rtw"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="rtw-label"
+            aria-controls="rtw-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="rtw-list" role="listbox" hidden>
+            <li role="option">Yes</li>
+            <li role="option">No</li>
+          </ul>
+
+          <span class="label" id="sponsor-label"
+            >Will you now or in the future require visa sponsorship?</span
+          >
+          <div
+            id="sponsor"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="sponsor-label"
+            aria-controls="sponsor-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="sponsor-list" role="listbox" hidden>
+            <li role="option">Yes</li>
+            <li role="option">No</li>
+          </ul>
+
+          <span class="label" id="convictions-label"
+            >Do you have any unspent criminal convictions?</span
+          >
+          <div
+            id="convictions"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="convictions-label"
+            aria-controls="convictions-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="convictions-list" role="listbox" hidden>
+            <li role="option">Yes</li>
+            <li role="option">No</li>
+          </ul>
+
+          <span class="label" id="adjustments-label"
+            >Do you need any reasonable adjustments at interview?</span
+          >
+          <div
+            id="adjustments"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="adjustments-label"
+            aria-controls="adjustments-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="adjustments-list" role="listbox" hidden>
+            <li role="option">Yes</li>
+            <li role="option">No</li>
+          </ul>
+
+          <span class="label" id="consent-label"
+            >I consent to Example Kestrel Water processing my application
+            data</span
+          >
+          <div
+            id="consent"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="consent-label"
+            aria-controls="consent-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="consent-list" role="listbox" hidden>
+            <li role="option">I agree</li>
+            <li role="option">I do not agree</li>
+          </ul>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit">Submit application</button>
+        </div>
+        <p id="status" aria-live="polite"></p>
+      </form>
+
+      <aside>
+        <form id="alerts">
+          <strong>Job alerts</strong>
+          <label for="alerts-email">Email address</label>
+          <input id="alerts-email" type="email" name="alertsEmail" />
+          <span class="label" id="alerts-country-label">Country</span>
+          <div
+            id="alerts-country"
+            class="combo"
+            role="combobox"
+            tabindex="0"
+            aria-labelledby="alerts-country-label"
+            aria-controls="alerts-country-list"
+            aria-expanded="false"
+            data-widget="combobox"
+          >
+            <span class="value">Select…</span><span aria-hidden="true">▾</span>
+          </div>
+          <ul id="alerts-country-list" role="listbox" hidden>
+            <li role="option">Ireland</li>
+            <li role="option">United Kingdom</li>
+          </ul>
+        </form>
+      </aside>
+    </main>
+
+    <script>
+      // Small widgets in the shapes common libraries produce. They open on
+      // a click (except the mouse-press one), choose on a click, close on
+      // a mouse press elsewhere, and report what the page observed.
+      (() => {
+        const form = document.getElementById('application');
+        const status = document.getElementById('status');
+        const seen = { submitted: 0, changes: 0, links: 0, navigated: 0 };
+        const render = () => {
+          status.textContent = `Fixture · submitted: ${seen.submitted} · changes: ${seen.changes} · link clicks: ${seen.links} · navigations: ${seen.navigated}`;
+        };
+        render();
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          seen.submitted += 1;
+          render();
+        });
+        document.addEventListener('click', (event) => {
+          if (event.target.closest('a[href]')) {
+            event.preventDefault();
+            seen.links += 1;
+            render();
+          }
+        });
+
+        const open = new Set();
+        document.addEventListener('mousedown', (event) => {
+          for (const widget of open) {
+            if (!widget.contains(event.target)) widget.close();
+          }
+        });
+
+        function chosen(trigger, text) {
+          trigger.querySelector('.value').textContent = text;
+          trigger.removeAttribute('data-placeholder');
+          seen.changes += 1;
+          render();
+          const after = trigger.dataset.after;
+          if (after === 'submit') form.requestSubmit();
+          if (after === 'navigate') {
+            seen.navigated += 1;
+            render();
+            location.hash = 'application-sent';
+          }
+          const reveals = trigger.dataset.reveals;
+          if (reveals && text === 'United Kingdom') {
+            document.getElementById(reveals).hidden = false;
+          }
+        }
+
+        /** Select-only combobox whose list stays in the page. */
+        function combobox(trigger) {
+          const list = document.getElementById(
+            trigger.getAttribute('aria-controls'),
+          );
+          const widget = {
+            contains: (node) => trigger.contains(node) || list.contains(node),
+            close() {
+              list.hidden = true;
+              trigger.setAttribute('aria-expanded', 'false');
+              open.delete(widget);
+            },
+          };
+          trigger.addEventListener('click', () => {
+            if (trigger.getAttribute('aria-expanded') === 'true') {
+              widget.close();
+            } else {
+              list.hidden = false;
+              trigger.setAttribute('aria-expanded', 'true');
+              open.add(widget);
+            }
+          });
+          list.addEventListener('click', (event) => {
+            const option = event.target.closest('[role="option"]');
+            if (!option || option.getAttribute('aria-disabled') === 'true') {
+              return;
+            }
+            if (list.getAttribute('aria-multiselectable') === 'true') {
+              option.setAttribute(
+                'aria-selected',
+                String(option.getAttribute('aria-selected') !== 'true'),
+              );
+              return;
+            }
+            for (const other of list.querySelectorAll('[role="option"]')) {
+              other.setAttribute('aria-selected', String(other === option));
+            }
+            widget.close();
+            chosen(trigger, option.textContent.trim());
+          });
+        }
+
+        /** A list built from `data-options`; "!" marks a disabled option. */
+        function buildList(trigger, id, options) {
+          const list = document.createElement(
+            trigger.dataset.links ? 'div' : 'ul',
+          );
+          list.id = id;
+          list.setAttribute('role', 'listbox');
+          for (const text of options.split('|')) {
+            const option = document.createElement(
+              trigger.dataset.links ? 'a' : 'li',
+            );
+            if (trigger.dataset.links) {
+              option.href = `https://careers.example.com/${encodeURIComponent(text)}`;
+            }
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', 'false');
+            option.textContent = text.replace(/!$/, '');
+            if (text.endsWith('!'))
+              option.setAttribute('aria-disabled', 'true');
+            list.append(option);
+          }
+          return list;
+        }
+
+        /**
+         * A popup button whose list exists only while open, named by
+         * `aria-controls` only then.
+         */
+        function popup(trigger, portalled = false) {
+          let list = null;
+          let holder = null;
+          const widget = {
+            contains: (node) =>
+              trigger.contains(node) || (list !== null && list.contains(node)),
+            close() {
+              holder?.remove();
+              list = null;
+              holder = null;
+              if (!portalled) trigger.removeAttribute('aria-controls');
+              trigger.setAttribute('aria-expanded', 'false');
+              open.delete(widget);
+            },
+          };
+          trigger.addEventListener('click', () => {
+            if (list) {
+              widget.close();
+              return;
+            }
+            const id = portalled
+              ? trigger.getAttribute('aria-controls')
+              : `${trigger.id}-list`;
+            list = buildList(trigger, id, trigger.dataset.options);
+            if (portalled) {
+              holder = document.createElement('div');
+              holder.dataset.portal = '';
+              holder.append(list);
+              document.body.append(holder);
+            } else {
+              holder = list;
+              trigger.after(list);
+              trigger.setAttribute('aria-controls', id);
+            }
+            trigger.setAttribute('aria-expanded', 'true');
+            open.add(widget);
+            if (trigger.dataset.refresh) {
+              const current = list;
+              setTimeout(() => {
+                if (list !== current) return;
+                const fresh = buildList(trigger, id, trigger.dataset.refresh);
+                current.replaceChildren(...fresh.children);
+              }, 0);
+            }
+            list.addEventListener('click', (event) => {
+              const option = event.target.closest('[role="option"]');
+              if (!option || option.getAttribute('aria-disabled') === 'true') {
+                return;
+              }
+              if (portalled) {
+                const native = trigger.nextElementSibling;
+                native.value = option.textContent;
+                native.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+              widget.close();
+              chosen(trigger, option.textContent.trim());
+            });
+          });
+        }
+
+        /** Opens only on a mouse press with the main button. */
+        function mousedownOnly(trigger) {
+          const list = document.getElementById(
+            trigger.getAttribute('aria-controls'),
+          );
+          trigger.addEventListener('mousedown', (event) => {
+            if (event.button !== 0) return;
+            list.hidden = false;
+            trigger.setAttribute('aria-expanded', 'true');
+          });
+          list.addEventListener('click', (event) => {
+            const option = event.target.closest('[role="option"]');
+            if (!option) return;
+            list.hidden = true;
+            trigger.setAttribute('aria-expanded', 'false');
+            chosen(trigger, option.textContent.trim());
+          });
+        }
+
+        /** Re-renders a new trigger element, then opens, on each click. */
+        function replacing(trigger) {
+          trigger.addEventListener('click', () => {
+            const fresh = trigger.cloneNode(true);
+            fresh.setAttribute('aria-expanded', 'true');
+            trigger.replaceWith(fresh);
+            document.getElementById(
+              trigger.getAttribute('aria-controls'),
+            ).hidden = false;
+          });
+        }
+
+        for (const trigger of document.querySelectorAll('[data-widget]')) {
+          const kind = trigger.dataset.widget;
+          if (kind === 'combobox') combobox(trigger);
+          if (kind === 'popup') popup(trigger);
+          if (kind === 'portal') popup(trigger, true);
+          if (kind === 'mousedown') mousedownOnly(trigger);
+          if (kind === 'replace') replacing(trigger);
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -16,12 +16,15 @@ export function comparable(text: string): string {
 /** Option text such as "Select…", "Choose a country" or "--". */
 const PLACEHOLDER_OPTION = /^\W*(?:select|choose|please|pick)\b|^[\W_]*$/i;
 
+/** Text that stands for "nothing chosen yet": "Select…", "--", "". */
+export function isPlaceholderText(text: string): boolean {
+  return PLACEHOLDER_OPTION.test(text.trim());
+}
+
 /** An option that stands for "nothing chosen yet". */
 export function isPlaceholderOption(option: HTMLOptionElement): boolean {
   return (
-    option.value === '' ||
-    option.disabled ||
-    PLACEHOLDER_OPTION.test(option.text.trim())
+    option.value === '' || option.disabled || isPlaceholderText(option.text)
   );
 }
 

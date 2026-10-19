@@ -22,6 +22,7 @@ import {
 import { readLimits } from './answer-limits';
 import { isShown } from './visibility';
 import { radioGroupOf } from './radio-group';
+import { triggerProblem } from './custom-choice';
 import {
   MAX_QUESTION_LENGTH,
   openQuestionKind,
@@ -59,13 +60,17 @@ export type FieldKind =
   | 'file'
   | 'checkbox'
   | 'radio'
-  /** A custom control such as an ARIA combobox: reported, never written. */
+  /**
+   * A custom control such as an ARIA combobox: reported, and chosen in
+   * only on the user's request when it is a supported dropdown (ADR 0021).
+   */
   | 'custom'
   | 'other';
 
 /**
  * What the engine can do with a control. `match` fields can be filled from
- * the profile; everything else is left to the user, with the reason.
+ * the profile (a supported custom dropdown only on the user's request,
+ * ADR 0021); everything else is left to the user, with the reason.
  */
 export type FieldSupport =
   | { status: 'match'; field: AutofillField; evidence: Evidence[] }
@@ -350,7 +355,7 @@ function scanWithin(
   )) {
     if (!isFormControl(element)) {
       if (isCustomField(element, isVisible, owned)) {
-        fields.push(describe(element, root));
+        fields.push(describe(element, root, isVisible));
       }
       continue;
     }
@@ -503,6 +508,22 @@ function supportOf(
   const radio = isInput(element) && element.type === 'radio';
   const certainGroup =
     radio && answerable && radioGroupOf(element, isVisible) !== null;
+  // A custom dropdown of a supported pattern, for a question a native
+  // list would be answered for, is chosen in only when the user asks
+  // (ADR 0021); every other custom control is guided.
+  if (
+    !isFormControl(element) &&
+    matched !== null &&
+    SELECT_FIELDS.has(matched) &&
+    detection.kind === 'match' &&
+    triggerProblem(element, isVisible) === null
+  ) {
+    return {
+      status: 'match',
+      field: detection.field,
+      evidence: detection.evidence,
+    };
+  }
   if (
     !isFormControl(element) ||
     isCustomDropdown(element) ||

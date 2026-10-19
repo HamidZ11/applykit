@@ -30,22 +30,25 @@ function report(id: string, v = values()): FieldReport {
 }
 
 describe('guidance for custom dropdowns', () => {
+  // Dropdowns ApplyKit may choose in (ADR 0021) offer the same saved
+  // value as a suggestion to choose; the others as guidance.
   it('suggests the saved country and calling code', () => {
     expect(report('residence')).toMatchObject({
-      status: 'unsupported',
+      status: 'suggest',
+      value: 'United Kingdom',
       fillValue: null,
-      suggestion: { kind: 'value', value: 'United Kingdom', note: null },
-    });
-    expect(report('calling-code').suggestion).toEqual({
-      kind: 'value',
-      value: '+44',
       note: null,
+      suggestion: null,
+    });
+    expect(report('calling-code')).toMatchObject({
+      status: 'suggest',
+      value: '+44',
     });
   });
 
   it('suggests from the one record a university section asks about', () => {
-    expect(report('qual-button').suggestion).toMatchObject({
-      kind: 'value',
+    expect(report('qual-button')).toMatchObject({
+      status: 'suggest',
       value: 'BSc Computer Science',
       note: 'From your saved BSc Computer Science at University of Example.',
     });
@@ -84,22 +87,27 @@ describe('guidance for custom dropdowns', () => {
       v.phone = phoneParts('07700 900123', '');
     });
 
-    expect(report('residence', none).suggestion).toEqual({
-      kind: 'missing',
+    expect(report('residence', none)).toMatchObject({
+      status: 'no-value',
       reason: 'Your profile has no country.',
     });
-    expect(report('calling-code', none).suggestion).toMatchObject({
-      kind: 'missing',
+    expect(report('calling-code', none)).toMatchObject({
+      status: 'no-value',
       reason: expect.stringContaining('could not be split') as string,
+    });
+    expect(report('edu-1-inst', none).suggestion).toMatchObject({
+      kind: 'ambiguous',
     });
   });
 
   it('never offers guidance for sensitive or unrecognised questions', () => {
-    // A monitoring question in a custom dropdown: guided without its value.
+    // A monitoring question in a custom dropdown, already answered: kept,
+    // and the answer it shows is not repeated.
     expect(report('gender')).toMatchObject({
-      status: 'unsupported',
+      status: 'keep',
       suggestion: null,
       target: 'diversityGender',
+      value: null,
       fillValue: null,
     });
     expect(report('start-month').suggestion).toBeNull();
