@@ -242,9 +242,10 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
 - Diversity & Inclusion (optional): save answers to gender, ethnic group,
   disability, religion or belief and sexual orientation on the profile
   page. **Reuse my saved diversity answers** is off by default; with it
-  on, Autofill fills monitoring lists whose question it recognises
-  exactly and that offer the same answer. The panel never shows your
-  answers, and **Clear all diversity preferences** deletes them.
+  on, Autofill fills monitoring lists and native radio groups whose
+  question it recognises exactly and that offer the same answer. The
+  panel never shows your answers, and **Clear all diversity
+  preferences** deletes them.
 - Fields your profile has no value for link to your profile page.
 - Custom dropdowns are counted as fields and, when ApplyKit recognises
   them, show "From your saved profile" with the value to choose, plus

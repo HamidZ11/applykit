@@ -18,8 +18,10 @@ saved application answers, suggested and filled only when the user
 confirms each one (ADR 0016), and graduation answers worked out from the
 saved degree's expected graduation date, suggested the same way
 (ADR 0017), opt-in diversity preferences for the five exact
-monitoring questions (ADR 0018), Skills & projects, and optional AI
-drafting of open questions with the user's own Anthropic key (ADR 0019).
+monitoring questions (ADR 0018), Skills & projects, optional AI
+drafting of open questions with the user's own Anthropic key (ADR 0019),
+and native radio groups for those same questions, with the same
+approval (ADR 0020).
 
 Still to come (build only when asked, one at a time): custom dropdown
 widgets; review
