@@ -58,7 +58,7 @@ guard of ADR 0021 cancels submission and navigation and stops the batch.
 
 One operation per tab: the panel's existing lock makes Autofill, "Use
 this answer", "Choose this option", inserting a draft and applying a
-batch exclusive; a second request is refused, and a rescan waits. Each
+batch exclusive; a second request is refused, and a rescan is ignored until the batch ends. Each
 tab's panel works only on its own page.
 
 ### Summary
