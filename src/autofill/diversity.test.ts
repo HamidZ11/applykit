@@ -304,7 +304,7 @@ describe('monitoring questions on a form', () => {
         status: 'manual',
         fillValue: null,
         reason:
-          'Reuse of your saved diversity answers is off, so ApplyKit leaves this to you.',
+          '“Use these answers when autofilling” is off in your diversity preferences, so ApplyKit leaves this to you.',
       });
     }
   });

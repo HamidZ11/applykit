@@ -22,7 +22,7 @@ import {
 import { readLimits } from './answer-limits';
 import { isShown } from './visibility';
 import { radioGroupOf } from './radio-group';
-import { triggerProblem } from './custom-choice';
+import { TRIGGER_PROBLEM_TEXT, triggerProblem } from './custom-choice';
 import {
   MAX_QUESTION_LENGTH,
   openQuestionKind,
@@ -511,13 +511,14 @@ function supportOf(
   // A custom dropdown of a supported pattern, for a question a native
   // list would be answered for, is chosen in only when the user asks
   // (ADR 0021); every other custom control is guided.
-  if (
+  const dropdownProblem =
     !isFormControl(element) &&
     matched !== null &&
     SELECT_FIELDS.has(matched) &&
-    detection.kind === 'match' &&
-    triggerProblem(element, isVisible) === null
-  ) {
+    detection.kind === 'match'
+      ? triggerProblem(element, isVisible)
+      : undefined;
+  if (dropdownProblem === null && detection.kind === 'match') {
     return {
       status: 'match',
       field: detection.field,
@@ -537,7 +538,19 @@ function supportOf(
       status: 'unsupported',
       custom: {
         field: detection.kind === 'match' ? detection.field : null,
-        evidence: detection.kind === 'match' ? detection.evidence : [],
+        evidence: [
+          ...(detection.kind === 'match' ? detection.evidence : []),
+          // Why a dropdown for a supported question is only guided, for
+          // Developer diagnostics.
+          ...(dropdownProblem
+            ? [
+                {
+                  signal: 'dropdown' as const,
+                  text: TRIGGER_PROBLEM_TEXT[dropdownProblem],
+                },
+              ]
+            : []),
+        ],
       },
     };
   }
@@ -687,10 +700,17 @@ function legendText(fieldset: HTMLFieldSetElement): string {
   return fieldset.querySelector(':scope > legend')?.textContent ?? '';
 }
 
-/** Collapses whitespace and drops required-field markers such as "*". */
+/**
+ * Collapses whitespace and drops required-field markers such as "*", and
+ * a control's prompt that follows its question ("… Select One Required").
+ */
 function cleanLabel(text: string): string {
   return text
     .replace(/\s+/g, ' ')
+    .replace(
+      /\s+(?:please select|please choose|select one|choose one|select an option)(?:\s+required)?\s*$/i,
+      '',
+    )
     .replace(/\s*(\*|\(required\))\s*$/i, '')
     .trim();
 }

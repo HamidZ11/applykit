@@ -320,7 +320,9 @@ describe('choosing on request', () => {
 
     expect(byId(plan(values(off)), 'gender')).toMatchObject({
       status: 'manual',
-      reason: expect.stringContaining('Reuse') as string,
+      reason: expect.stringContaining(
+        'Use these answers when autofilling',
+      ) as string,
     });
     const result = await choose('gender', {
       v: values(off),

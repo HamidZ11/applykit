@@ -125,6 +125,8 @@ export interface ReportSummary {
 const REASON = {
   sensitive:
     'A personal or sensitive question. ApplyKit never answers these for you.',
+  workAuthorisation:
+    'Work authorisation: answer this yourself. ApplyKit never answers or suggests right-to-work, visa or sponsorship questions.',
   consent: 'A declaration or consent. Only you can agree to this.',
   verification: 'A verification check. Complete it yourself.',
   answer:
@@ -141,6 +143,10 @@ const REASON = {
   phoneParts:
     'Your saved phone number could not be split into a country code and a number. Save it with its country code, for example +44, or check your country.',
 } as const;
+
+/** Right to work, visas and sponsorship, named in the question itself. */
+const WORK_AUTHORISATION =
+  /\b(?:right to work|authori[sz](?:ed|ation) to work|work authori[sz]ation|eligib(?:le|ility) to work|work permit|visas?|sponsor(?:ship|ed)?|immigration)\b/i;
 
 /** What planning needs to know about the whole form. */
 interface FormContext {
@@ -203,7 +209,14 @@ function planField(
   const { support } = field;
   switch (support.status) {
     case 'manual':
-      return { ...base, status: 'manual', reason: REASON[support.reason] };
+      return {
+        ...base,
+        status: 'manual',
+        reason:
+          support.reason === 'sensitive' && WORK_AUTHORISATION.test(field.label)
+            ? REASON.workAuthorisation
+            : REASON[support.reason],
+      };
     case 'other-person':
       return {
         ...base,
@@ -387,7 +400,7 @@ function planDiversity(
       ...matched,
       status: 'manual',
       reason:
-        'Reuse of your saved diversity answers is off, so ApplyKit leaves this to you.',
+        '“Use these answers when autofilling” is off in your diversity preferences, so ApplyKit leaves this to you.',
     };
   }
   if (!diversity.saved.includes(DIVERSITY_CATEGORY[target])) {

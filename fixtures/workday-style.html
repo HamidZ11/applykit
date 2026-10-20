@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Graduate Scheme 2027 · Example Fernhill Consulting</title>
+    <link rel="icon" href="data:," />
+    <!--
+      Fictional application modelled on the structure observed on a real
+      Workday form, not on its markup, which was not available: questions
+      written in their own element beside a "Select One" button whose only
+      name is "Select One Required", year inputs named "Year" beside a
+      separate "From" or "To (Actual or Expected)", buttons opening a list
+      portalled to the end of the page, one dropdown without aria-expanded,
+      a question too long to be read as one, and a fixed bar with Back and
+      Save and Continue at the bottom of the window. Every name is
+      invented. Used by unit tests and manual testing.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --brand: #0b5cad;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding-bottom: 80px;
+        font:
+          14px/1.5 -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: #f4f6f8;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 28px 24px;
+      }
+      h1 {
+        font-size: 24px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 28px 0 8px;
+      }
+      h3 {
+        font-size: 15px;
+        margin: 16px 0 4px;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 0 0 20px;
+      }
+      .panel {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 4px 20px 20px;
+      }
+      .formField {
+        margin-top: 16px;
+      }
+      .formField > label,
+      .question {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .req {
+        color: #c4314b;
+      }
+      input,
+      .dropdown {
+        display: block;
+        width: 100%;
+        max-width: 420px;
+        padding: 8px 10px;
+        font: inherit;
+        color: inherit;
+        text-align: left;
+        background: #fff;
+        border: 1px solid #8a96a3;
+        border-radius: 4px;
+      }
+      .year {
+        max-width: 90px;
+      }
+      [data-portal] {
+        position: absolute;
+        z-index: 20;
+      }
+      [role='listbox'] {
+        margin: 2px 0 0;
+        padding: 4px;
+        list-style: none;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        box-shadow: 0 6px 18px rgb(31 35 40 / 14%);
+      }
+      [role='option'] {
+        padding: 6px 10px;
+        cursor: default;
+      }
+      [role='option']:hover {
+        background: #e8f1fb;
+      }
+      .bottom-bar {
+        position: fixed;
+        inset: auto 0 0 0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        padding: 14px 24px;
+        background: #fff;
+        border-top: 1px solid var(--line);
+      }
+      .bottom-bar button {
+        padding: 9px 18px;
+        font: inherit;
+        font-weight: 600;
+        border-radius: 18px;
+        border: 1px solid var(--brand);
+        background: #fff;
+        color: var(--brand);
+      }
+      .bottom-bar button[type='submit'] {
+        background: var(--brand);
+        color: #fff;
+      }
+      #status {
+        margin-top: 16px;
+        font:
+          12px ui-monospace,
+          monospace;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Graduate Scheme 2027, Technology Risk</h1>
+      <p class="meta">Example Fernhill Consulting · London</p>
+
+      <form id="application" action="/apply" method="post">
+        <h2>My Information</h2>
+        <div class="panel">
+          <div class="formField">
+            <label for="first">First Name <span class="req">*</span></label>
+            <input id="first" name="legalName--firstName" />
+          </div>
+          <div class="formField">
+            <label for="last">Last Name <span class="req">*</span></label>
+            <input id="last" name="legalName--lastName" />
+          </div>
+        </div>
+
+        <h2>My Experience</h2>
+        <div class="panel" role="group" aria-labelledby="education-1">
+          <h3 id="education-1">Education 1</h3>
+          <div class="formField">
+            <label for="school">School or University</label>
+            <input id="school" name="schoolName" />
+          </div>
+          <div class="formField">
+            <label id="degree-label">Degree <span class="req">*</span></label>
+            <button
+              id="degree"
+              class="dropdown"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Degree Select One Required"
+              data-options="High School Diploma|Bachelor's Degree|Master's Degree|Doctorate"
+            >
+              Select One
+            </button>
+          </div>
+          <div class="formField">
+            <label for="field">Field of Study</label>
+            <input id="field" name="fieldOfStudy" />
+          </div>
+          <div class="formField">
+            <label>From</label>
+            <div class="date">
+              <input
+                id="edu-from"
+                class="year"
+                aria-label="Year"
+                placeholder="YYYY"
+                inputmode="numeric"
+                maxlength="4"
+              />
+            </div>
+          </div>
+          <div class="formField">
+            <label>To (Actual or Expected)</label>
+            <div class="date">
+              <input
+                id="edu-to"
+                class="year"
+                aria-label="Year"
+                placeholder="YYYY"
+                inputmode="numeric"
+                maxlength="4"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" role="group" aria-labelledby="languages-1">
+          <h3 id="languages-1">Languages 1</h3>
+          <div class="formField">
+            <div class="question">Language</div>
+            <button
+              id="language"
+              class="dropdown"
+              type="button"
+              aria-haspopup="listbox"
+              aria-label="Select One Required"
+              data-options="English|French|German"
+            >
+              Select One
+            </button>
+          </div>
+          <div class="formField">
+            <div class="question">Overall proficiency</div>
+            <button
+              id="proficiency"
+              class="dropdown"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Select One Required"
+              data-options="Beginner|Intermediate|Advanced|Fluent"
+            >
+              Select One
+            </button>
+          </div>
+        </div>
+
+        <h2>Application Questions</h2>
+        <div class="panel">
+          <div class="formField">
+            <div class="question">
+              Are you authorised to work in the country where this job is
+              available? <span class="req">*</span>
+            </div>
+            <button
+              id="q-authorised"
+              class="dropdown"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Select One Required"
+              data-options="Yes|No"
+            >
+              Select One
+            </button>
+          </div>
+          <div class="formField">
+            <div class="question">
+              Will you need sponsorship for an employment visa or renewal of an
+              existing visa? <span class="req">*</span>
+            </div>
+            <button
+              id="q-sponsorship"
+              class="dropdown"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Select One Required"
+              data-options="Yes|No"
+            >
+              Select One
+            </button>
+          </div>
+          <div class="formField">
+            <div class="question">
+              Are you related to a current employee?
+              <span class="req">*</span>
+            </div>
+            <button
+              id="q-related"
+              class="dropdown"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Select One Required"
+              data-options="Yes|No"
+            >
+              Select One
+            </button>
+          </div>
+          <div class="formField">
+            <div class="question">
+              When will you be available to start a full-time role after your
+              studies? <span class="req">*</span>
+            </div>
+            <button
+              id="q-start"
+              class="dropdown"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Select One Required"
+              data-options="Summer 2027|Autumn 2027|Later"
+            >
+              Select One
+            </button>
+          </div>
+          <div class="formField">
+            <div class="question">
+              Are you available to work during the time period stated in the job
+              description? <span class="req">*</span>
+            </div>
+            <button
+              id="q-period"
+              class="dropdown"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Select One Required"
+              data-options="Yes|No"
+            >
+              Select One
+            </button>
+          </div>
+          <div class="formField">
+            <div class="question">
+              Please read our recruitment privacy statement, which explains how
+              Example Fernhill Consulting stores and shares your information
+              with assessment partners and background screening providers in the
+              countries where we operate, and confirm below that you have read
+              and understood it before you continue.
+            </div>
+            <button
+              id="q-long"
+              class="dropdown"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Select One Required"
+              data-options="I have read it"
+            >
+              Select One
+            </button>
+          </div>
+        </div>
+
+        <h2>Voluntary Disclosures</h2>
+        <div class="panel">
+          <div class="formField">
+            <label id="gender-label">What is your gender?</label>
+            <button
+              id="gender"
+              class="dropdown"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-labelledby="gender-label"
+              data-options="Man|Woman|Non-binary|Prefer not to say"
+            >
+              Select One
+            </button>
+          </div>
+        </div>
+        <p id="status" aria-live="polite"></p>
+      </form>
+    </main>
+
+    <div class="bottom-bar">
+      <button type="button" id="back">Back</button>
+      <button type="submit" form="application" id="save-continue">
+        Save and Continue
+      </button>
+    </div>
+
+    <script>
+      // Buttons that open a list portalled to the end of the page, named
+      // by aria-controls only while open; the choice shows in the button.
+      (() => {
+        const form = document.getElementById('application');
+        const status = document.getElementById('status');
+        let submitted = 0;
+        const render = () => {
+          status.textContent = `Fixture · submitted: ${submitted}`;
+        };
+        render();
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          submitted += 1;
+          render();
+        });
+
+        for (const button of document.querySelectorAll('.dropdown')) {
+          let holder = null;
+          const close = () => {
+            holder?.remove();
+            holder = null;
+            button.removeAttribute('aria-controls');
+            if (button.hasAttribute('aria-expanded')) {
+              button.setAttribute('aria-expanded', 'false');
+            }
+          };
+          button.addEventListener('click', () => {
+            if (holder) {
+              close();
+              return;
+            }
+            const list = document.createElement('ul');
+            list.id = `${button.id}-list`;
+            list.setAttribute('role', 'listbox');
+            for (const text of button.dataset.options.split('|')) {
+              const option = document.createElement('li');
+              option.setAttribute('role', 'option');
+              option.setAttribute('aria-selected', 'false');
+              option.textContent = text;
+              list.append(option);
+            }
+            holder = document.createElement('div');
+            holder.dataset.portal = '';
+            const box = button.getBoundingClientRect();
+            holder.style.top = `${box.bottom + window.scrollY}px`;
+            holder.style.left = `${box.left + window.scrollX}px`;
+            holder.style.width = `${box.width}px`;
+            holder.append(list);
+            document.body.append(holder);
+            button.setAttribute('aria-controls', list.id);
+            if (button.hasAttribute('aria-expanded')) {
+              button.setAttribute('aria-expanded', 'true');
+            }
+            list.addEventListener('click', (event) => {
+              const option = event.target.closest('[role="option"]');
+              if (!option) return;
+              button.textContent = option.textContent;
+              close();
+            });
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

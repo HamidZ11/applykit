@@ -23,6 +23,31 @@ export interface CustomOption {
   disabled: boolean;
 }
 
+/** Why a dropdown is guided rather than chosen in. */
+export type TriggerProblem =
+  | 'pattern'
+  | 'shadow'
+  | 'action'
+  | 'editable'
+  | 'unavailable'
+  | 'expanded'
+  | 'ownership'
+  | 'ids'
+  | 'multiple';
+
+/** The same, as Developer diagnostics shows it. */
+export const TRIGGER_PROBLEM_TEXT: Record<TriggerProblem, string> = {
+  pattern: 'not a select-only combobox or a button opening a listbox',
+  shadow: 'inside a shadow root',
+  action: 'a link, form control or submit button, or inside one',
+  editable: 'editable or searchable',
+  unavailable: 'disabled, read-only or hidden',
+  expanded: 'aria-expanded is missing or not "false"',
+  ownership: 'its list is not named by aria-controls alone',
+  ids: 'an id it uses is not unique',
+  multiple: 'its list allows several choices',
+};
+
 /** Elements whose own behaviour a click could set off. */
 const ACTING =
   'a, area, input, select, textarea, summary, label, details, iframe';
@@ -90,7 +115,7 @@ function isDisabled(element: Element): boolean {
 export function triggerProblem(
   trigger: HTMLElement,
   isVisible: (element: Element) => boolean = isShown,
-): string | null {
+): TriggerProblem | null {
   const role = trigger.getAttribute('role');
   const popup = trigger.getAttribute('aria-haspopup');
   const combobox =
@@ -149,7 +174,7 @@ export function triggerProblem(
  * Why `list` is not a list ApplyKit may choose in: not a listbox, multi-
  * select, searchable, or with options of its own elsewhere.
  */
-function listProblem(list: Element): string | null {
+function listProblem(list: Element): TriggerProblem | null {
   if (list.getAttribute('role') !== 'listbox') return 'ownership';
   // A list inside another widget is that widget's.
   if (list.parentElement?.closest('[role="combobox"], [aria-haspopup]')) {
@@ -192,7 +217,7 @@ export function openList(
 }
 
 /** Why an open list cannot be chosen in, or null when it can. */
-export function openListProblem(list: HTMLElement): string | null {
+export function openListProblem(list: HTMLElement): TriggerProblem | null {
   return listProblem(list);
 }
 

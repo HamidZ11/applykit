@@ -72,7 +72,9 @@ export type Signal =
   | 'id'
   | 'placeholder'
   /** A select's options, e.g. calling codes such as "+44". */
-  | 'options';
+  | 'options'
+  /** Why a custom dropdown is guided rather than chosen in (ADR 0021). */
+  | 'dropdown';
 
 export interface Evidence {
   signal: Signal;
@@ -656,7 +658,9 @@ export function detectControl(control: DetectableControl): Detection {
     .filter((t) => t.signal === 'name' || t.signal === 'id')
     .map((t) => t.normalised)
     .join(' | ');
-  const hasLabel = texts.some((t) => t.signal === 'label');
+  // A label of its own: a question read from around an unlabelled control
+  // does not earn it the narrower identifier check.
+  const hasLabel = ownLabel(control) !== '';
   // The question people read: labels, and a radio group's legend.
   const questions = questionTexts(control, texts);
   // A supported equal-opportunities question, asked of the applicant in a
@@ -733,7 +737,14 @@ export function detectControl(control: DetectableControl): Detection {
       add(field, { signal, text: raw });
     }
     if (inEmployment && !inEducation) continue;
-    for (const field of matchEducation(normalised, inEducation)) {
+    const education = matchEducation(normalised, inEducation);
+    // "To (Actual or Expected)": a hint in brackets, as for jobs, only when
+    // the whole label matches nothing.
+    for (const field of education.length > 0
+      ? education
+      : matchEducation(core, inEducation).filter(
+          (field) => field === 'educationStart' || field === 'educationEnd',
+        )) {
       add(field, { signal, text: raw });
     }
   }
@@ -762,7 +773,7 @@ export function detectControl(control: DetectableControl): Detection {
 
   // A label that asks something else outweighs an example in the
   // placeholder: "How did you hear about us?" with "e.g. LinkedIn".
-  const labelled = texts.some((t) => t.signal === 'label');
+  const labelled = hasLabel;
   for (const [field, found] of [...candidates]) {
     const placeholderOnly = found.every((e) => e.signal === 'placeholder');
     if (
@@ -1307,7 +1318,183 @@ export function groupName(group: Element | null): string {
   return normalise(`${accessibleName(group)} ${heading?.textContent ?? ''}`);
 }
 
+/**
+ * The question a control asks, as people read it: its own label, or, when
+ * that says nothing about the question ("Select One Required", a bare
+ * "Year", or no label at all on a native control), the text of the
+ * smallest container around it that holds no other field.
+ */
 export function labelText(control: DetectableControl): string {
+  const named = ownLabel(control);
+  const stripped = named.replace(PROMPT_TAIL, '');
+  // "Please select one" is a prompt through and through: keep it whole.
+  const own = plainWords(stripped)
+    .split(' ')
+    .every((word) => GENERIC_WORDS.has(word))
+    ? named
+    : stripped;
+  const words = plainWords(own);
+  const datePart = DATE_PART.test(words);
+  if (
+    !datePart &&
+    !isGenericLabel(words) &&
+    !(words === '' && isNativeControl(control))
+  ) {
+    return own;
+  }
+  const question = questionAround(control);
+  if (question === '') return own;
+  return datePart ? `${question} ${own}` : question;
+}
+
+/**
+ * A control's prompt after its question, as some widgets name themselves
+ * ("Degree Select One Required"): the prompt says nothing about the
+ * question. Only after other words, and only these prompts, so a question
+ * that ends in "required" keeps it.
+ */
+const PROMPT_TAIL =
+  /(?<=\S)\s+(?:please select|please choose|select one|choose one|select an option)(?:\s+required)?\s*$/i;
+
+/** Lower-case words only, for comparing labels with generic wording. */
+function plainWords(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/** Words of control prompts and markers, which name no question. */
+const GENERIC_WORDS = new Set([
+  'please',
+  'select',
+  'choose',
+  'pick',
+  'one',
+  'a',
+  'an',
+  'option',
+  'answer',
+  'from',
+  'the',
+  'list',
+  'required',
+  'optional',
+]);
+const PROMPT_WORDS = new Set([
+  'select',
+  'choose',
+  'pick',
+  'required',
+  'optional',
+]);
+
+/** "Select One Required", "Please choose", "Required": no question. */
+function isGenericLabel(words: string): boolean {
+  if (words === '') return false;
+  const list = words.split(' ');
+  return (
+    list.every((word) => GENERIC_WORDS.has(word)) &&
+    list.some((word) => PROMPT_WORDS.has(word))
+  );
+}
+
+/** A date part's own label ("Year", "MM"), which says which date it is not. */
+const DATE_PART = /^(?:year|month|day|yyyy|yy|mm|dd)$/;
+
+function isNativeControl(control: Element): boolean {
+  return (
+    control instanceof HTMLInputElement ||
+    control instanceof HTMLSelectElement ||
+    control instanceof HTMLTextAreaElement
+  );
+}
+
+/** What counts as another field when looking for a control's question. */
+const FIELD_LIKE =
+  'input:not([type="hidden"]), select, textarea, [role="combobox"], [role="listbox"], [role="spinbutton"], [role="radiogroup"], [role="radio"], [role="checkbox"], [role="textbox"], [aria-haspopup="listbox"], [contenteditable=""], [contenteditable="true"]';
+
+/** Longer than this, a container's text is more than one question. */
+const MAX_QUESTION_LENGTH = 200;
+
+/**
+ * The text of the smallest container around `control` (up to a few levels,
+ * never the form) that holds no other field, without the control's own
+ * text, hidden text, headings, buttons and popup lists. Empty when the
+ * nearest such text is generic, or too long to be one question: then the
+ * field keeps its own label, and ApplyKit treats it as before.
+ */
+function questionAround(control: DetectableControl): string {
+  let node = control.parentElement;
+  for (let depth = 0; node && depth < 6; depth++) {
+    if (node.matches('form, body, html, main, [role="main"]')) return '';
+    const others = [...node.querySelectorAll(FIELD_LIKE)].some(
+      (field) =>
+        field !== control &&
+        !control.contains(field) &&
+        !field.contains(control),
+    );
+    if (others) return '';
+    const text = readableText(node, control, ownLabelElements(control))
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text !== '' && !isGenericLabel(plainWords(text))) {
+      return text.length <= MAX_QUESTION_LENGTH ? text : '';
+    }
+    node = node.parentElement;
+  }
+  return '';
+}
+
+/** Hints, counters and messages: never a question. */
+const NOT_QUESTION = `[hidden], [aria-hidden="true"], script, style, template, button, [role="button"], [role="listbox"], [role="option"], small, output, [role="status"], [role="alert"], [aria-live], ${HEADINGS}`;
+
+/**
+ * The text in `node` that comes before `control`: a question precedes
+ * its field, while what follows is often a hint or a value shown. Never
+ * the control's own label elements, already read as its name.
+ */
+function readableText(
+  node: Node,
+  control: Element,
+  skip: ReadonlySet<Element>,
+): string {
+  let text = '';
+  for (const child of node.childNodes) {
+    if (
+      child !== control &&
+      !child.contains(control) &&
+      control.compareDocumentPosition(child) & Node.DOCUMENT_POSITION_FOLLOWING
+    ) {
+      continue;
+    }
+    if (child.nodeType === Node.TEXT_NODE) {
+      text += child.textContent ?? '';
+    } else if (
+      child instanceof Element &&
+      child !== control &&
+      !skip.has(child) &&
+      !child.matches(NOT_QUESTION)
+    ) {
+      text += ` ${readableText(child, control, skip)} `;
+    }
+  }
+  return text;
+}
+
+/** The elements that already name the control: its labels. */
+function ownLabelElements(control: DetectableControl): Set<Element> {
+  const elements = new Set<Element>(labelsOf(control));
+  for (const id of (control.getAttribute('aria-labelledby') ?? '').split(
+    /\s+/,
+  )) {
+    const element = id ? control.ownerDocument.getElementById(id) : null;
+    if (element) elements.add(element);
+  }
+  return elements;
+}
+
+function ownLabel(control: DetectableControl): string {
   const parts: string[] = [];
   for (const label of labelsOf(control)) parts.push(ownText(label));
   const labelledBy = control.getAttribute('aria-labelledby');
@@ -1362,6 +1549,8 @@ export function describeEvidence(evidence: Evidence): string {
       return `${evidence.signal} “${evidence.text}”`;
     case 'options':
       return `options like “${evidence.text}”`;
+    case 'dropdown':
+      return `dropdown not chosen in: ${evidence.text}`;
     default:
       return `${evidence.signal}="${evidence.text}"`;
   }

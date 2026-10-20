@@ -270,7 +270,7 @@ const LEFT: Record<
   'reuse-off': {
     status: 'manual',
     reason:
-      'Reuse of your saved diversity answers is off, so ApplyKit leaves this to you.',
+      '“Use these answers when autofilling” is off in your diversity preferences, so ApplyKit leaves this to you.',
   },
   'not-saved': {
     status: 'no-value',
