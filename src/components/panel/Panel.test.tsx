@@ -45,6 +45,7 @@ import { savedDiversity } from '@/test/diversity-fixtures';
 import { savedAnswers } from '@/test/answer-fixtures';
 import { loadFixture, runFixtureScripts } from '@/test/load-fixture';
 import { Panel } from './Panel';
+import { forgetPanelPosition } from './usePanelPosition';
 
 // Count real engine calls without changing what the engine does.
 vi.mock('@/autofill/fill', async (importOriginal) => {
@@ -2081,6 +2082,125 @@ describe('choosing in custom dropdowns', () => {
     expect(text).toContain('Suggested answer available');
     expect(text).toContain('Choose this option');
     expect(dialog().textContent).not.toMatch(/non.?binary/i);
+  });
+});
+
+describe('moving the panel', () => {
+  beforeEach(async () => {
+    forgetPanelPosition();
+    await open();
+    // jsdom has no layout: a 380 × 300 panel anchored bottom-right, moved
+    // by its own transform.
+    vi.spyOn(dialog(), 'getBoundingClientRect').mockImplementation(() => {
+      const [x = 0, y = 0] = offset();
+      const right = window.innerWidth - 16 + x;
+      const bottom = window.innerHeight - 16 + y;
+      return {
+        left: right - 380,
+        right,
+        top: bottom - 300,
+        bottom,
+        width: 380,
+        height: 300,
+        x: right - 380,
+        y: bottom - 300,
+        toJSON: () => ({}),
+      };
+    });
+    keyOnHandle('Home');
+  });
+
+  afterEach(() => {
+    Object.assign(window, { innerWidth: 1024, innerHeight: 768 });
+  });
+
+  function offset(): number[] {
+    const match = /translate\((-?\d+)px, (-?\d+)px\)/.exec(
+      dialog().style.transform,
+    );
+    return [Number(match?.[1] ?? 0), Number(match?.[2] ?? 0)];
+  }
+
+  function keyOnHandle(key: string, shiftKey = false) {
+    act(() => {
+      button('Move panel').dispatchEvent(
+        new KeyboardEvent('keydown', { key, shiftKey, bubbles: true }),
+      );
+    });
+  }
+
+  function pointer(type: string, target: Element, x: number, y: number) {
+    act(() => {
+      target.dispatchEvent(
+        new MouseEvent(type, {
+          bubbles: true,
+          button: 0,
+          clientX: x,
+          clientY: y,
+        }),
+      );
+    });
+  }
+
+  it('moves with the arrow keys on its handle, and Home puts it back', () => {
+    keyOnHandle('ArrowLeft');
+    expect(offset()).toEqual([-24, 0]);
+
+    keyOnHandle('ArrowUp', true);
+    expect(offset()).toEqual([-24, -96]);
+
+    keyOnHandle('Home');
+    expect(offset()).toEqual([0, 0]);
+  });
+
+  it('never leaves the viewport', () => {
+    keyOnHandle('ArrowRight');
+    keyOnHandle('ArrowDown');
+    expect(offset()).toEqual([8, 8]);
+
+    for (let i = 0; i < 20; i++) keyOnHandle('ArrowLeft', true);
+    expect(offset()[0]).toBe(-(1024 - 16 - 380 - 8));
+  });
+
+  it('is dragged by its header, never by the header’s buttons', () => {
+    const header = dialog().querySelector('header');
+    if (!header) throw new Error('No header');
+
+    pointer('pointerdown', header, 500, 500);
+    pointer('pointermove', header, 400, 450);
+    pointer('pointerup', header, 400, 450);
+    expect(offset()).toEqual([-100, -50]);
+
+    const toggle = button('Show all fields');
+    pointer('pointerdown', toggle, 400, 450);
+    pointer('pointermove', toggle, 100, 100);
+    expect(offset()).toEqual([-100, -50]);
+  });
+
+  it('comes back into view when the window shrinks', () => {
+    keyOnHandle('ArrowLeft', true);
+    keyOnHandle('ArrowLeft', true);
+    expect(offset()).toEqual([-192, 0]);
+
+    act(() => {
+      Object.assign(window, { innerWidth: 500 });
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    const [x] = offset();
+    // The whole panel fits again, its left edge first.
+    expect(500 - 16 + (x ?? 0) - 380).toBeGreaterThanOrEqual(8);
+    expect(500 - 16 + (x ?? 0)).toBeLessThanOrEqual(500 - 8);
+  });
+
+  it('keeps Escape and the field list working after moving', () => {
+    keyOnHandle('ArrowLeft');
+    click('Show all fields');
+
+    press('Escape');
+
+    expect(dialog().dataset.mode).toBe('compact');
+    expect(offset()).toEqual([-24, 0]);
   });
 });
 

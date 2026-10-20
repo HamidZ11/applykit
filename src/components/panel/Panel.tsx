@@ -1,6 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import {
   CornerDownLeft,
+  GripVertical,
   Maximize2,
   Minimize2,
   RotateCw,
@@ -21,6 +22,7 @@ import {
   SecondaryButton,
 } from '@/components/ui/primitives';
 import { useHeightTransition } from './useHeightTransition';
+import { usePanelPosition } from './usePanelPosition';
 import {
   usePanel,
   type Drafting,
@@ -74,6 +76,7 @@ export function Panel({
   const hasForm = summary.total > 0;
   const selectedField = fields.find((field) => field.element === selected);
   useHeightTransition(frame, mode);
+  const position = usePanelPosition(frame);
 
   // Keep keyboard focus in the panel when it opens and when a mode switch
   // removes the focused control; never steal it from inside the panel.
@@ -130,10 +133,38 @@ export function Panel({
         tabIndex={-1}
         data-mode={mode}
         onKeyDown={onKeyDown}
-        style={{ height: mode === 'expanded' ? EXPANDED_HEIGHT : 'auto' }}
-        className="ak-panel fixed right-4 bottom-4 flex max-h-[calc(100vh-32px)] w-[380px] flex-col overflow-hidden rounded-lg bg-canvas shadow-panel outline-none"
+        style={{
+          height: mode === 'expanded' ? EXPANDED_HEIGHT : 'auto',
+          transform: `translate(${String(position.offset.x)}px, ${String(position.offset.y)}px)`,
+        }}
+        className="ak-panel fixed right-4 bottom-4 flex max-h-[calc(100vh-32px)] w-[380px] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg bg-canvas shadow-panel outline-none"
       >
-        <header className="flex h-10 shrink-0 items-center gap-2 border-b border-line pr-2 pl-3.5">
+        {/* The header moves the panel; its buttons keep their own clicks. */}
+        <header
+          onPointerDown={(event) => {
+            const target = event.target as Element;
+            if (target.closest('button:not([data-move-handle])')) return;
+            position.handle.onPointerDown(event);
+          }}
+          onPointerMove={position.handle.onPointerMove}
+          onPointerUp={position.handle.onPointerUp}
+          onPointerCancel={position.handle.onPointerCancel}
+          onDoubleClick={(event) => {
+            if ((event.target as Element).closest('button')) return;
+            position.reset();
+          }}
+          className="flex h-10 shrink-0 cursor-grab touch-none items-center gap-2 border-b border-line pr-2 pl-1.5 select-none active:cursor-grabbing"
+        >
+          <button
+            type="button"
+            data-move-handle
+            onKeyDown={position.handle.onKeyDown}
+            aria-label="Move panel"
+            title="Move panel: drag the header, or use the arrow keys here. Home, or a double-click on the header, puts it back."
+            className="flex size-6 cursor-grab items-center justify-center rounded-sm text-ink-3 transition-colors duration-100 hover:bg-hover hover:text-ink"
+          >
+            <Icon icon={GripVertical} size={14} />
+          </button>
           <BrandMark />
           <span className="font-medium">ApplyKit</span>
           <span className="min-w-0 truncate font-mono text-2xs text-ink-3">
