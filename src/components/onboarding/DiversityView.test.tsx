@@ -111,7 +111,10 @@ describe('DiversityView', () => {
     );
     expect(reuse().checked).toBe(false);
     expect(reuse().closest('label')?.textContent).toContain(
-      'Reuse my saved diversity answers',
+      'Use these answers when autofilling',
+    );
+    expect(reuse().closest('label')?.textContent).toContain(
+      'saving answers does not turn it on',
     );
     for (const title of [
       'Gender',
@@ -142,7 +145,24 @@ describe('DiversityView', () => {
         },
       },
     });
-    expect(host.textContent).toContain('Diversity preferences saved.');
+    // Saving names the setting once; it is not turned on.
+    expect(host.textContent).toContain(
+      'They are used when autofilling only if you turn on “Use these answers when autofilling” below.',
+    );
+  });
+
+  it('asks to save changes before reuse can be turned on', async () => {
+    await render(<DiversityView now={() => NOW} />);
+
+    choose('Disability', 'no');
+
+    expect(reuse().disabled).toBe(true);
+    expect(reuse().closest('label')?.textContent).toContain(
+      'Save your changes first.',
+    );
+    await click('Save answers');
+    expect(reuse().disabled).toBe(false);
+    expect(reuse().checked).toBe(false);
   });
 
   it('turns reuse on and off at once, keeping answers', async () => {

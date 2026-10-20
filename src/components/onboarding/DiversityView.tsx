@@ -262,37 +262,6 @@ export function DiversityView({
         </Banner>
       )}
 
-      <div className="mt-6 rounded-md border border-line bg-white px-4 py-3.5">
-        <label className="flex cursor-default items-start gap-2.5">
-          <input
-            type="checkbox"
-            checked={preferences.reuse}
-            disabled={busy}
-            onChange={(event) => {
-              if (event.target.checked) {
-                void save(
-                  { reuse: true, answers: preferences.answers },
-                  'Reuse turned on. Autofill now fills matching questions.',
-                );
-              } else {
-                void turnOffReuse();
-              }
-            }}
-            className="mt-0.5 size-4 shrink-0 rounded-xs accent-accent"
-          />
-          <span>
-            <span className="block font-medium">
-              Reuse my saved diversity answers
-            </span>
-            <span className="mt-0.5 block text-xs text-ink-2">
-              Off by default. When on, Autofill fills questions it recognises
-              when a list on the form offers the same answer. Turning it off
-              keeps your answers.
-            </span>
-          </span>
-        </label>
-      </div>
-
       <form
         noValidate
         className="mt-6"
@@ -301,7 +270,10 @@ export function DiversityView({
           if (!dirty || busy) return;
           void save(
             { reuse: preferences.reuse, answers },
-            'Diversity preferences saved.',
+            preferences.reuse ||
+              Object.values(answers).every((answer) => answer === null)
+              ? 'Diversity preferences saved.'
+              : 'Diversity preferences saved. They are used when autofilling only if you turn on “Use these answers when autofilling” below.',
           ).then((saved) => {
             if (saved) setDraft(null);
           });
@@ -342,6 +314,44 @@ export function DiversityView({
         </div>
         <Notice>{notice}</Notice>
       </form>
+
+      <div className="mt-8 rounded-md border border-line bg-white px-4 py-3.5">
+        <label className="flex cursor-default items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={preferences.reuse}
+            // It applies to saved answers: unsaved changes would not be used.
+            disabled={busy || dirty}
+            onChange={(event) => {
+              if (event.target.checked) {
+                void save(
+                  { reuse: true, answers: preferences.answers },
+                  'Turned on. Autofill now fills matching monitoring questions.',
+                );
+              } else {
+                void turnOffReuse();
+              }
+            }}
+            className="mt-0.5 size-4 shrink-0 rounded-xs accent-accent"
+          />
+          <span>
+            <span className="block font-medium">
+              Use these answers when autofilling
+            </span>
+            <span className="mt-0.5 block text-xs text-ink-2">
+              Off by default: saving answers does not turn it on. When on,
+              ApplyKit fills only the monitoring questions it recognises
+              exactly, when the form offers the same answer. Turn it off at any
+              time; your answers are kept.
+            </span>
+            {dirty && (
+              <span className="mt-1 block text-xs font-medium text-ink-2">
+                Save your changes first.
+              </span>
+            )}
+          </span>
+        </label>
+      </div>
     </SectionShell>
   );
 }
