@@ -78,6 +78,11 @@ Read `docs/architecture.md` before changing structure, and the ADRs in
   (`answer-limits.ts`) are enforced before writing. Tests mock `fetch`;
   never make real API requests; `src/ai/evaluation.test.ts` uses only
   the fictional applicants in `src/test/evaluation-applicants.ts`.
+- A control named only by its prompt ("Select One Required"), a bare
+  date part, or nothing (native controls) takes its question from the
+  smallest container holding no other field (ADR 0023); that question
+  goes through every exclusion like any label, and long or shared text
+  is never used.
 - A correct skip beats a wrong fill: never answer sensitive, consent or
   verification questions (the one exception: the five exact monitoring
   questions, with the user's reuse opt-in, ADR 0018; diversity answers

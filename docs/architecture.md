@@ -66,7 +66,12 @@ the panel upward, to at most 600 px or the viewport height. The height
 change is animated between measured pixel heights (`useHeightTransition`),
 not a CSS transition from `auto`, so it cannot overshoot. The header
 toggle, any compact plan line and "View all" expand; the toggle and Escape
-collapse.
+collapse. The panel can be moved out of the way of a page's own controls
+(`usePanelPosition`): dragged by its header (not its buttons), or with the
+arrow keys on its "Move panel" handle; Home or a double-click puts it back.
+It is offset from its corner, clamped so it stays wholly in the viewport
+(also after a resize or a height change), and keeps its place on the page
+while it is open and when reopened.
 
 ### Shared state
 
@@ -357,6 +362,9 @@ ADR 0017 and ADR 0018.
 - Detection signals: `autocomplete` token, input `type`, label text
   (`<label>`, `aria-labelledby`, `aria-label`), `name`, `id`,
   `placeholder`, and fieldset legends or labelled groups for context.
+  When a control's own name is only a prompt ("Select One Required"), a
+  bare date part ("Year") or missing on a native control, the label is
+  the text of the smallest container holding no other field (ADR 0023).
   Exactly one unopposed match is required; conflicting signals are skipped.
 - Skipped with a reason: details about someone else (references,
   employer contacts and addresses, companies outside a job section, hiring

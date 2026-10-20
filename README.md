@@ -130,6 +130,8 @@ Limitations:
    questions as radio groups next to radio questions that must never be
    answered;
    `custom-controls.html` is built from custom dropdowns;
+   `workday-style.html` is shaped like observed Workday pages: questions
+   beside "Select One" dropdowns, year boxes and a fixed bottom bar;
    `batch-answers.html` has several suggested answers to review and apply
    together, on a page that re-renders and changes fields as you answer;
    `custom-dropdowns.html` has working custom dropdowns of several kinds,
@@ -203,6 +205,13 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
 ## Current functionality
 
 - Toolbar button opens and closes a floating panel on the current tab.
+  Drag its header, or use the arrow keys on its move handle, to move it
+  away from the page's own buttons; Home puts it back.
+- Questions whose dropdown is named only "Select One" are shown by the
+  question written beside them, and "From" / "To" year boxes in an
+  education section are filled from your saved record (ADR 0023).
+  Right-to-work, visa and sponsorship questions say "Work authorisation:
+  answer this yourself"; ApplyKit never answers them.
 - The panel is rendered in a shadow root, isolated from page styles, with
   bundled Instrument Sans and IBM Plex Mono fonts.
 - Compact mode summarises the plan and, after autofill, the fields left for
@@ -251,7 +260,7 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   assumes a past end date means you graduated.
 - Diversity & Inclusion (optional): save answers to gender, ethnic group,
   disability, religion or belief and sexual orientation on the profile
-  page. **Reuse my saved diversity answers** is off by default; with it
+  page. **Use these answers when autofilling** is off by default (saving answers does not turn it on); with it
   on, Autofill fills monitoring lists and native radio groups whose
   question it recognises exactly and that offer the same answer. The
   panel never shows your answers, and **Clear all diversity
@@ -365,6 +374,10 @@ billed by Anthropic. Without a key, nothing changes and nothing is sent.
   miss a relevant item; check the ticks. Detecting a form's ban on AI is
   English-only and needs the ban near the question. AI drafting has not
   been tried in Safari, and needs Safari 17.1 or later.
+- Workday support is limited to what a fictional form shaped like it
+  shows (`fixtures/workday-style.html`); it has not been verified on real
+  Workday markup. `docs/workday-diagnostics.md` explains how to see why
+  a dropdown is only guided. Language skills are not part of the profile.
 - Custom dropdowns are chosen in only on request, one at a time, and only
   when they open on a click and name their list with `aria-controls`
   (ADR 0021). Widgets that open on a mouse press or need typing (React
